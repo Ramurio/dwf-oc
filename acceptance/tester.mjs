@@ -212,6 +212,15 @@ export async function inspectTester(client, attempt) {
         delete state.error;
       }
     }
+    if (state.status !== 'running') {
+      messages = await messagesFor(client, attempt.sessionId);
+      const latest = testerState(attempt, messages);
+      if (JSON.stringify(latest) !== JSON.stringify(state)) {
+        state = { ...latest, status: 'running' };
+        delete state.report;
+        delete state.error;
+      }
+    }
   }
   await save(join(attempt.directory, 'messages.json'), visibleMessages(messages));
   await save(join(attempt.directory, 'state.json'), state);

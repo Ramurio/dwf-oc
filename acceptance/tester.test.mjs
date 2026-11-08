@@ -148,3 +148,35 @@ test('background work delays the final report and unrelated sessions do not bloc
   assert.equal((await inspectTester(client, attempt)).status, 'succeeded');
   assert.equal(await readFile(join(directory, 'report.md'), 'utf8'), 'Final report');
 });
+
+test('tester completion changing during an activity request waits for a fresh poll', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'dwf-tester-moving-completion-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const attempt = { id: 'one', sessionId: 'ses_one', inputId: 'msg_one', directory, workspace: '/project' };
+  let messages = [{ type: 'user', id: 'msg_one' },
+    { type: 'assistant', id: 'msg_early', finish: 'stop', time: { completed: 1 },
+      content: [{ type: 'text', text: 'Early success' }] }, { type: 'idle', outcome: 'succeeded' }];
+  const client = {
+    message: { list: async () => ({ data: messages, cursor: {} }) },
+    shell: { list: async () => ({ data: [] }) },
+    session: {
+      inbox: { list: async () => [] },
+      active: async () => {
+        messages = [...messages, { type: 'synthetic', text: 'Background completion' },
+          { type: 'assistant', id: 'msg_late', finish: 'error', time: { completed: 2 },
+            error: { message: 'Late failure' }, content: [] },
+          { type: 'idle', outcome: 'failed', error: 'Late failure' }];
+        return {};
+      },
+    },
+  };
+  const first = await inspectTester(client, attempt);
+  assert.equal(first.status, 'running');
+  assert.equal(first.report, undefined);
+  await assert.rejects(readFile(join(directory, 'report.md')), { code: 'ENOENT' });
+  const journal = JSON.parse(await readFile(join(directory, 'messages.json'), 'utf8'));
+  assert.equal(journal.at(-1).outcome, 'failed');
+  const last = await inspectTester(client, attempt);
+  assert.equal(last.status, 'failed');
+  assert.equal(last.error, 'Late failure');
+});

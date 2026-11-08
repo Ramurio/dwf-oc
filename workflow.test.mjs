@@ -55,6 +55,20 @@ test('вердикт читается структурированно, отсу
   assert.throws(() => parseVerdict('{"outcome":"approve","summary":""}', 'verifier'));
 });
 
+test('fenced results obey the same final and unambiguous boundary as plain JSON', () => {
+  const approval = '{"outcome":"approve","summary":"Earlier"}';
+  const rejection = '{"outcome":"changes","summary":"Final"}';
+  const fenced = `\`\`\`json\n${approval}\n\`\`\``;
+  assert.equal(parseVerdict(`Checks finished.\n${fenced}`, 'reviewer').outcome, 'approve');
+  for (const text of [
+    `${fenced}\n${rejection}`,
+    `${approval}\n\`\`\`json\n${rejection}\n\`\`\``,
+    `${fenced}\n\`\`\`json\n${rejection}\n\`\`\``,
+    `${fenced}\nThe final check failed.`,
+    `First verdict ${approval}\n${rejection}`,
+  ]) assert.throws(() => parseVerdict(text, 'reviewer'));
+});
+
 test('каждый обязательный проверяющий должен одобрить текущую версию', () => {
   const definition = sampleWorkflow('Task');
   definition.nodes.secondReview = { role: 'reviewer' };

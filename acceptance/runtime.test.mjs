@@ -12,6 +12,7 @@ import { createSandbox, cliJson, transcript, waitFor, writeJson, taggedProcesses
 import { createControlledHttpProvider, nativeProviderConfig } from './controlled-http-provider.mjs';
 import { getWorkflow } from '../run-store.mjs';
 import { captureStopSessions, outcomeFromMessages, readExecution, stopSessions } from '../opencode-runtime.mjs';
+import { inspectTester } from './tester.mjs';
 
 const cli = [process.execPath, fileURLToPath(new URL('../dwf.mjs', import.meta.url))];
 const verdict = (outcome = 'approve') => JSON.stringify({ outcome, summary: `Observed ${outcome}` });
@@ -320,8 +321,15 @@ test('native completion during an activity request cannot return an older approv
   } };
   const request = { sessionId: visit.sessionId, inputId: visit.inputId,
     request: { session: { location: { directory: state.workspace.path } } } };
-  assert.equal((await readExecution(delayed, request)).outcome, undefined);
+  const attempt = { id: 'activity-race', sessionId: visit.sessionId, inputId: visit.inputId,
+    directory: sandbox.root, workspace: state.workspace.path };
+  const [execution, tester] = await Promise.all([
+    readExecution(delayed, request), inspectTester(delayed, attempt),
+  ]);
+  assert.equal(execution.outcome, undefined);
+  assert.equal(tester.status, 'running');
   assert.match((await readExecution(client, request)).outcome.result, /changes/);
+  assert.match((await inspectTester(client, attempt)).report, /changes/);
   const db = new DatabaseSync(join(sandbox.state, 'dwf.sqlite'));
   db.prepare('UPDATE workflows SET expires = 0 WHERE id = ?').run(sandbox.runId);
   db.close();
