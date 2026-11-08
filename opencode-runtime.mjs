@@ -115,14 +115,14 @@ export async function checkRoleAgents(client, workspace, agents) {
   }
 }
 
-export async function connect(root, participants) {
+export async function connect(root, participants, launch = {}) {
   const directory = join(root, 'opencode');
   const state = join(directory, 'state');
   const registration = join(state, 'opencode', 'service.json');
   await mkdir(directory, { recursive: true, mode: 0o700 });
   return withServiceLock(root, async () => {
     const config = await serviceConfig(directory, participants);
-    const env = { OPENCODE_CONFIG_DIR: join(directory, 'config'),
+    const env = { ...launch.env, OPENCODE_CONFIG_DIR: join(directory, 'config'),
       XDG_CONFIG_HOME: join(directory, 'xdg-config'), XDG_DATA_HOME: join(directory, 'data'),
       XDG_CACHE_HOME: join(directory, 'cache'), XDG_STATE_HOME: state,
       OPENCODE_DB: join(directory, 'opencode.sqlite'), OPENCODE_CONFIG: '',
@@ -131,11 +131,13 @@ export async function connect(root, participants) {
       OPENCODE_DISABLE_FILEWATCHER: 'false',
       OPENCODE_CONFIG_CONTENT: JSON.stringify({ ...config, update: 'disable', snapshots: false,
         mcp: { servers: {} }, agents: { ...config.agents, 'dwf-planner': planner } }) };
+    const port = env.DWF_OPENCODE_PORT ?? process.env.DWF_OPENCODE_PORT ?? '0';
+    if (!/^\d+$/.test(port) || Number(port) > 65535) throw publicError('Неверный внутренний порт сервиса.');
     const version = execFileSync(executable, ['--version'], { encoding: 'utf8', timeout: 30_000 }).trim();
     if (version !== `opencode v${OPENCODE_VERSION}`) throw publicError('Установленная версия OpenCode несовместима с DWF.');
     // Refuse replacement even if a live service reports a different version than its registration.
     const endpoint = await Service.ensure({ file: registration, version: OPENCODE_VERSION,
-      command: [executable, 'serve', '--service', '--hostname', '127.0.0.1', '--port', '0'], env,
+      command: [...launch.commandPrefix ?? [], executable, 'serve', '--service', '--hostname', '127.0.0.1', '--port', port], env,
       onStart(reason) {
         if (reason === 'version-mismatch') throw publicError('Версия общего сервиса OpenCode отличается. Требуется явное обновление.');
       } });
@@ -167,8 +169,59 @@ export async function admit(client, run) {
     }
   }
   if (session.metadata?.dwfRunId !== run.id) throw publicError('Сессия OpenCode не принадлежит этому запуску DWF.');
+  if (session.location && session.location.directory !== run.request.session.location.directory) {
+    await client.session.move({ sessionID: run.sessionId, directory: run.request.session.location.directory });
+  }
   // The native inbox reconciles the persisted ID both before and after promotion to history.
   await client.session.prompt({ sessionID: run.sessionId, id: run.inputId, text: run.request.text });
+}
+
+function shellProcesses() {
+  return execFileSync('ps', ['-ax', '-o', 'pid=,pgid=,stat=,lstart='], { encoding: 'utf8' })
+    .trim().split('\n').flatMap(line => {
+      const match = line.trim().match(/^(\d+)\s+(\d+)\s+(\S+)\s+(.+)$/);
+      return match && !match[3].startsWith('Z')
+        ? [{ pid: Number(match[1]), group: Number(match[2]), started: match[4] }] : [];
+    });
+}
+
+export async function captureStopSessions(client, state) {
+  const sessions = new Set(state.visits.map(visit => visit.sessionId));
+  const directories = new Set([state.workspace.path, ...state.visits.map(visit => visit.workspace?.path).filter(Boolean)]);
+  state.stopShells ??= [];
+  for (const directory of directories) {
+    const shells = await client.shell.list({ location: { directory } });
+    const processes = shellProcesses();
+    for (const shell of shells.data.filter(shell => sessions.has(shell.metadata?.sessionID))) {
+      const process = processes.find(item => item.pid === shell.pid);
+      if (process && !state.stopShells.some(item => item.id === shell.id)) {
+        state.stopShells.push({ id: shell.id, directory, ...process });
+      }
+    }
+  }
+}
+
+async function stopShellProcess(target) {
+  const live = () => {
+    const processes = shellProcesses();
+    const leader = processes.find(item => item.pid === target.pid);
+    if (leader && leader.started !== target.started) return [];
+    return target.group === target.pid ? processes.filter(item => item.group === target.group)
+      : processes.filter(item => item.pid === target.pid);
+  };
+  if (!live().length) return;
+  const pid = target.group === target.pid ? -target.pid : target.pid;
+  try { process.kill(pid, 'SIGTERM'); }
+  catch (error) { if (error.code !== 'ESRCH') throw error; }
+  await pause(150);
+  if (!live().length) return;
+  try { process.kill(pid, 'SIGKILL'); }
+  catch (error) { if (error.code !== 'ESRCH') throw error; }
+  for (let attempt = 0; attempt < 30; attempt++) {
+    if (!live().length) return;
+    await pause(100);
+  }
+  throw publicError('Не удалось подтвердить завершение процесса участника. Остановка будет повторена.');
 }
 
 export async function stopSessions(client, state) {
@@ -185,13 +238,17 @@ export async function stopSessions(client, state) {
       if (!isSessionNotFoundError(error)) throw error;
     }
   }
-  const location = { directory: state.workspace.path };
-  const shells = await client.shell.list({ location });
-  for (const shell of shells.data) {
-    if (shell.status === 'running' && sessions.has(shell.metadata?.sessionID)) {
-      await client.shell.remove({ id: shell.id, location });
+  const directories = new Set([state.workspace.path, ...state.visits.map(visit => visit.workspace?.path).filter(Boolean)]);
+  for (const directory of directories) {
+    const location = { directory };
+    const shells = await client.shell.list({ location });
+    for (const shell of shells.data) {
+      if (shell.status === 'running' && sessions.has(shell.metadata?.sessionID)) {
+        await client.shell.remove({ id: shell.id, location });
+      }
     }
   }
+  for (const target of state.stopShells ?? []) await stopShellProcess(target);
 }
 
 export function sessionRequest(workspace, model, runId, task) {

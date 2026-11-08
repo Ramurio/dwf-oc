@@ -25,7 +25,7 @@ function git(project, args) {
     stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 }
 
-async function canonical(path) {
+export async function canonical(path) {
   try { return await realpath(path); }
   catch (error) {
     if (error.code !== 'ENOENT') throw error;
@@ -76,7 +76,20 @@ function environment(profile, stateDirectory) {
     PATH: join(projectDirectory, 'node_modules/.bin') + delimiter + (process.env.PATH ?? '') };
 }
 
-export async function connectTester(root, stateDirectory, prepare = false) {
+export async function authorizeTester(client, stateDirectory) {
+  if ((await client.credential.list()).length !== 0) return;
+  try {
+    const credentials = JSON.parse(execFileSync(executable, ['auth', 'export', 'openai', '--standalone'],
+      { env: { ...process.env, ...environment(join(stateDirectory, 'opencode'), stateDirectory) },
+        encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 1024 * 1024 }));
+    for (const credential of credentials.filter(item => item.active)) {
+      await client.credential.create({ integrationID: credential.integrationID,
+        label: credential.label, value: credential.value, activate: true });
+    }
+  } catch { throw new Error('Не удалось подключить существующий вход OpenCode к профилю тестера.'); }
+}
+
+export async function connectTester(root, stateDirectory, prepare = false, launch = {}) {
   const profile = join(root, 'opencode');
   const configDirectory = join(profile, 'config');
   await mkdir(configDirectory, { recursive: true, mode: 0o700 });
@@ -84,7 +97,7 @@ export async function connectTester(root, stateDirectory, prepare = false) {
   catch (error) { if (error.code !== 'ENOENT') throw error; prepare = true; }
   if (prepare) {
     const skills = join(profile, 'skills');
-    await cp(join(homedir(), '.codex/skills/dwf-oc'), join(skills, 'dwf-oc'), { recursive: true });
+    await cp(launch.skillDirectory ?? join(homedir(), '.codex/skills/dwf-oc'), join(skills, 'dwf-oc'), { recursive: true });
     await save(join(configDirectory, 'opencode.json'), { update: 'disable', snapshots: false,
       mcp: { servers: {} }, skills: [skills],
       plugins: ['-opencode.skill', '-opencode.config.compatibility', 'opencode.config.skill', 'opencode.tool.skill'],
@@ -92,22 +105,13 @@ export async function connectTester(root, stateDirectory, prepare = false) {
         { action: 'skill.use', resource: 'dwf-oc', effect: 'allow' }] });
   }
   const endpoint = await Service.ensure({ file: join(profile, 'state/opencode/service.json'), version,
-    command: [executable, 'serve', '--service', '--hostname', '127.0.0.1', '--port', '0'],
-    env: environment(profile, stateDirectory),
+    command: [...launch.commandPrefix ?? [], executable, 'serve', '--service', '--hostname', '127.0.0.1', '--port', String(launch.port ?? 0)],
+    env: { ...launch.env, ...environment(profile, stateDirectory),
+      PATH: join(projectDirectory, 'node_modules/.bin') + delimiter + (launch.env?.PATH ?? process.env.PATH ?? '') },
     onStart(reason) { if (reason === 'version-mismatch') throw new Error('Версия OpenCode тестера изменилась.'); } });
   const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) });
-  if ((await client.credential.list()).length === 0) {
-    // Transfer through the native credential API without writing secrets to the test journal.
-    try {
-      const credentials = JSON.parse(execFileSync(executable, ['auth', 'export', 'openai', '--standalone'],
-        { env: { ...process.env, ...environment(join(stateDirectory, 'opencode'), stateDirectory) },
-          encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 1024 * 1024 }));
-      for (const credential of credentials.filter(item => item.active)) {
-        await client.credential.create({ integrationID: credential.integrationID,
-          label: credential.label, value: credential.value, activate: true });
-      }
-    } catch { throw new Error('Не удалось подключить существующий вход OpenCode к профилю тестера.'); }
-  }
+  // Transfer through the native credential API without writing secrets to the test journal.
+  await authorizeTester(client, launch.credentialStateDirectory ?? stateDirectory);
   return client;
 }
 

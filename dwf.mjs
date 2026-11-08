@@ -55,7 +55,9 @@ async function start(workflowFile, supplied) {
     return [name, { ...participantAgent(node.role, settings), memory: settings.memory }];
   })) : undefined;
   const client = await connect(root, participants);
-  const model = await checkModel(client, workspace, selected, process.env.DWF_PLANNER_REASONING ?? 'high');
+  const model = graph ? { providerID: selected.provider, id: selected.modelId,
+    variant: process.env.DWF_PLANNER_REASONING ?? 'high' } :
+    await checkModel(client, workspace, selected, process.env.DWF_PLANNER_REASONING ?? 'high');
   const id = randomUUID();
   if (graph) {
     for (const [name, node] of Object.entries(workflow.nodes)) {

@@ -184,13 +184,7 @@ export function updateWorkflow(root, state, owner, complete = false, finalize = 
   const db = open(root, true);
   try {
     db.exec('BEGIN IMMEDIATE');
-    const row = db.prepare('SELECT state FROM workflows WHERE id = ? AND owner = ?').get(state.id, owner);
-    if (!row) throw publicError('Контроллер workflow потерял владение запуском.');
-    const saved = JSON.parse(row.state);
-    if (saved.controls?.length) {
-      const known = new Map((state.controls ?? []).map(command => [command.id, command]));
-      state.controls = saved.controls.map(command => known.get(command.id) ?? command);
-    }
+    refreshControls(db, state, owner);
     if (finalize) {
       if (state.controls?.some(command => command.status === 'pending')) return false;
       state.finalizing = true;
@@ -200,6 +194,34 @@ export function updateWorkflow(root, state, owner, complete = false, finalize = 
     if (result.changes !== 1) throw publicError('Контроллер workflow потерял владение запуском.');
     db.exec('COMMIT');
     return true;
+  } finally {
+    if (db.isTransaction) db.exec('ROLLBACK');
+    db.close();
+  }
+}
+
+function refreshControls(db, state, owner) {
+  const row = db.prepare('SELECT state FROM workflows WHERE id = ? AND owner = ?').get(state.id, owner);
+  if (!row) throw Object.assign(publicError('Контроллер workflow потерял владение запуском.'), { code: 'DWF_OWNER_LOST' });
+  const saved = JSON.parse(row.state);
+  if (saved.controls?.length) {
+    const known = new Map((state.controls ?? []).map(command => [command.id, command]));
+    state.controls = saved.controls.map(command => known.get(command.id) ?? command);
+  }
+}
+
+// Keep the owner check and external side effect indivisible with respect to commands and takeover.
+export async function withWorkflowAction(root, state, owner, action) {
+  const db = open(root, true);
+  try {
+    db.exec('BEGIN IMMEDIATE');
+    refreshControls(db, state, owner);
+    const result = await action();
+    const complete = state.status !== 'running';
+    db.prepare('UPDATE workflows SET state = ?, owner = ?, expires = ? WHERE id = ? AND owner = ?')
+      .run(JSON.stringify(state), complete ? null : owner, complete ? 0 : Date.now() + 30000, state.id, owner);
+    db.exec('COMMIT');
+    return result;
   } finally {
     if (db.isTransaction) db.exec('ROLLBACK');
     db.close();

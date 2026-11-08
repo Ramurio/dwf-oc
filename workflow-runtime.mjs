@@ -4,10 +4,10 @@ import { openSync, closeSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as pause } from 'node:timers/promises';
-import { admit, checkRoleAgents, connect, readExecution, stopSessions } from './opencode-runtime.mjs';
-import { claimWorkflow, getWorkflow, updateWorkflow, workflowHasOwner, publicError } from './run-store.mjs';
+import { admit, checkRoleAgents, connect, readExecution, stopSessions, captureStopSessions } from './opencode-runtime.mjs';
+import { claimWorkflow, getWorkflow, updateWorkflow, workflowHasOwner, publicError, withWorkflowAction } from './run-store.mjs';
 import { parseVerdict, rolePermissions, rolePrompt, roleAgents, checkApprovals } from './workflow-definition.mjs';
-import { mergeWorkspace, snapshot, writeReviewDiff } from './workflow-git.mjs';
+import { mergeWorkspace, snapshot, writeReviewDiff, verificationWorkspace } from './workflow-git.mjs';
 
 export function publicWorkflow(state) {
   const current = state.visits.at(-1);
@@ -86,7 +86,8 @@ function request(state, visit) {
     rule.action !== 'skill' || state.roleAgents?.[node.role] === roleAgents[node.role]);
   return { id: state.id, sessionId: visit.sessionId, inputId: visit.inputId,
     request: { text: visit.prompt, session: { title: `DWF ${node.role} ${visit.node}`,
-      agent: participant?.id ?? state.roleAgents?.[node.role] ?? 'build', model: participant?.model ?? state.model, location: { directory: state.workspace.path },
+      agent: participant?.id ?? state.roleAgents?.[node.role] ?? 'build', model: participant?.model ?? state.model,
+      location: { directory: visit.workspace?.path ?? state.workspace.path },
       metadata: { dwfRunId: state.id },
       permissions: [...permissions, ...(visit.review ? [{ action: 'external_directory',
         resource: join(dirname(visit.review.path), '*'), effect: 'allow' }] : [])] } } };
@@ -98,31 +99,28 @@ export async function runWorkflow(root, id) {
     acknowledge();
     return;
   }
-  let state = getWorkflow(root, id);
+  const state = getWorkflow(root, id);
   const save = complete => updateWorkflow(root, state, owner, complete);
-  try {
-    if (state.status !== 'running') { save(true); acknowledge(); return; }
-    let client = await connect(root, state.participants);
-    if (state.roleAgents) await checkRoleAgents(client, state.workspace.path, state.roleAgents);
-    let acknowledged = false;
-    while (state.status === 'running') {
+  if (state.status !== 'running') { save(true); acknowledge(); return; }
+  let client;
+  let acknowledged = false;
+  while (state.status === 'running') {
+    try {
       save(false);
+      if (!client) {
+        client = await connect(root, state.participants);
+        if (state.roleAgents) await checkRoleAgents(client, state.workspace.path, state.roleAgents);
+      }
       const stop = state.controls?.find(command => command.kind === 'stop' && command.status === 'pending');
       if (stop) {
-        try { await stopSessions(client, state); }
-        catch (error) {
-          if (error.publicMessage) throw error;
-          state.service = 'unavailable';
-          save(false);
-          await pause(1000);
-          try { client = await connect(root, state.participants); } catch { /* Retry this durable stop. */ }
-          continue;
-        }
-        for (const command of state.controls) if (command.status === 'pending') command.status = 'cancelled';
-        stop.status = 'applied';
-        state.status = 'cancelled';
-        delete state.service;
-        save(true);
+        await withWorkflowAction(root, state, owner, () => captureStopSessions(client, state));
+        await withWorkflowAction(root, state, owner, async () => {
+          await stopSessions(client, state);
+          for (const command of state.controls) if (command.status === 'pending') command.status = 'cancelled';
+          stop.status = 'applied';
+          state.status = 'cancelled';
+          delete state.service;
+        });
         break;
       }
       let visit = state.visits.at(-1);
@@ -130,28 +128,32 @@ export async function runWorkflow(root, id) {
         const steering = state.controls?.find(command => command.kind === 'steer' && command.status === 'pending');
         const next = steering?.node ?? (visit ? state.definition.transitions[visit.node][visit.verdict.outcome] : state.definition.entry);
         if (next === null) {
-          if (!updateWorkflow(root, state, owner, false, true)) continue;
-          const revision = snapshot(state.workspace);
-          checkApprovals(state, revision);
-          if (state.definition.merge) {
-            state.result = { summary: visit.verdict.summary, commit: mergeWorkspace(state.workspace, revision) };
-          } else state.result = visit.verdict;
-          state.status = 'succeeded';
-          save(true);
-          break;
+          await withWorkflowAction(root, state, owner, () => {
+            if (state.controls?.some(command => command.status === 'pending')) return;
+            state.finalizing = true;
+            const revision = snapshot(state.workspace);
+            checkApprovals(state, revision);
+            if (state.definition.merge) {
+              state.result = { summary: visit.verdict.summary, commit: mergeWorkspace(state.workspace, revision) };
+            } else state.result = visit.verdict;
+            state.status = 'succeeded';
+          });
+          continue;
         }
         const node = state.definition.nodes[next];
         const revision = snapshot(state.workspace);
         if (!steering && state.participants?.[next]?.memory === false) delete state.sessions[next];
         state.sessions[next] ??= 'ses_' + randomUUID();
         const inputId = 'msg_' + randomUUID();
+        const workspace = node.role === 'verifier' ? verificationWorkspace(root, id, state.workspace, revision, inputId) : state.workspace;
         // A reviewer session from an older release lacks permission to read review artifacts.
         const earlierReview = state.visits.find(item => item.node === next);
         const review = node.role === 'reviewer' && state.workspace.mode !== 'directory' && (!earlierReview || earlierReview.review) ? writeReviewDiff(state.workspace, revision,
           join(root, 'workflows', id, 'reviews', `${inputId}.diff`)) : undefined;
         visit = { node: next, sessionId: state.sessions[next], inputId, revision, startedAt: Date.now(),
+          ...(node.role === 'verifier' ? { workspace } : {}),
           ...(review ? { review } : {}),
-          prompt: rolePrompt(state.definition, next, visit?.verdict, revision, state.visits, Boolean(state.roleAgents), review, state.workspace) };
+          prompt: rolePrompt(state.definition, next, visit?.verdict, revision, state.visits, Boolean(state.roleAgents), review, workspace) };
         if (steering) {
           visit.prompt += `\n\nУточнение пользователя для этого участника:\n${steering.text}`;
           visit.steering = steering.id;
@@ -161,9 +163,17 @@ export async function runWorkflow(root, id) {
         save(false);
       }
       if (!visit.admitted) {
-        await admit(client, request(state, visit));
-        visit.admitted = true;
-        save(false);
+        await withWorkflowAction(root, state, owner, async () => {
+          const pending = state.controls?.some(command => command.status === 'pending' &&
+            (command.kind === 'stop' || !visit.steering));
+          if (pending) {
+            if (!visit.steering) state.visits.pop();
+            return;
+          }
+          await admit(client, request(state, visit));
+          visit.admitted = true;
+        });
+        if (!visit.admitted) continue;
       }
       if (!acknowledged) { acknowledge(); acknowledged = true; }
       let outcome;
@@ -177,29 +187,45 @@ export async function runWorkflow(root, id) {
         state.service = 'unavailable';
         save(false);
         await pause(1000);
-        try { client = await connect(root, state.participants); } catch { /* Retain the pending visit and retry service discovery. */ }
+        client = undefined;
         continue;
       }
       delete state.service;
       if (!outcome) { await pause(300); continue; }
-      if (outcome.status !== 'succeeded') throw publicError(outcome.error);
+      save(false);
+      if (state.controls?.some(command => command.kind === 'stop' && command.status === 'pending')) continue;
       const role = state.definition.nodes[visit.node].role;
-      if (role !== 'worker' && snapshot(state.workspace) !== visit.revision) {
+      const revision = snapshot(visit.workspace ?? state.workspace);
+      if (role !== 'worker' && revision !== visit.revision) {
         throw publicError('Проверяющий участник изменил рабочее дерево. Требуется новая проверка.');
       }
-      visit.verdict = parseVerdict(outcome.result, role);
-      visit.revision = snapshot(state.workspace);
+      try {
+        if (outcome.status !== 'succeeded') throw publicError(outcome.error);
+        visit.verdict = parseVerdict(outcome.result, role);
+      } catch (error) {
+        if (!state.controls?.some(command => command.kind === 'steer' && command.status === 'pending')) throw error;
+        visit.verdict = { outcome: 'blocked', summary: error.publicMessage };
+      }
+      if (role === 'worker') visit.revision = revision;
       if (visit.steering) state.controls.find(command => command.id === visit.steering).status = 'applied';
-      if (visit.verdict.outcome === 'blocked') throw publicError(visit.verdict.summary);
+      if (visit.verdict.outcome === 'blocked' && !state.controls?.some(command => command.status === 'pending')) throw publicError(visit.verdict.summary);
       save(false);
+    } catch (error) {
+      if (error.code === 'DWF_OWNER_LOST') break;
+      try {
+        await withWorkflowAction(root, state, owner, () => {
+          if (state.controls?.some(command => command.kind === 'stop' && command.status === 'pending')) {
+            state.service = 'unavailable';
+            return;
+          }
+          state.status = 'failed';
+          state.error = error.publicMessage ?? 'Контроллер workflow завершился с ошибкой. Рабочее дерево сохранено.';
+        });
+      } catch { break; /* A replacement controller owns the current state. */ }
+      if (state.status === 'running') { client = undefined; await pause(1000); }
     }
-    if (!acknowledged) acknowledge();
-  } catch (error) {
-    state.status = 'failed';
-    state.error = error.publicMessage ?? 'Контроллер workflow завершился с ошибкой. Рабочее дерево сохранено.';
-    try { save(true); } catch { /* A replacement controller owns the current state. */ }
-    acknowledge();
   }
+  if (!acknowledged) acknowledge();
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

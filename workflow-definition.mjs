@@ -151,6 +151,7 @@ const roleInstructions = {
   ].join('\n'),
   verifier: [
     'Independently verify the result against the original requirements. Run the necessary checks and reproduce user scenarios with the available tools. Use temporary data. Preserve project files.',
+    'For Git workflows your workspace contains only the transferable candidate files. Install declared dependencies if needed. Base your checks on this workspace and report missing required files.',
     'Base your conclusion on your own checks. Return changes for unmet requirements. Include reproduction steps and the expected and actual results.',
     'Return approve when the checks required by the task succeed. If a necessary check cannot be performed, return blocked.',
     'In summary, state the checks performed, their results and remaining limitations.',

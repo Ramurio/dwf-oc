@@ -60,6 +60,15 @@ export function snapshot(workspace) {
   return hash.digest('hex');
 }
 
+export function verificationWorkspace(root, id, workspace, revision, inputId) {
+  if (workspace.mode === 'directory') return workspace;
+  const path = join(root, 'workflows', id, 'verification', inputId);
+  const commit = git(workspace.path, ['commit-tree', revision, '-p', git(workspace.path, ['rev-parse', 'HEAD']),
+    '-m', 'DWF verification snapshot']);
+  git(workspace.path, ['worktree', 'add', '--detach', path, commit]);
+  return { ...workspace, path };
+}
+
 export function tree(workspace) {
   const directory = mkdtempSync(join(tmpdir(), 'dwf-index-'));
   const env = { GIT_INDEX_FILE: join(directory, 'index') };

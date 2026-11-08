@@ -11,7 +11,7 @@ import { getWorkflow } from '../run-store.mjs';
 const cli = [process.execPath, fileURLToPath(new URL('../dwf.mjs', import.meta.url))];
 const verdict = (outcome = 'approve') => JSON.stringify({ outcome, summary: `Observed ${outcome}` });
 
-async function fixture(t, definition, reply, directory = false) {
+async function fixture(t, definition, reply, directory = false, overrides = {}) {
   const sandbox = await createSandbox();
   const provider = await createControlledHttpProvider({ directory: sandbox.control, token: sandbox.token, reply });
   t.after(async () => {
@@ -31,6 +31,7 @@ async function fixture(t, definition, reply, directory = false) {
     DWF_PLANNER_REASONING: 'high', OPENCODE_CONFIG: join(sandbox.root, 'provider.json'),
   });
   delete sandbox.env.OPENCODE_CONFIG_CONTENT;
+  Object.assign(sandbox.env, overrides);
   const config = nativeProviderConfig(provider.baseURL);
   const alternate = structuredClone(config.providers['dwf-acceptance'].models.planner);
   alternate.capabilities.reasoning.effort.push('low');
@@ -170,4 +171,46 @@ test('stop interrupts a held session, persists cancellation and leaves other run
   }, 15000, 'independent completion');
   assert.equal(finished.status, 'succeeded', finished.error);
   assert.equal(getWorkflow(sandbox.state, sandbox.runId).status, 'cancelled');
+});
+
+test('stop waits for a SIGTERM-resistant native shell and its child before confirming cancellation', { timeout: 60000 }, async t => {
+  const definition = { task: 'Controlled resistant shell stop', workspace: 'directory', entry: 'verify',
+    nodes: { verify: { role: 'verifier', tools: ['shell'], skills: [] } },
+    transitions: { verify: { approve: null, changes: null } } };
+  const sandbox = await fixture(t, definition, ({ toolResults }) => {
+    if (toolResults.length) return verdict();
+    return { toolCalls: [{ name: 'shell', arguments: {
+      command: `trap '' TERM; echo $$ > '${sandbox.root}/shell.pid'; while :; do echo tick >> '${sandbox.root}/heartbeat'; sleep 0.05; done`,
+      background: true,
+    } }] };
+  }, true);
+  await waitFor(async () => (await sandbox.events()).some(event => event.type === 'received'), 10000, 'first request');
+  const first = (await sandbox.events()).find(event => event.type === 'received');
+  await writeJson(join(sandbox.control, 'release.json'), { token: sandbox.token, callIds: [first.callId] });
+  await waitFor(async () => (await sandbox.events()).filter(event => event.type === 'received').length >= 2,
+    10000, 'background shell');
+  const pid = Number(await readFile(join(sandbox.root, 'shell.pid'), 'utf8'));
+  process.kill(pid, 0);
+  assert.equal((await sandbox.command(['stop', sandbox.runId])).status, 'cancelled');
+  assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' });
+  const heartbeat = await readFile(join(sandbox.root, 'heartbeat'), 'utf8');
+  await new Promise(resolve => setTimeout(resolve, 200));
+  assert.equal(await readFile(join(sandbox.root, 'heartbeat'), 'utf8'), heartbeat);
+  assert.equal((await sandbox.command(['stop', sandbox.runId])).status, 'cancelled');
+});
+
+test('explicit participant settings ignore an unused global model and reasoning', { timeout: 60000 }, async t => {
+  const definition = { task: 'Use the explicit model', workspace: 'directory', entry: 'review',
+    nodes: { review: { role: 'reviewer', tools: [], skills: [], reasoning: null,
+      model: { provider: 'dwf-acceptance', modelId: 'alternate' } } },
+    transitions: { review: { approve: null, changes: null } } };
+  const sandbox = await fixture(t, definition, () => verdict(), true, {
+    DWF_PLANNER_MODEL: JSON.stringify({ provider: 'missing', modelId: 'unused' }),
+    DWF_PLANNER_REASONING: 'unused-invalid',
+  });
+  await sandbox.release();
+  const result = await sandbox.finish();
+  assert.equal(result.status, 'succeeded', result.error);
+  const calls = (await sandbox.events()).filter(event => event.type === 'received');
+  assert(calls.every(call => call.model.modelId === 'alternate' && call.reasoning === undefined));
 });

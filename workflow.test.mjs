@@ -7,8 +7,9 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as pause } from 'node:timers/promises';
 import { validateWorkflow, parseVerdict, rolePermissions, rolePrompt, roleSystemPrompt, roleAgents, outcomes, participantSettings, participantAgent, checkApprovals } from './workflow-definition.mjs';
-import { createWorkflow, getWorkflow, claimWorkflow, updateWorkflow, workflowHasOwner, savePreset, presets, queueWorkflowCommand } from './run-store.mjs';
-import { git, prepareWorkspace, tree, mergeWorkspace, writeReviewDiff, snapshot } from './workflow-git.mjs';
+import { createWorkflow, getWorkflow, claimWorkflow, updateWorkflow, workflowHasOwner, savePreset, presets, queueWorkflowCommand, withWorkflowAction } from './run-store.mjs';
+import { git, prepareWorkspace, tree, mergeWorkspace, writeReviewDiff, snapshot, verificationWorkspace } from './workflow-git.mjs';
+import { DatabaseSync } from 'node:sqlite';
 import { roleSkills } from './role-skills.mjs';
 import { publicWorkflow, watchEvent } from './workflow-runtime.mjs';
 import { launch, waitFor, within, watchStates } from './acceptance/harness.mjs';
@@ -95,6 +96,68 @@ test('управляющие команды переживают сохране�
   assert.equal(other.controls[0].id, stopped.id);
   assert.deepEqual(queueWorkflowCommand(root, other.id, 'stop'), stopped);
   assert.throws(() => queueWorkflowCommand(root, other.id, 'steer', 'implement', 'Late'), /не принимает/);
+});
+
+test('устаревший владелец не выполняет внешние действия после takeover и stop', async t => {
+  const root = await fixture(t);
+  const state = { id: 'fencing', definition: sampleWorkflow('Task'), status: 'running', visits: [] };
+  createWorkflow(root, state);
+  claimWorkflow(root, state.id, 'old');
+  const db = new DatabaseSync(join(root, 'dwf.sqlite'));
+  db.prepare('UPDATE workflows SET expires = 0 WHERE id = ?').run(state.id);
+  db.close();
+  assert(claimWorkflow(root, state.id, 'new'));
+  const current = getWorkflow(root, state.id);
+  queueWorkflowCommand(root, state.id, 'stop');
+  current.status = 'cancelled';
+  updateWorkflow(root, current, 'new', true);
+  let called = false;
+  await assert.rejects(withWorkflowAction(root, state, 'old', () => { called = true; }), { code: 'DWF_OWNER_LOST' });
+  assert.equal(called, false);
+  assert.equal(getWorkflow(root, state.id).status, 'cancelled');
+});
+
+test('admission и принятие управляющей команды сериализуются на реальной SQLite', async t => {
+  const root = await fixture(t);
+  const state = { id: 'serialized', definition: sampleWorkflow('Task'), status: 'running', visits: [] };
+  createWorkflow(root, state);
+  claimWorkflow(root, state.id, 'owner');
+  let client;
+  await withWorkflowAction(root, state, 'owner', async () => {
+    client = launch([process.execPath], ['--input-type=module', '-e', `
+      import {queueWorkflowCommand} from './run-store.mjs';
+      process.stdout.write('attempting\\n');
+      queueWorkflowCommand(process.argv[1], 'serialized', 'stop');
+      process.stdout.write('accepted\\n');
+    `, root], { env: process.env });
+    await waitFor(() => client.stdout.includes('attempting'), 5000, 'concurrent control request');
+    await pause(50);
+    assert.equal(client.exited, false);
+    assert(!client.stdout.includes('accepted'));
+  });
+  assert.equal((await within(client.exit, 5000, 'control after admission')).code, 0);
+  await within(client.close, 5000, 'control output');
+  assert.equal(getWorkflow(root, state.id).controls[0].kind, 'stop');
+});
+
+test('verifier получает только переносимые файлы из проверяемого дерева', async t => {
+  const root = await fixture(t);
+  const source = join(root, 'source');
+  await mkdir(source);
+  git(source, ['init', '-b', 'main']);
+  git(source, ['config', 'user.name', 'Test']);
+  git(source, ['config', 'user.email', 'test@example.invalid']);
+  await writeFile(join(source, '.gitignore'), 'local-only.js\n');
+  await writeFile(join(source, 'index.js'), 'import "./local-only.js";\n');
+  git(source, ['add', '.']);
+  git(source, ['commit', '-m', 'base']);
+  const workspace = prepareWorkspace(root, source, 'portable');
+  await writeFile(join(workspace.path, 'local-only.js'), 'console.log("hidden dependency");\n');
+  const revision = snapshot(workspace);
+  const verification = verificationWorkspace(root, 'portable', workspace, revision, 'attempt');
+  assert.equal(snapshot(verification), revision);
+  assert(!(await readdir(verification.path)).includes('local-only.js'));
+  assert.throws(() => execFileSync(process.execPath, ['index.js'], { cwd: verification.path, stdio: 'pipe' }), /Command failed/);
 });
 
 test('настройки участника наследуются, пустые списки заменяют defaults', () => {
