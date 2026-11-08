@@ -1,5 +1,11 @@
 node_modules/
 acceptance-results/
+.env
+.env.*
+.DS_Store
+*.log
+*.sqlite*
+.dwf/
 
 # Beads / Dolt files (added by bd init)
 .dolt/

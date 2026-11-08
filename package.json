@@ -1,0 +1,33 @@
+{
+  "name": "dwf",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "^22.19.0 || ^24.0.0 || >=26"
+  },
+  "scripts": {
+    "test": "npm run test:harness && npm run test:product && npm run test:acceptance && npm run test:recovery && npm run test:workflow",
+    "test:acceptance": "cucumber-js --config cucumber.mjs --tags @controlled --format json:acceptance-results/opencode/controlled.json",
+    "test:real": "cucumber-js --config cucumber.mjs --tags @real --format json:acceptance-results/opencode/real.json",
+    "test:steps": "cucumber-js --config cucumber.mjs --dry-run",
+    "test:harness": "node --test acceptance/harness.test.mjs acceptance/tester.test.mjs",
+    "test:mutation": "node acceptance/verify-lifetime-mutation.mjs",
+    "dwf": "node dwf.mjs",
+    "test:product": "node --test run-store.test.mjs workflow.test.mjs",
+    "test:recovery": "cucumber-js --config cucumber.mjs --tags @recovery --format json:acceptance-results/opencode/recovery.json",
+    "test:workflow": "cucumber-js --config cucumber.mjs --tags @workflow --format json:acceptance-results/opencode/workflow.json"
+  },
+  "devDependencies": {
+    "@cucumber/cucumber": "13.2.1"
+  },
+  "bin": {
+    "dwf": "./dwf.mjs"
+  },
+  "dependencies": {
+    "@opencode/cli": "2.2.5",
+    "@opencode/client": "2.2.5"
+  },
+  "allowScripts": {
+    "@opencode/cli@2.2.5": true
+  }
+}

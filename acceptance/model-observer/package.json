@@ -1,0 +1,6 @@
+{
+  "name": "dwf-model-observer",
+  "private": true,
+  "type": "module",
+  "exports": { "./server": "./index.mjs" }
+}
