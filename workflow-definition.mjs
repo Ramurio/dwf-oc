@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { relative } from 'node:path';
 import { publicError } from './run-store.mjs';
 import { roleSkills, bundledSkills } from './role-skills.mjs';
 
@@ -242,7 +243,9 @@ export function rolePrompt(definition, nodeId, previous, revision, visits = [], 
     workspace?.instructions?.length ? `Inherited project instructions captured at workflow start (outermost first):\n${JSON.stringify(workspace.instructions)}` : '',
     `Поручение пользователя:\n${definition.task}`,
     `Workspace snapshot recorded and checked by DWF: ${revision}`,
-    review ? `Материалы ревью (полный diff относительно начала задачи):\n${JSON.stringify(review)}` : '',
+    review ? `Материалы ревью (полный diff относительно начала задачи, path относительно Project workspace):\n${JSON.stringify({
+      ...review, path: workspace ? relative(workspace.path, review.path) : review.path,
+    })}` : '',
     history ? `Завершённые этапы workflow (по порядку):\n${JSON.stringify(history)}` :
       previous ? `Предыдущий результат участника:\n${JSON.stringify(previous)}` : '',
     separateSystem ? '' : resultInstructions(node.role),

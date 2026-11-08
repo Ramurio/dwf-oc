@@ -275,6 +275,9 @@ test('reviewer получает путь, базу, снимок и размер
   const review = { base: 'initial-commit', revision: 'reviewed-tree', path: '/state/review.diff', bytes: 512 };
   const prompt = rolePrompt(definition, 'review', undefined, review.revision, [], true, review);
   assert(prompt.includes(JSON.stringify(review)));
+  const relativePrompt = rolePrompt(definition, 'review', undefined, review.revision, [], true, review, { path: '/state/worktree' });
+  assert(relativePrompt.includes('"path":"../review.diff"'));
+  assert.equal(review.path, '/state/review.diff');
   assert(!rolePrompt(definition, 'implement', undefined, 'tree', [], true).includes('Материалы ревью'));
 });
 

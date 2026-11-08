@@ -133,6 +133,33 @@ test('public CLI rejects stale approval from an earlier mandatory reviewer', { t
   assert.equal((await readdir(sandbox.workspace)).includes('result.txt'), false);
 });
 
+test('native reviewer reads the supplied full diff with its scoped permission', { timeout: 60000 }, async t => {
+  const definition = { task: 'Review an actual file change', entry: 'work',
+    nodes: { work: { role: 'worker', tools: ['shell'], skills: [], instructions: 'stage=work' },
+      review: { role: 'reviewer', tools: ['read'], skills: [], instructions: 'stage=review' },
+      verify: { role: 'verifier', tools: [], skills: [] } },
+    transitions: { work: { done: 'review' }, review: { approve: 'verify', changes: null },
+      verify: { approve: null, changes: null } } };
+  let observedDiff = false;
+  const sandbox = await fixture(t, definition, ({ prompt, toolResults }) => {
+    if (prompt.includes('stage=work')) return toolResults.length ? verdict('done') : {
+      toolCalls: [{ name: 'shell', arguments: { command: 'printf reviewed-change > result.txt' } }],
+    };
+    if (prompt.includes('stage=review')) {
+      const review = JSON.parse(prompt.match(/Материалы ревью[^\n]*\n([^\n]+)/)[1]);
+      assert.match(review.path, /^\.\.\/reviews\/[^/]+\.diff$/);
+      if (!toolResults.length) return { toolCalls: [{ name: 'read', arguments: { path: review.path } }] };
+      assert.match(toolResults.join('\n'), /\+reviewed-change/);
+      observedDiff = true;
+    }
+    return verdict();
+  });
+  await sandbox.release();
+  const result = await sandbox.finish();
+  assert.equal(result.status, 'succeeded', result.error);
+  assert.equal(observedDiff, true);
+});
+
 test('steering reaches the selected participant in the same session before completion', { timeout: 60000 }, async t => {
   const definition = { task: 'Produce a result', entry: 'work',
     nodes: { work: { role: 'worker', tools: [], skills: [] }, finish: { role: 'orchestrator', tools: [], skills: [] } },
