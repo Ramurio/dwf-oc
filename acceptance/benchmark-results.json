@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "recordedAt": "2026-11-08T23:42:24.601772+00:00",
+  "recordedAt": "2026-11-08T23:53:34.669472+00:00",
   "model": {
     "provider": "openai",
     "modelId": "gpt-6.1-sol-ultrafast",
@@ -121,7 +121,7 @@
         "providerCostFilled": false
       },
       "usageComplete": true,
-      "note": "657 candidate tests and independent behavior/type checks passed. Original tests have one list-versus-tuple representation mismatch also changed upstream. With only the upstream info-dict test update, all 625 original tests pass. 22 skips and one xfail are inherited."
+      "note": "657 candidate tests and independent behavior/type checks passed. Original tests have one list-versus-tuple representation mismatch also changed upstream. With only the upstream info-dict test update, all 625 original tests pass. The reference has three failures against the old tests, reduced to two after that update: custom metavar formatting and the invalid-choice-message method signature changed upstream. These are reference API/test mismatches. 22 skips and one xfail are inherited."
     },
     {
       "attempt": "2843c0a0-6fec-4458-92aa-80a0249a6858",
