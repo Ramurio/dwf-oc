@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { access, cp, mkdir, readFile, realpath, rename, writeFile } from 'node:fs/promises';
+import { access, cp, mkdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve, relative, sep, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -179,7 +179,14 @@ export function testerState(attempt, messages) {
   const assistants = turn.filter(message => message.type === 'assistant');
   const last = assistants.at(-1);
   let report = '';
-  for (const message of assistants) {
+  let completed = false;
+  for (const message of turn) {
+    if (completed && ['assistant', 'synthetic', 'user'].includes(message.type)) {
+      report = '';
+      completed = false;
+    }
+    if (message.type === 'idle') completed = true;
+    if (message.type !== 'assistant') continue;
     if (message.error || !['stop', 'length'].includes(message.finish)) report = '';
     else report += message.content.filter(part => part.type === 'text').map(part => part.text).join('');
   }
@@ -198,33 +205,31 @@ export async function inspectTester(client, attempt) {
   if (state.status !== 'running') {
     messages = await messagesFor(client, attempt.sessionId);
     state = testerState(attempt, messages);
+    let pendingShells = [];
+    let busy = false;
     if (messages.findLast(message => message.type === 'idle')?.outcome === 'succeeded') {
       const [shells, active, inbox] = await Promise.all([
         client.shell.list({ location: { directory: attempt.workspace } }),
         client.session.active(), client.session.inbox.list({ sessionID: attempt.sessionId }),
       ]);
-      const pendingShells = shells.data.filter(shell =>
+      pendingShells = shells.data.filter(shell =>
         shell.status === 'running' && shell.metadata.sessionID === attempt.sessionId).map(shell => shell.id);
-      if (pendingShells.length || active[attempt.sessionId] || inbox.length) {
-        state.status = 'running';
-        state.pendingShells = pendingShells;
-        delete state.report;
-        delete state.error;
-      }
+      busy = pendingShells.length > 0 || Boolean(active[attempt.sessionId]) || inbox.length > 0;
     }
-    if (state.status !== 'running') {
-      messages = await messagesFor(client, attempt.sessionId);
-      const latest = testerState(attempt, messages);
-      if (JSON.stringify(latest) !== JSON.stringify(state)) {
-        state = { ...latest, status: 'running' };
-        delete state.report;
-        delete state.error;
-      }
+    messages = await messagesFor(client, attempt.sessionId);
+    const latest = testerState(attempt, messages);
+    if (busy || JSON.stringify(latest) !== JSON.stringify(state)) {
+      state = { ...latest, status: 'running' };
+      if (pendingShells.length) state.pendingShells = pendingShells;
+    } else {
+      state = latest;
     }
   }
+  if (state.status === 'running') { delete state.report; delete state.error; }
   await save(join(attempt.directory, 'messages.json'), visibleMessages(messages));
   await save(join(attempt.directory, 'state.json'), state);
   if (state.report !== undefined) await writeFile(join(attempt.directory, 'report.md'), state.report, { mode: 0o600 });
+  else await rm(join(attempt.directory, 'report.md'), { force: true });
   return state;
 }
 

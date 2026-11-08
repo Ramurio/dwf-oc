@@ -147,9 +147,12 @@ test('background work delays the final report and unrelated sessions do not bloc
   pending = false;
   assert.equal((await inspectTester(client, attempt)).status, 'succeeded');
   assert.equal(await readFile(join(directory, 'report.md'), 'utf8'), 'Final report');
+  pending = true;
+  assert.equal((await inspectTester(client, attempt)).status, 'running');
+  await assert.rejects(readFile(join(directory, 'report.md')), { code: 'ENOENT' });
 });
 
-test('tester completion changing during an activity request waits for a fresh poll', async t => {
+for (const active of [false, true]) test(`tester completion changing during activity waits for a fresh poll (busy=${active})`, async t => {
   const directory = await mkdtemp(join(tmpdir(), 'dwf-tester-moving-completion-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const attempt = { id: 'one', sessionId: 'ses_one', inputId: 'msg_one', directory, workspace: '/project' };
@@ -166,7 +169,7 @@ test('tester completion changing during an activity request waits for a fresh po
           { type: 'assistant', id: 'msg_late', finish: 'error', time: { completed: 2 },
             error: { message: 'Late failure' }, content: [] },
           { type: 'idle', outcome: 'failed', error: 'Late failure' }];
-        return {};
+        return active ? { ses_one: true } : {};
       },
     },
   };
@@ -179,4 +182,19 @@ test('tester completion changing during an activity request waits for a fresh po
   const last = await inspectTester(client, attempt);
   assert.equal(last.status, 'failed');
   assert.equal(last.error, 'Late failure');
+});
+
+test('resumed tester reports replace old completions and retain length continuations', () => {
+  const attempt = { id: 'one', sessionId: 'ses_one', inputId: 'msg_one', workspace: '/project' };
+  const answer = (id, text, finish = 'stop') => ({ type: 'assistant', id, finish,
+    time: { completed: 1 }, content: [{ type: 'text', text }] });
+  const messages = [{ type: 'user', id: 'msg_one' }, answer('early', 'Early success'),
+    { type: 'idle', outcome: 'succeeded' }];
+  for (const resume of [[], [{ type: 'synthetic', text: 'Background completion' }]]) {
+    const state = testerState(attempt, [...messages, ...resume, answer('late', 'Late correction'),
+      { type: 'idle', outcome: 'succeeded' }]);
+    assert.equal(state.report, 'Late correction');
+  }
+  assert.equal(testerState(attempt, [{ type: 'user', id: 'msg_one' }, answer('first', 'Long ', 'length'),
+    answer('last', 'report'), { type: 'idle', outcome: 'succeeded' }]).report, 'Long report');
 });

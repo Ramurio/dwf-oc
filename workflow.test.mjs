@@ -60,12 +60,16 @@ test('fenced results obey the same final and unambiguous boundary as plain JSON'
   const rejection = '{"outcome":"changes","summary":"Final"}';
   const fenced = `\`\`\`json\n${approval}\n\`\`\``;
   assert.equal(parseVerdict(`Checks finished.\n${fenced}`, 'reviewer').outcome, 'approve');
+  assert.equal(parseVerdict(`Checked type {value: number}.\n${approval}`, 'reviewer').outcome, 'approve');
+  const nested = { outcome: 'approve', summary: 'A "quoted } brace" and \\ escape', detail: { items: [{ ok: true }] } };
+  assert.deepEqual(parseVerdict(JSON.stringify(nested), 'reviewer'), nested);
   for (const text of [
     `${fenced}\n${rejection}`,
     `${approval}\n\`\`\`json\n${rejection}\n\`\`\``,
     `${fenced}\n\`\`\`json\n${rejection}\n\`\`\``,
     `${fenced}\nThe final check failed.`,
     `First verdict ${approval}\n${rejection}`,
+    `${approval}\n{"outcome":`,
   ]) assert.throws(() => parseVerdict(text, 'reviewer'));
 });
 

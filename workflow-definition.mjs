@@ -116,12 +116,44 @@ export function participantVisits(visits) {
   return visits.flatMap(visit => visit.children ?? [visit]);
 }
 
+function verdictObjects(text) {
+  const objects = [];
+  let depth = 0;
+  let start = 0;
+  let quoted = false;
+  let escaped = false;
+  for (let index = 0; index < text.length; index++) {
+    const character = text[index];
+    if (!depth) {
+      if (character === '{') { start = index; depth = 1; }
+      continue;
+    }
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === '"') quoted = false;
+      continue;
+    }
+    if (character === '"') quoted = true;
+    else if (character === '{') depth++;
+    else if (character === '}') {
+      depth--;
+      if (!depth) {
+        try { objects.push({ value: JSON.parse(text.slice(start, index + 1)), end: index + 1 }); }
+        catch { /* Ordinary prose may contain balanced braces. */ }
+      }
+    }
+  }
+  return objects;
+}
+
 export function parseVerdict(text, role) {
   const unfenced = text.replace(/```(?:json)?\s*\n([\s\S]*?)```/g, '\n$1\n');
-  const start = unfenced.indexOf('{');
-  let result;
-  try { result = JSON.parse(start < 0 ? unfenced : unfenced.slice(start)); }
-  catch { throw publicError('Участник вернул неверный JSON результата.'); }
+  const objects = verdictObjects(unfenced);
+  if (objects.length !== 1 || unfenced.slice(objects[0].end).trim()) {
+    throw publicError('Участник вернул неверный JSON результата.');
+  }
+  const result = objects[0].value;
   if (!object(result) || ![...outcomes[role], 'blocked'].includes(result.outcome) ||
     typeof result.summary !== 'string' || !result.summary.trim()) {
     throw publicError('Результат участника требует допустимый outcome и непустой summary.');

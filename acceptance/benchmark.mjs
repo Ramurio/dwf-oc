@@ -126,6 +126,29 @@ export function benchmarkAssessment(tester, workflows) {
       ...(workflow.error ? { error: workflow.error } : {}) })) };
 }
 
+export async function monitorBenchmark(attempt, { inspect, resume, interval = 2000 }) {
+  let previous;
+  for (;;) {
+    const state = await inspect();
+    const workflows = benchmarkWorkflows(attempt);
+    const assessment = benchmarkAssessment(state, workflows);
+    const status = JSON.stringify({ ...assessment, messages: state.messageCount, tool: state.lastTool });
+    if (status !== previous) console.log(status);
+    previous = status;
+    if (assessment.status !== 'running') {
+      await save(join(attempt.directory, 'assessment.json'), assessment);
+      return { state, assessment };
+    }
+    if (state.status !== 'running') {
+      for (const workflow of workflows.filter(workflow => workflow.status === 'running')) {
+        try { await resume(workflow.id); }
+        catch { console.log(JSON.stringify({ monitor: 'retrying', runId: workflow.id })); }
+      }
+    }
+    await pause(interval);
+  }
+}
+
 async function checkBoundary(attempt, profile, env, hidden, port) {
   const probe = `
     const fs=require('node:fs'),net=require('node:net'),assert=require('node:assert/strict');
@@ -189,31 +212,13 @@ export async function runBenchmark(settings) {
     await tester.checkTester(testerClient, attempt);
     await tester.admitTester(testerClient, attempt);
     console.log(JSON.stringify({ attempt: attempt.directory, sessionId: attempt.sessionId, isolation: 'passed' }));
-    let previous;
-    let finalTester;
-    for (;;) {
-      const state = finalTester ?? await tester.inspectTester(testerClient, attempt);
-      if (state.status !== 'running') finalTester = state;
-      const workflows = benchmarkWorkflows(attempt);
-      const assessment = benchmarkAssessment(state, workflows);
-      const status = JSON.stringify({ ...assessment, messages: state.messageCount, tool: state.lastTool });
-      if (status !== previous) console.log(status);
-      previous = status;
-      if (assessment.status !== 'running') {
-        await save(join(attempt.directory, 'assessment.json'), assessment);
-        return { attempt, state, assessment };
-      }
-      if (finalTester) {
-        for (const workflow of workflows.filter(workflow => workflow.status === 'running')) {
-          try {
-            execFileSync('/usr/bin/sandbox-exec', ['-f', profile, process.execPath,
-              join(attempt.runtime, 'dwf.mjs'), 'inspect', workflow.id],
-            { cwd: attempt.workspace, env, stdio: ['ignore', 'pipe', 'pipe'], timeout: 20000 });
-          } catch { console.log(JSON.stringify({ monitor: 'retrying', runId: workflow.id })); }
-        }
-      }
-      await pause(2000);
-    }
+    const result = await monitorBenchmark(attempt, {
+      inspect: () => tester.inspectTester(testerClient, attempt),
+      resume: id => execFileSync('/usr/bin/sandbox-exec', ['-f', profile, process.execPath,
+        join(attempt.runtime, 'dwf.mjs'), 'inspect', id],
+      { cwd: attempt.workspace, env, stdio: ['ignore', 'pipe', 'pipe'], timeout: 20000 }),
+    });
+    return { attempt, ...result };
   } finally {
     await save(join(attempt.directory, 'proxy-events.json'), proxy.events);
     await new Promise(resolve => unrelated.close(resolve));

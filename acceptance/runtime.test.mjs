@@ -329,7 +329,7 @@ test('native completion during an activity request cannot return an older approv
   assert.equal(execution.outcome, undefined);
   assert.equal(tester.status, 'running');
   assert.match((await readExecution(client, request)).outcome.result, /changes/);
-  assert.match((await inspectTester(client, attempt)).report, /changes/);
+  assert.equal(JSON.parse((await inspectTester(client, attempt)).report).outcome, 'changes');
   const db = new DatabaseSync(join(sandbox.state, 'dwf.sqlite'));
   db.prepare('UPDATE workflows SET expires = 0 WHERE id = ?').run(sandbox.runId);
   db.close();

@@ -4,8 +4,8 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { benchmarkAssessment, benchmarkEnvironment, benchmarkWorkflows, prepareBenchmark } from './benchmark.mjs';
-import { createWorkflow } from '../run-store.mjs';
+import { benchmarkAssessment, benchmarkEnvironment, benchmarkWorkflows, monitorBenchmark, prepareBenchmark } from './benchmark.mjs';
+import { claimWorkflow, createWorkflow, updateWorkflow } from '../run-store.mjs';
 
 test('benchmark archives a pristine baseline with no future Git objects or runtime task records', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'dwf-benchmark-test-'));
@@ -75,4 +75,28 @@ test('benchmark observes its own durable workflow state after the tester finishe
   createWorkflow(stateDirectory, workflow);
   assert.deepEqual(benchmarkWorkflows(attempt), [workflow]);
   assert.equal(benchmarkAssessment({ status: 'succeeded' }, benchmarkWorkflows(attempt)).status, 'running');
+});
+
+test('benchmark rereads a resumed tester until the combined assessment finishes', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'dwf-benchmark-resume-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const attempt = { directory, stateDirectory: directory };
+  const workflow = { id: 'work', status: 'running', definition: { merge: true } };
+  createWorkflow(directory, workflow);
+  assert(claimWorkflow(directory, workflow.id, 'controller'));
+  let polls = 0;
+  const resumed = [];
+  const result = await monitorBenchmark(attempt, {
+    interval: 0,
+    inspect: async () => ({ status: ['succeeded', 'running', 'failed'][polls++], messageCount: polls }),
+    resume: async id => {
+      resumed.push(id);
+      updateWorkflow(directory, { ...workflow, status: 'succeeded', result: { commit: 'verified' } }, 'controller', true);
+    },
+  });
+  assert.equal(polls, 3);
+  assert.deepEqual(resumed, ['work']);
+  assert.equal(result.state.status, 'failed');
+  assert.equal(result.assessment.status, 'failed');
+  assert.equal(JSON.parse(await readFile(join(directory, 'assessment.json'), 'utf8')).status, 'failed');
 });
