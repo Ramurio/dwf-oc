@@ -133,6 +133,25 @@ export async function admitTester(client, attempt) {
   await client.session.prompt({ sessionID: attempt.sessionId, id: attempt.inputId, text: attempt.prompt });
 }
 
+export async function checkTester(client, attempt) {
+  const location = { directory: attempt.workspace };
+  const available = await client.model.list({ location });
+  if (!available.data.some(item => item.providerID === model.providerID && item.id === model.id &&
+    item.enabled && item.variants.some(variant => variant.id === model.variant))) {
+    throw new Error('Тестеру недоступна GPT-6.1 Sol Ultrafast с reasoning high.');
+  }
+  const deadline = Date.now() + 15000;
+  for (;;) {
+    const skills = await client.skill.list({ location });
+    if (skills.data.some(skill => skill.id === 'dwf-oc')) {
+      await save(join(attempt.directory, 'skills.json'), skills.data);
+      return;
+    }
+    if (Date.now() >= deadline) throw new Error('OpenCode не загрузил скилл dwf-oc.');
+    await pause(100);
+  }
+}
+
 async function messagesFor(client, sessionId) {
   const messages = [];
   let cursor;
@@ -239,14 +258,7 @@ async function main() {
     process.stdout.write(JSON.stringify({ attempt: attempt.directory, sessionId: attempt.sessionId,
       workspace: attempt.workspace, base: attempt.base }) + '\n');
     const client = await connectTester(attempt.root, attempt.stateDirectory, true);
-    const available = await client.model.list({ location: { directory: attempt.workspace } });
-    if (!available.data.some(item => item.providerID === model.providerID && item.id === model.id &&
-      item.enabled && item.variants.some(variant => variant.id === model.variant))) {
-      throw new Error('Тестеру недоступна GPT-6.1 Sol Ultrafast с reasoning high.');
-    }
-    const skills = await client.skill.list({ location: { directory: attempt.workspace } });
-    if (!skills.data.some(skill => skill.id === 'dwf-oc')) throw new Error('OpenCode не загрузил скилл dwf-oc.');
-    await save(join(attempt.directory, 'skills.json'), skills.data);
+    await checkTester(client, attempt);
     await admitTester(client, attempt);
     const state = await observe(attempt, true);
     process.exitCode = state.status === 'succeeded' ? 0 : 1;

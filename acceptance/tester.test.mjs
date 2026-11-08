@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { createAttempt, admitTester, visibleMessages, testerState, inspectTester } from './tester.mjs';
+import { createAttempt, admitTester, visibleMessages, testerState, inspectTester, checkTester } from './tester.mjs';
 
 test('fresh tester attempts clone one baseline without changing the source', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'dwf-tester-test-'));
@@ -51,6 +51,23 @@ test('reconnecting uses the persisted native input ID and rejects a foreign sess
   await admitTester(client, attempt);
   assert.deepEqual(prompts, Array(2).fill({ sessionID: 'ses_one', id: 'msg_one', text: 'task' }));
   await assert.rejects(admitTester(client, { ...attempt, id: 'other' }), /другой пробе/);
+});
+
+test('tester waits for asynchronously loaded skills before admission', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'dwf-tester-start-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  let loaded = false;
+  const client = {
+    model: { list: async () => ({ data: [{ providerID: 'openai', id: 'gpt-6.1-sol-ultrafast',
+      enabled: true, variants: [{ id: 'high' }] }] }) },
+    skill: { list: async () => {
+      const data = loaded ? [{ id: 'dwf-oc' }] : [];
+      loaded = true;
+      return { data };
+    } },
+  };
+  await checkTester(client, { directory, workspace: directory });
+  assert.deepEqual(JSON.parse(await readFile(join(directory, 'skills.json'), 'utf8')), [{ id: 'dwf-oc' }]);
 });
 
 test('a crash before admission can create the exact persisted session', async () => {

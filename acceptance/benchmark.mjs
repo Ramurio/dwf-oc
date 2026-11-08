@@ -141,9 +141,7 @@ export async function runBenchmark(settings) {
     await runtime.checkModel(client, attempt.workspace, { provider: model.providerID, modelId: model.id }, model.variant);
     const testerClient = await tester.connectTester(attempt.root, attempt.stateDirectory, true,
       { commandPrefix, env, port: ports[1], credentialStateDirectory: credentials, skillDirectory: join(attempt.directory, 'skill') });
-    const skills = await testerClient.skill.list({ location: { directory: attempt.workspace } });
-    if (!skills.data.some(skill => skill.id === 'dwf-oc')) throw new Error('The isolated tester has no DWF skill.');
-    await save(join(attempt.directory, 'skills.json'), skills.data);
+    await tester.checkTester(testerClient, attempt);
     await tester.admitTester(testerClient, attempt);
     console.log(JSON.stringify({ attempt: attempt.directory, sessionId: attempt.sessionId, isolation: 'passed' }));
     let previous;
