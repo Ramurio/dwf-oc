@@ -4,7 +4,8 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { benchmarkEnvironment, prepareBenchmark } from './benchmark.mjs';
+import { benchmarkAssessment, benchmarkEnvironment, benchmarkWorkflows, prepareBenchmark } from './benchmark.mjs';
+import { createWorkflow } from '../run-store.mjs';
 
 test('benchmark archives a pristine baseline with no future Git objects or runtime task records', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'dwf-benchmark-test-'));
@@ -48,4 +49,29 @@ test('benchmark sanitizes inherited secrets and directs caches into the attempt'
     assert.equal(env.PYTHONPATH, '/attempt/project/src');
     assert.equal(env.HTTPS_PROXY, 'http://127.0.0.1:1234');
   } finally { delete process.env[key]; }
+});
+
+test('benchmark distinguishes a successful tester report from actual workflow completion', () => {
+  const tester = { status: 'succeeded' };
+  assert.equal(benchmarkAssessment(tester, []).status, 'failed');
+  const workflow = { id: 'test', status: 'failed', definition: { merge: true }, error: 'Blocked check' };
+  assert.equal(benchmarkAssessment(tester, [workflow]).status, 'failed');
+  assert.equal(benchmarkAssessment(tester, [{ ...workflow, status: 'running' }]).status, 'running');
+  assert.equal(benchmarkAssessment(tester, [{ ...workflow, status: 'succeeded' }]).status, 'failed');
+  const complete = { ...workflow, status: 'succeeded', error: undefined, result: { commit: 'verified' } };
+  const result = benchmarkAssessment(tester, [complete]);
+  assert.equal(result.status, 'succeeded');
+  assert.equal(result.workflows[0].integration, 'merged');
+  assert.equal(benchmarkAssessment({ status: 'failed' }, [complete]).status, 'failed');
+});
+
+test('benchmark observes its own durable workflow state after the tester finishes', async t => {
+  const stateDirectory = await mkdtemp(join(tmpdir(), 'dwf-benchmark-state-'));
+  t.after(() => rm(stateDirectory, { recursive: true, force: true }));
+  const attempt = { stateDirectory };
+  assert.deepEqual(benchmarkWorkflows(attempt), []);
+  const workflow = { id: 'pending', status: 'running', definition: { merge: true } };
+  createWorkflow(stateDirectory, workflow);
+  assert.deepEqual(benchmarkWorkflows(attempt), [workflow]);
+  assert.equal(benchmarkAssessment({ status: 'succeeded' }, benchmarkWorkflows(attempt)).status, 'running');
 });

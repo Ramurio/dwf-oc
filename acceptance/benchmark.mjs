@@ -1,11 +1,13 @@
 import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { cp, mkdir, readFile, realpath, symlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { createServer } from 'node:net';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { setTimeout as pause } from 'node:timers/promises';
+import { DatabaseSync } from 'node:sqlite';
 import { Service } from '@opencode/client/service';
 import { OpenCode } from '@opencode/client';
 import { createModelProxy, writeSandboxProfile } from './isolation.mjs';
@@ -103,6 +105,27 @@ export function benchmarkEnvironment(attempt, proxy, port, extra = {}) {
   return env;
 }
 
+export function benchmarkWorkflows(attempt) {
+  const file = join(attempt.stateDirectory, 'dwf.sqlite');
+  if (!existsSync(file)) return [];
+  const db = new DatabaseSync(file, { readOnly: true });
+  try {
+    if (!db.prepare("SELECT name FROM sqlite_master WHERE name = 'workflows'").get()) return [];
+    return db.prepare('SELECT state FROM workflows ORDER BY id').all().map(row => JSON.parse(row.state));
+  } finally { db.close(); }
+}
+
+export function benchmarkAssessment(tester, workflows) {
+  const running = tester.status === 'running' || workflows.some(workflow => workflow.status === 'running');
+  const succeeded = tester.status === 'succeeded' && workflows.length > 0 &&
+    workflows.every(workflow => workflow.status === 'succeeded' &&
+      (!workflow.definition.merge || Boolean(workflow.result?.commit)));
+  return { status: running ? 'running' : succeeded ? 'succeeded' : 'failed', testerStatus: tester.status,
+    workflows: workflows.map(workflow => ({ runId: workflow.id, status: workflow.status,
+      integration: workflow.definition.merge ? workflow.result?.commit ? 'merged' : 'unmerged' : 'not-requested',
+      ...(workflow.error ? { error: workflow.error } : {}) })) };
+}
+
 async function checkBoundary(attempt, profile, env, hidden, port) {
   const probe = `
     const fs=require('node:fs'),net=require('node:net'),assert=require('node:assert/strict');
@@ -167,12 +190,28 @@ export async function runBenchmark(settings) {
     await tester.admitTester(testerClient, attempt);
     console.log(JSON.stringify({ attempt: attempt.directory, sessionId: attempt.sessionId, isolation: 'passed' }));
     let previous;
+    let finalTester;
     for (;;) {
-      const state = await tester.inspectTester(testerClient, attempt);
-      const status = JSON.stringify({ status: state.status, messages: state.messageCount, tool: state.lastTool });
+      const state = finalTester ?? await tester.inspectTester(testerClient, attempt);
+      if (state.status !== 'running') finalTester = state;
+      const workflows = benchmarkWorkflows(attempt);
+      const assessment = benchmarkAssessment(state, workflows);
+      const status = JSON.stringify({ ...assessment, messages: state.messageCount, tool: state.lastTool });
       if (status !== previous) console.log(status);
       previous = status;
-      if (state.status !== 'running') return { attempt, state };
+      if (assessment.status !== 'running') {
+        await save(join(attempt.directory, 'assessment.json'), assessment);
+        return { attempt, state, assessment };
+      }
+      if (finalTester) {
+        for (const workflow of workflows.filter(workflow => workflow.status === 'running')) {
+          try {
+            execFileSync('/usr/bin/sandbox-exec', ['-f', profile, process.execPath,
+              join(attempt.runtime, 'dwf.mjs'), 'inspect', workflow.id],
+            { cwd: attempt.workspace, env, stdio: ['ignore', 'pipe', 'pipe'], timeout: 20000 });
+          } catch { console.log(JSON.stringify({ monitor: 'retrying', runId: workflow.id })); }
+        }
+      }
       await pause(2000);
     }
   } finally {
@@ -186,6 +225,6 @@ export async function runBenchmark(settings) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const settings = JSON.parse(await readFile(resolve(process.argv[2]), 'utf8'));
   const result = await runBenchmark(settings);
-  console.log(JSON.stringify({ attempt: result.attempt.directory, status: result.state.status, report: result.state.report }));
-  process.exitCode = result.state.status === 'succeeded' ? 0 : 1;
+  console.log(JSON.stringify({ attempt: result.attempt.directory, ...result.assessment, report: result.state.report }));
+  process.exitCode = result.assessment.status === 'succeeded' ? 0 : 1;
 }
