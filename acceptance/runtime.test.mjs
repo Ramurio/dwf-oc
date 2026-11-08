@@ -4,9 +4,13 @@ import { execFileSync } from 'node:child_process';
 import { mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createSandbox, cliJson, transcript, waitFor, writeJson } from './harness.mjs';
+import { DatabaseSync } from 'node:sqlite';
+import { OpenCode } from '@opencode/client';
+import { Service } from '@opencode/client/service';
+import { createSandbox, cliJson, transcript, waitFor, writeJson, taggedProcesses } from './harness.mjs';
 import { createControlledHttpProvider, nativeProviderConfig } from './controlled-http-provider.mjs';
 import { getWorkflow } from '../run-store.mjs';
+import { captureStopSessions, stopSessions } from '../opencode-runtime.mjs';
 
 const cli = [process.execPath, fileURLToPath(new URL('../dwf.mjs', import.meta.url))];
 const verdict = (outcome = 'approve') => JSON.stringify({ outcome, summary: `Observed ${outcome}` });
@@ -205,7 +209,7 @@ test('explicit participant settings ignore an unused global model and reasoning'
       model: { provider: 'dwf-acceptance', modelId: 'alternate' } } },
     transitions: { review: { approve: null, changes: null } } };
   const sandbox = await fixture(t, definition, () => verdict(), true, {
-    DWF_PLANNER_MODEL: JSON.stringify({ provider: 'missing', modelId: 'unused' }),
+    DWF_PLANNER_MODEL: 'not JSON',
     DWF_PLANNER_REASONING: 'unused-invalid',
   });
   await sandbox.release();
@@ -213,4 +217,174 @@ test('explicit participant settings ignore an unused global model and reasoning'
   assert.equal(result.status, 'succeeded', result.error);
   const calls = (await sandbox.events()).filter(event => event.type === 'received');
   assert(calls.every(call => call.model.modelId === 'alternate' && call.reasoning === undefined));
+});
+
+test('a live background verifier cannot approve files before its command finishes', { timeout: 60000 }, async t => {
+  const definition = { task: 'Check background completion', workspace: 'directory', entry: 'verify',
+    nodes: { verify: { role: 'verifier', tools: ['shell'], skills: [] } },
+    transitions: { verify: { approve: null, changes: null } } };
+  const sandbox = await fixture(t, definition, ({ toolResults }) => toolResults.length ? verdict() : {
+    toolCalls: [{ name: 'shell', arguments: { command: 'sleep 2; printf CHANGED > untouched.txt', background: true } }],
+  }, true);
+  await sandbox.release();
+  const result = await sandbox.finish();
+  assert.equal(result.status, 'failed');
+  assert.match(result.error, /изменил рабочее дерево/);
+  assert.equal(await readFile(join(sandbox.workspace, 'untouched.txt'), 'utf8'), 'CHANGED');
+});
+
+test('stop catches a resistant shell created after the initial process snapshot', { timeout: 60000 }, async t => {
+  const definition = { task: 'Stop a late shell', workspace: 'directory', entry: 'verify',
+    nodes: { verify: { role: 'verifier', tools: [], skills: [] } },
+    transitions: { verify: { approve: null, changes: null } } };
+  const sandbox = await fixture(t, definition, () => verdict(), true);
+  const endpoint = await Service.discover({ file: join(sandbox.state, 'opencode/state/opencode/service.json') });
+  const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) });
+  const state = getWorkflow(sandbox.state, sandbox.runId);
+  await captureStopSessions(client, state);
+  assert.equal(state.stopShells.length, 0);
+  const sessionID = state.visits[0].sessionId;
+  await client.shell.create({ location: { directory: state.workspace.path }, metadata: { sessionID },
+    command: `trap '' TERM; echo $$ > '${sandbox.root}/late.pid'; while :; do sleep 0.1; done` });
+  await waitFor(async () => readFile(join(sandbox.root, 'late.pid'), 'utf8').catch(() => false), 5000, 'late shell');
+  const pid = Number(await readFile(join(sandbox.root, 'late.pid'), 'utf8'));
+  await stopSessions(client, state);
+  await waitFor(() => {
+    try { process.kill(pid, 0); return false; }
+    catch (error) { return error.code === 'ESRCH'; }
+  }, 1000, 'native shell reaped');
+});
+
+test('fixed groups run concurrently and recover without repeating completed members', { timeout: 60000 }, async t => {
+  const definition = { task: 'Collect two independent reviews', workspace: 'directory', entry: 'reviews',
+    nodes: { left: { role: 'reviewer', tools: [], skills: [], instructions: 'member=left' },
+      right: { role: 'reviewer', tools: [], skills: [], instructions: 'member=right' },
+      summary: { role: 'orchestrator', tools: [], skills: [], instructions: 'member=summary' } },
+    groups: { reviews: { members: ['left', 'right'] } },
+    transitions: { reviews: { done: 'summary', changes: null, failed: null },
+      left: { approve: 'summary', changes: null }, right: { approve: 'summary', changes: null }, summary: { done: null } } };
+  const sandbox = await fixture(t, definition, ({ prompt }) => {
+    if (prompt.includes('member=summary')) {
+      assert(prompt.includes('"participant":"left"'));
+      assert(prompt.includes('"participant":"right"'));
+      return verdict('done');
+    }
+    return verdict();
+  }, true);
+  const calls = await waitFor(async () => {
+    const calls = (await sandbox.events()).filter(event => event.type === 'received');
+    return calls.length === 2 && calls;
+  }, 10000, 'both concurrent members');
+  const left = calls.find(call => call.prompt.includes('member=left'));
+  await writeJson(join(sandbox.control, 'release.json'), { token: sandbox.token, callIds: [left.callId] });
+  await waitFor(() => getWorkflow(sandbox.state, sandbox.runId).visits[0].children[0].verdict,
+    10000, 'persisted first member');
+  const controller = taggedProcesses(sandbox.token).find(item =>
+    execFileSync('ps', ['-p', String(item.pid), '-o', 'command='], { encoding: 'utf8' }).includes('workflow-runtime.mjs'));
+  assert(controller);
+  process.kill(controller.pid, 'SIGKILL');
+  const db = new DatabaseSync(join(sandbox.state, 'dwf.sqlite'));
+  db.prepare('UPDATE workflows SET expires = 0 WHERE id = ?').run(sandbox.runId);
+  db.close();
+  await sandbox.command(['inspect', sandbox.runId]);
+  await sandbox.release();
+  const result = await sandbox.finish();
+  assert.equal(result.status, 'succeeded', result.error);
+  assert.deepEqual(result.visits.map(visit => visit.node), ['reviews', 'summary']);
+  const finalCalls = (await sandbox.events()).filter(event => event.type === 'received');
+  assert.equal(finalCalls.filter(call => call.prompt.includes('member=left')).length, 1);
+  assert.equal(finalCalls.filter(call => call.prompt.includes('member=summary')).length, 1);
+  assert.equal(result.visits[0].verdict.results.length, 2);
+});
+
+test('map groups use runtime items, isolate writers and merge their complete result', { timeout: 60000 }, async t => {
+  const definition = { task: 'Write each discovered item to its own file', entry: 'plan', merge: true,
+    nodes: { plan: { role: 'orchestrator', tools: [], skills: [], instructions: 'member=plan' },
+      write: { role: 'worker', tools: ['shell'], skills: [], instructions: 'member=write' },
+      review: { role: 'reviewer', tools: [], skills: [], instructions: 'member=review' },
+      verify: { role: 'verifier', tools: ['shell'], skills: [], instructions: 'member=verify' } },
+    groups: { files: { member: 'write', itemsFrom: 'plan' } },
+    transitions: { plan: { done: 'files' }, files: { done: 'review', changes: null, failed: null },
+      write: { done: 'review' }, review: { approve: 'verify', changes: null }, verify: { approve: null, changes: null } } };
+  const sandbox = await fixture(t, definition, ({ prompt, toolResults }) => {
+    if (prompt.includes('member=plan')) return JSON.stringify({ outcome: 'done', summary: 'Found two items', items: [{ id: 'alpha' }, { id: 'beta' }] });
+    if (prompt.includes('member=write')) {
+      const name = JSON.parse(prompt.split('Элемент параллельной группы:\n').at(-1)).id;
+      return toolResults.length ? verdict('done') : { toolCalls: [{ name: 'shell', arguments: { command: `printf '${name}' > ${name}.txt` } }] };
+    }
+    if (prompt.includes('member=verify') && !toolResults.length) {
+      return { toolCalls: [{ name: 'shell', arguments: { command: 'test "$(cat alpha.txt)" = alpha && test "$(cat beta.txt)" = beta' } }] };
+    }
+    return verdict();
+  });
+  await sandbox.release();
+  const result = await sandbox.finish();
+  assert.equal(result.status, 'succeeded', result.error);
+  const group = result.visits.find(visit => visit.node === 'files');
+  assert.deepEqual(group.children.map(child => child.participant), ['files/alpha', 'files/beta']);
+  assert.notEqual(group.children[0].workspace.path, group.children[1].workspace.path);
+  assert.notEqual(group.children[0].sessionId, group.children[1].sessionId);
+  assert.equal(await readFile(join(sandbox.workspace, 'alpha.txt'), 'utf8'), 'alpha');
+  assert.equal(await readFile(join(sandbox.workspace, 'beta.txt'), 'utf8'), 'beta');
+  assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: sandbox.workspace, encoding: 'utf8' }), '');
+});
+
+test('group reports retain optional branch failures and stop cancels every active member', { timeout: 60000 }, async t => {
+  const definition = { task: 'Collect independent optional feedback', workspace: 'directory', entry: 'reviews',
+    nodes: { requiredReview: { role: 'reviewer', tools: [], skills: [], instructions: 'member=required' },
+      advisory: { role: 'reviewer', required: false, tools: [], skills: [], instructions: 'member=advisory' },
+      summary: { role: 'orchestrator', tools: [], skills: [] } },
+    groups: { reviews: { members: ['requiredReview', 'advisory'], required: ['requiredReview'] } },
+    transitions: { reviews: { done: 'summary', changes: null, failed: null },
+      requiredReview: { approve: 'summary', changes: null }, advisory: { approve: 'summary', changes: null }, summary: { done: null } } };
+  const sandbox = await fixture(t, definition, ({ prompt }) => {
+    if (prompt.includes('member=advisory')) return 'invalid JSON';
+    return verdict(prompt.includes('Завершённые этапы workflow') ? 'done' : 'approve');
+  }, true);
+  await sandbox.release();
+  const result = await sandbox.finish();
+  assert.equal(result.status, 'succeeded', result.error);
+  assert.equal(result.visits[0].verdict.results[1].status, 'failed');
+  await writeJson(join(sandbox.control, 'release.json'), { token: sandbox.token, callIds: [] });
+  const second = await sandbox.command(['start', '--file', join(sandbox.root, 'workflow.json')]);
+  assert.equal((await sandbox.command(['stop', second.runId])).status, 'cancelled');
+  const stopped = getWorkflow(sandbox.state, second.runId);
+  assert.equal(stopped.controls[0].status, 'applied');
+});
+
+test('a terminal group failure preserves every result and fails the workflow', { timeout: 60000 }, async t => {
+  const definition = { task: 'Collect required work', entry: 'work',
+    nodes: { first: { role: 'worker', tools: [], skills: [], instructions: 'member=first' },
+      second: { role: 'worker', tools: [], skills: [], instructions: 'member=second' } },
+    groups: { work: { members: ['first', 'second'] } },
+    transitions: { work: { done: null, changes: null, failed: null }, first: { done: null }, second: { done: null } } };
+  const sandbox = await fixture(t, definition, ({ prompt }) => prompt.includes('member=first') ? 'invalid JSON' : verdict('done'));
+  await sandbox.release();
+  const result = await sandbox.finish();
+  assert.equal(result.status, 'failed');
+  assert.equal(result.result.outcome, 'failed');
+  assert.equal(result.result.results.length, 2);
+  assert.equal(result.result.results[0].status, 'failed');
+  assert.equal(result.result.results[1].status, 'completed');
+});
+
+test('steering a mapped participant preserves its own context after the group settles', { timeout: 60000 }, async t => {
+  const definition = { task: 'Revisit one parallel item', entry: 'jobs',
+    nodes: { write: { role: 'worker', tools: [], skills: [], memory: false, instructions: 'member=write' },
+      summary: { role: 'orchestrator', tools: [], skills: [], instructions: 'member=summary' } },
+    groups: { jobs: { member: 'write', items: [{ id: 'alpha' }, { id: 'beta' }] } },
+    transitions: { jobs: { done: 'summary', changes: null, failed: null }, write: { done: 'summary' }, summary: { done: null } } };
+  const sandbox = await fixture(t, definition, () => verdict('done'));
+  await waitFor(async () => (await sandbox.events()).filter(event => event.type === 'received').length === 2,
+    10000, 'parallel requests before steering');
+  const file = join(sandbox.root, 'refinement.txt');
+  await writeFile(file, 'Clarify only alpha');
+  await sandbox.command(['steer', sandbox.runId, 'jobs/alpha', '--message-file', file]);
+  await sandbox.release();
+  const result = await sandbox.finish();
+  assert.equal(result.status, 'succeeded', result.error);
+  assert.deepEqual(result.visits.map(visit => visit.node), ['jobs', 'write', 'summary']);
+  assert.equal(result.visits[0].children[0].sessionId, result.visits[1].sessionId);
+  assert(result.visits[1].prompt.includes('Clarify only alpha'));
+  assert.equal(result.controls[0].status, 'applied');
 });

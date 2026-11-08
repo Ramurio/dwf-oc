@@ -70,6 +70,7 @@ test('каждый обязательный проверяющий должен 
   }
   delete state.definition.nodes.review;
   state.definition.nodes.secondReview.required = false;
+  state.definition.merge = false;
   state.visits = state.visits.filter(visit => visit.node === 'verify');
   assert.doesNotThrow(() => checkApprovals(state, 'current'));
 });

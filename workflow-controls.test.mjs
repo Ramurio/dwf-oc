@@ -17,15 +17,17 @@ registerHooks({
         export const admit = async (_client, request) => globalThis.dwfControlIO.admit(request);
         export const readExecution = async (_client, request) => globalThis.dwfControlIO.read(request);
         export const captureStopSessions = async () => {};
+        export const interruptSessions = async () => {};
         export const stopSessions = async () => { globalThis.dwfControlIO.stops++; };
       ` };
     }
     if (url === new URL('./workflow-git.mjs', import.meta.url).href) {
       return { format: 'module', shortCircuit: true, source: `
         export const snapshot = () => globalThis.dwfControlIO.snapshot();
+        export const git = () => {};
         export const verificationWorkspace = (_root, _id, workspace) => workspace;
         export const writeReviewDiff = () => {};
-        export const mergeWorkspace = () => 'commit';
+        export const mergeWorkspace = () => globalThis.dwfControlIO.merge();
       ` };
     }
     return next(url, context);
@@ -33,18 +35,21 @@ registerHooks({
 });
 const { runWorkflow } = await import('./workflow-runtime.mjs');
 
-async function fixture(t) {
+async function fixture(t, options = {}) {
   const root = await mkdtemp(join(tmpdir(), 'dwf-control-test-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const id = 'controlled';
   const definition = { task: 'Controlled scheduling', workspace: 'directory', entry: 'review',
     nodes: { review: { role: 'reviewer' }, verify: { role: 'verifier' } },
     transitions: { review: { approve: 'verify', changes: 'verify' }, verify: { approve: null, changes: null } } };
+  if (options.merge) definition.merge = true;
+  if (options.memory === false) definition.transitions.verify.changes = 'review';
   createWorkflow(root, { id, definition, workspace: { mode: 'directory', path: root },
-    status: 'running', visits: [], sessions: {} });
+    status: 'running', visits: [], sessions: {},
+    ...(options.memory === false ? { participants: { review: { memory: false, agent: { permissions: [] } } } } : {}) });
   const admitted = [];
   io = globalThis.dwfControlIO = {
-    stops: 0, snapshot: () => 'original', connect: async () => ({}),
+    stops: 0, snapshot: () => 'original', connect: async () => ({}), merge: () => 'commit',
     admit: async request => admitted.push(request),
     read: async () => ({ outcome: { status: 'succeeded', result: '{"outcome":"approve","summary":"Checked"}' } }),
   };
@@ -128,4 +133,81 @@ test('read-only approval retains the revision actually observed by its participa
   assert.equal(state.visits[0].revision, 'original');
   assert.equal(state.visits[0].verdict.outcome, 'approve');
   assert.equal(state.status, 'failed');
+});
+
+test('finalization is durable before Git integration and rejects later controls', async t => {
+  const f = await fixture(t, { merge: true });
+  io.merge = () => {
+    assert.equal(f.state().finalizing, true);
+    return 'commit';
+  };
+  await f.run();
+  assert.equal(f.state().status, 'succeeded');
+  assert.throws(() => f.command('stop'), /завершает/);
+});
+
+test('steering accepted during snapshot survives a subsequent invalid answer', async t => {
+  const f = await fixture(t);
+  const read = io.read;
+  let invalid = true;
+  let queue = false;
+  io.read = async request => {
+    if (!invalid) return read(request);
+    invalid = false;
+    queue = true;
+    return { outcome: { status: 'succeeded', result: 'invalid JSON' } };
+  };
+  io.snapshot = () => {
+    if (queue) { queue = false; f.command('steer', 'review', 'Recover this answer'); }
+    return 'original';
+  };
+  await f.run();
+  assert.equal(f.state().status, 'succeeded', f.state().error);
+  assert.equal(f.state().controls[0].status, 'applied');
+});
+
+test('discarded ordinary memory=false visit cannot replace the steering context', async t => {
+  const f = await fixture(t, { memory: false });
+  const read = io.read;
+  let changed = false;
+  let queued = false;
+  io.read = async request => {
+    if (request.request.session.title.endsWith('verify') && !changed) {
+      changed = true;
+      return { outcome: { status: 'succeeded', result: '{"outcome":"changes","summary":"Revise"}' } };
+    }
+    return read(request);
+  };
+  io.snapshot = () => {
+    if (!queued && f.state().visits.at(-1)?.verdict?.outcome === 'changes') {
+      queued = true;
+      f.command('steer', 'review', 'Continue in the previous context');
+    }
+    return 'original';
+  };
+  await f.run();
+  const reviews = f.state().visits.filter(visit => visit.node === 'review');
+  assert.equal(reviews.length, 2);
+  assert.equal(reviews[0].sessionId, reviews[1].sessionId);
+  assert.equal(f.state().status, 'succeeded', f.state().error);
+});
+
+test('a transient reconnect failure preserves the resumable running state', async t => {
+  const f = await fixture(t);
+  const read = io.read;
+  let failedRead = false;
+  let failConnect = false;
+  io.read = async request => {
+    if (failedRead) return read(request);
+    failedRead = true;
+    failConnect = true;
+    throw new Error('Transport failed');
+  };
+  io.connect = async () => {
+    if (failConnect) { failConnect = false; throw new Error('Reconnect failed once'); }
+    return {};
+  };
+  await f.run();
+  assert.equal(f.state().status, 'succeeded', f.state().error);
+  assert.equal(f.admitted.length, 2);
 });

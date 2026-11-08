@@ -6,6 +6,7 @@ export const outcomes = {
   worker: ['done'], reviewer: ['approve', 'changes'],
   verifier: ['approve', 'changes'], orchestrator: ['done'],
 };
+export const groupOutcomes = ['done', 'changes', 'failed'];
 
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const identifier = value => typeof value === 'string' && /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(value) &&
@@ -31,11 +32,13 @@ function validateSettings(value, role, reject) {
 export function validateWorkflow(value) {
   const reject = message => { throw publicError('Workflow: ' + message); };
   if (!object(value)) reject('ожидается объект.');
-  if (Object.keys(value).some(key => !['task', 'entry', 'nodes', 'transitions', 'merge', 'roles', 'workspace'].includes(key))) reject('неизвестное поле.');
+  if (Object.keys(value).some(key => !['task', 'entry', 'nodes', 'groups', 'transitions', 'merge', 'roles', 'workspace'].includes(key))) reject('неизвестное поле.');
   if (typeof value.task !== 'string' || !value.task.trim()) reject('нужно непустое task.');
   if (!object(value.nodes) || !Object.keys(value.nodes).length) reject('нужны nodes.');
   if (!object(value.transitions)) reject('нужны transitions.');
-  if (!identifier(value.entry) || !Object.hasOwn(value.nodes, value.entry)) reject('entry должен указывать на участника.');
+  if (value.groups !== undefined && !object(value.groups)) reject('groups должен быть объектом.');
+  const entries = { ...value.nodes, ...value.groups };
+  if (!identifier(value.entry) || !Object.hasOwn(entries, value.entry)) reject('entry должен указывать на участника или группу.');
   if (value.merge !== undefined && typeof value.merge !== 'boolean') reject('merge должен быть boolean.');
   if (value.workspace !== undefined && !['worktree', 'directory'].includes(value.workspace)) reject('неверный workspace.');
   if (value.roles !== undefined) {
@@ -54,14 +57,33 @@ export function validateWorkflow(value) {
     if (node.required !== undefined && (typeof node.required !== 'boolean' ||
       !['reviewer', 'verifier'].includes(node.role))) reject('required допустим только для проверяющих.');
     if (value.workspace === 'directory' && node.role === 'worker') reject('directory поддерживает только read-only роли.');
-    const routes = value.transitions[id];
-    if (!object(routes) || Object.keys(routes).some(key => !outcomes[node.role].includes(key))) reject('неверные переходы ' + id);
-    for (const outcome of outcomes[node.role]) {
-      if (!Object.hasOwn(routes, outcome)) reject(`нужен переход ${id}.${outcome}`);
-      if (routes[outcome] !== null && (!identifier(routes[outcome]) || !Object.hasOwn(value.nodes, routes[outcome]))) reject('неизвестный адресат перехода.');
+  }
+  for (const [id, group] of Object.entries(value.groups ?? {})) {
+    if (!identifier(id) || Object.hasOwn(value.nodes, id) || !object(group) ||
+      Object.keys(group).some(key => !['members', 'required', 'member', 'items', 'itemsFrom'].includes(key))) reject('неверная группа ' + id);
+    if (group.members !== undefined) {
+      if (!Array.isArray(group.members) || !group.members.length || new Set(group.members).size !== group.members.length ||
+        group.members.some(member => !Object.hasOwn(value.nodes, member)) ||
+        ['member', 'items', 'itemsFrom'].some(key => group[key] !== undefined)) reject('неверный состав группы ' + id);
+      if (group.required !== undefined && (!Array.isArray(group.required) || new Set(group.required).size !== group.required.length ||
+        group.required.some(member => !group.members.includes(member)))) reject('неверный обязательный состав группы ' + id);
+    } else {
+      if (!Object.hasOwn(value.nodes, group.member) || group.required !== undefined ||
+        (group.items === undefined) === (group.itemsFrom === undefined)) reject('нужны member и items либо itemsFrom для ' + id);
+      if (group.itemsFrom !== undefined && !Object.hasOwn(value.nodes, group.itemsFrom)) reject('неизвестный источник itemsFrom.');
+      if (group.items !== undefined) validateItems(group.items);
     }
   }
-  if (Object.keys(value.transitions).some(id => !Object.hasOwn(value.nodes, id))) reject('переход от неизвестного участника.');
+  for (const id of Object.keys(entries)) {
+    const expected = value.nodes[id] ? outcomes[value.nodes[id].role] : groupOutcomes;
+    const routes = value.transitions[id];
+    if (!object(routes) || Object.keys(routes).some(key => !expected.includes(key))) reject('неверные переходы ' + id);
+    for (const outcome of expected) {
+      if (!Object.hasOwn(routes, outcome)) reject(`нужен переход ${id}.${outcome}`);
+      if (routes[outcome] !== null && (!identifier(routes[outcome]) || !Object.hasOwn(entries, routes[outcome]))) reject('неизвестный адресат перехода.');
+    }
+  }
+  if (Object.keys(value.transitions).some(id => !Object.hasOwn(entries, id))) reject('переход от неизвестного участника.');
   const seen = new Set();
   const pending = [value.entry];
   while (pending.length) {
@@ -69,14 +91,28 @@ export function validateWorkflow(value) {
     if (seen.has(id)) continue;
     seen.add(id);
     pending.push(...Object.values(value.transitions[id]).filter(next => next !== null));
+    const group = value.groups?.[id];
+    if (group) pending.push(...(group.members ?? [group.member]));
   }
-  if (seen.size !== Object.keys(value.nodes).length) reject('есть недостижимые участники.');
+  if (seen.size !== Object.keys(entries).length) reject('есть недостижимые участники.');
   if (![...seen].some(id => Object.values(value.transitions[id]).includes(null))) reject('нужен завершающий переход null.');
   if (value.merge && value.workspace === 'directory') reject('directory не поддерживает merge.');
   if (value.merge && !['reviewer', 'verifier'].every(role => Object.values(value.nodes).some(node => node.role === role && node.required !== false))) {
     reject('merge требует reviewer и verifier.');
   }
   return structuredClone(value);
+}
+
+export function validateItems(items) {
+  if (!Array.isArray(items) || items.some(item => !object(item) || !identifier(item.id)) ||
+    new Set(items.map(item => item.id)).size !== items.length) {
+    throw publicError('Группа требует массив items с уникальными идентификаторами id.');
+  }
+  return items;
+}
+
+export function participantVisits(visits) {
+  return visits.flatMap(visit => visit.children ?? [visit]);
 }
 
 export function parseVerdict(text, role) {
@@ -121,12 +157,26 @@ export function participantAgent(role, config) {
 }
 
 export function checkApprovals(state, revision) {
+  const required = [];
   for (const [id, node] of Object.entries(state.definition.nodes)) {
     if (!['reviewer', 'verifier'].includes(node.role) || node.required === false) continue;
-    const latest = state.visits.findLast(visit => visit.node === id);
-    if (latest?.verdict?.outcome !== 'approve' || latest.revision !== revision) {
+    const maps = Object.entries(state.definition.groups ?? {}).filter(([, group]) => group.member === id);
+    for (const [groupId] of maps) {
+      const latest = state.visits.findLast(visit => visit.node === groupId);
+      if (!latest) throw publicError(`Для завершения нужны результаты ${groupId}.`);
+      for (const child of latest.children) required.push({ id: child.participant, role: node.role,
+        visit: participantVisits(state.visits).findLast(visit => visit.participant === child.participant) });
+    }
+    const ordinary = participantVisits(state.visits).findLast(visit => visit.node === id && !visit.item);
+    if (!maps.length || ordinary) required.push({ id, role: node.role, visit: ordinary });
+  }
+  for (const { id, visit } of required) {
+    if (visit?.verdict?.outcome !== 'approve' || visit.revision !== revision) {
       throw publicError(`Для завершения нужно одобрение ${id} текущей версии.`);
     }
+  }
+  if (state.definition.merge && !['reviewer', 'verifier'].every(role => required.some(item => item.role === role))) {
+    throw publicError('Для merge нужны фактические одобрения reviewer и verifier.');
   }
 }
 
@@ -135,6 +185,7 @@ const commonInstructions = [
   'Work within the supplied project workspace. Read applicable AGENTS.md files inside it and any inherited project instructions supplied with the task. Parent directories contain DWF runtime data and are outside the project.',
   'DWF records the workspace snapshot, checks that reviews and verification cover the current files, and manages Git branches and integration. Treat its supplied snapshot identifier as an opaque reference. Leave snapshot calculation and Git index management to DWF.',
   'Distinguish observed facts from assumptions and other participants\' conclusions. Report actions and checks truthfully.',
+  'Finish or stop your background commands before reporting completion. Your result is accepted only after your commands have finished.',
   'If an obstacle prevents completion, return blocked. State the cause, the unfinished work and what is needed to continue.',
 ].join('\n');
 const roleInstructions = {
@@ -180,7 +231,7 @@ export const roleAgents = Object.fromEntries(Object.keys(outcomes).map(role => [
 export function rolePrompt(definition, nodeId, previous, revision, visits = [], separateSystem = false, review, workspace) {
   const node = definition.nodes[nodeId];
   const history = node.role === 'orchestrator' ? visits.flatMap((visit, index) => visit.verdict ? [{
-    visit: index + 1, node: visit.node, role: definition.nodes[visit.node].role,
+    visit: index + 1, node: visit.node, role: definition.nodes[visit.node]?.role ?? 'group',
     sessionId: visit.sessionId, revision: visit.revision, result: visit.verdict,
   }] : []) : undefined;
   return [

@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { OpenCode, isSessionNotFoundError } from '@opencode/client';
 import { Service } from '@opencode/client/service';
 import { publicError, withServiceLock } from './run-store.mjs';
-import { roleAgents, rolePermissions, roleSystemPrompt } from './workflow-definition.mjs';
+import { roleAgents, rolePermissions, roleSystemPrompt, participantVisits } from './workflow-definition.mjs';
 import { roleSkills, bundledSkills } from './role-skills.mjs';
 
 export const OPENCODE_VERSION = '2.2.5';
@@ -186,14 +186,16 @@ function shellProcesses() {
 }
 
 export async function captureStopSessions(client, state) {
-  const sessions = new Set(state.visits.map(visit => visit.sessionId));
-  const directories = new Set([state.workspace.path, ...state.visits.map(visit => visit.workspace?.path).filter(Boolean)]);
+  const visits = participantVisits(state.visits);
+  const sessions = new Set(visits.map(visit => visit.sessionId));
+  const directories = new Set([state.workspace.path, ...visits.map(visit => visit.workspace?.path).filter(Boolean)]);
   state.stopShells ??= [];
   for (const directory of directories) {
     const shells = await client.shell.list({ location: { directory } });
     const processes = shellProcesses();
     for (const shell of shells.data.filter(shell => sessions.has(shell.metadata?.sessionID))) {
-      const process = processes.find(item => item.pid === shell.pid);
+      const process = processes.find(item => item.pid === shell.pid) ??
+        (processes.some(item => item.group === shell.pid) ? { pid: shell.pid, group: shell.pid } : undefined);
       if (process && !state.stopShells.some(item => item.id === shell.id)) {
         state.stopShells.push({ id: shell.id, directory, ...process });
       }
@@ -224,8 +226,9 @@ async function stopShellProcess(target) {
   throw publicError('Не удалось подтвердить завершение процесса участника. Остановка будет повторена.');
 }
 
-export async function stopSessions(client, state) {
-  const sessions = new Set(state.visits.map(visit => visit.sessionId));
+export async function interruptSessions(client, state) {
+  const visits = participantVisits(state.visits);
+  const sessions = new Set(visits.map(visit => visit.sessionId));
   for (const sessionID of sessions) {
     try {
       const session = await client.session.get({ sessionID });
@@ -238,7 +241,16 @@ export async function stopSessions(client, state) {
       if (!isSessionNotFoundError(error)) throw error;
     }
   }
-  const directories = new Set([state.workspace.path, ...state.visits.map(visit => visit.workspace?.path).filter(Boolean)]);
+}
+
+export async function stopSessions(client, state) {
+  await interruptSessions(client, state);
+  await captureStopSessions(client, state);
+  // Terminate before removing native records, so interrupted cleanup remains retryable.
+  for (const target of state.stopShells ?? []) await stopShellProcess(target);
+  const visits = participantVisits(state.visits);
+  const sessions = new Set(visits.map(visit => visit.sessionId));
+  const directories = new Set([state.workspace.path, ...visits.map(visit => visit.workspace?.path).filter(Boolean)]);
   for (const directory of directories) {
     const location = { directory };
     const shells = await client.shell.list({ location });
@@ -248,7 +260,6 @@ export async function stopSessions(client, state) {
       }
     }
   }
-  for (const target of state.stopShells ?? []) await stopShellProcess(target);
 }
 
 export function sessionRequest(workspace, model, runId, task) {
@@ -283,6 +294,15 @@ export async function readExecution(client, run) {
   if (outcome !== undefined) {
     messages = await readMessages(client, run.sessionId);
     outcome = outcomeFromMessages(messages, run.inputId);
+    if (client.shell) {
+      const shells = await client.shell.list({ location: run.request.session.location });
+      const owned = shells.data.filter(shell => shell.metadata?.sessionID === run.sessionId);
+      const processes = owned.some(shell => shell.pid) ? shellProcesses() : [];
+      if (owned.some(shell => shell.status === 'running' || processes.some(item => item.group === shell.pid ||
+        item.pid === shell.pid && Math.abs(Date.parse(item.started) - shell.time.started) < 5000))) {
+        outcome = undefined;
+      }
+    }
   }
   return { outcome, progress: progressFromMessages(messages, run.inputId) };
 }

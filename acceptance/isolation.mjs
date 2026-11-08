@@ -46,7 +46,8 @@ export async function writeSandboxProfile(file, { writable, readable = [], ports
   const subpaths = paths => paths.map(path => `(subpath ${JSON.stringify(path)})`).join(' ');
   const profile = [
     '(version 1)', '(deny default)',
-    '(allow process-exec process-fork sysctl-read mach-lookup signal)',
+    '(allow process-exec process-fork sysctl-read mach-lookup)',
+    '(allow signal (target same-sandbox))',
     '(allow file-read-metadata)',
     '(allow file-read* (literal "/"))',
     `(allow file-read* file-map-executable ${subpaths(['/System', '/usr', '/bin', '/sbin', '/Library', '/opt/homebrew', '/private/etc', '/private/var/db', ...readPaths])})`,

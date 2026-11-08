@@ -111,7 +111,7 @@ export async function connectTester(root, stateDirectory, prepare = false, launc
     onStart(reason) { if (reason === 'version-mismatch') throw new Error('Версия OpenCode тестера изменилась.'); } });
   const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) });
   // Transfer through the native credential API without writing secrets to the test journal.
-  await authorizeTester(client, launch.credentialStateDirectory ?? stateDirectory);
+  if (launch.authorize !== false) await authorizeTester(client, launch.credentialStateDirectory ?? stateDirectory);
   return client;
 }
 

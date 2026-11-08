@@ -7,7 +7,7 @@ import { setTimeout as pause } from 'node:timers/promises';
 import { createRun, getRun, markAdmitted, publicError, publicOutcome, saveOutcome,
   createWorkflow, getWorkflow, savePreset, presets, queueWorkflowCommand } from './run-store.mjs';
 import { admit, checkModel, checkRoleAgents, connect, readOutcome, sessionRequest } from './opencode-runtime.mjs';
-import { validateWorkflow, outcomes, roleTools, roleAgents, rolePermissions, participantSettings, participantAgent } from './workflow-definition.mjs';
+import { validateWorkflow, outcomes, groupOutcomes, roleTools, roleAgents, rolePermissions, participantSettings, participantAgent } from './workflow-definition.mjs';
 import { ensureWorkflowRunner, publicWorkflow, watchEvent } from './workflow-runtime.mjs';
 import { prepareWorkspace } from './workflow-git.mjs';
 
@@ -36,7 +36,9 @@ async function start(workflowFile, supplied) {
     Object.keys(workflow.planner).length !== 1 || typeof workflow.planner.task !== 'string' || !workflow.planner.task.trim()) {
     throw publicError('Ожидается workflow {"planner":{"task":"непустое поручение"}}.');
   }
-  const selected = parse(process.env.DWF_PLANNER_MODEL ?? '{"provider":"openai","modelId":"gpt-6.1-sol-ultrafast"}',
+  const usesDefaultModel = !graph || Object.keys(workflow.nodes).some(name => !participantSettings(workflow, name).model);
+  const selected = parse(usesDefaultModel ? process.env.DWF_PLANNER_MODEL ?? '{"provider":"openai","modelId":"gpt-6.1-sol-ultrafast"}'
+    : '{"provider":"openai","modelId":"gpt-6.1-sol-ultrafast"}',
     'Задайте DWF_PLANNER_MODEL как JSON с provider и modelId.');
   if (!object(selected) || typeof selected.provider !== 'string' || !selected.provider.trim() ||
     typeof selected.modelId !== 'string' || !selected.modelId.trim() || Object.keys(selected).some(key => !['provider', 'modelId'].includes(key))) {
@@ -219,6 +221,9 @@ try {
   },
     roles: outcomes, tools: roleTools,
     settings: ['model', 'reasoning', 'tools', 'skills', 'memory'],
+    groups: { fixed: { members: ['participantOne', 'participantTwo'], required: ['participantOne', 'participantTwo'] },
+      map: { member: 'participant', itemsFrom: 'planningParticipant' },
+      items: [{ id: 'uniqueItem', task: 'Task for this participant' }], outcomes: groupOutcomes },
     workspace: ['worktree', 'directory'], terminal: 'null',
     merge: 'true — локальный merge проверенной версии в исходную ветку' });
   else if (command === 'preset') await presetCommand(args);
