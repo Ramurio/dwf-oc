@@ -64,7 +64,7 @@ async function main() {
   }
   if (phase === 'after') assert.equal((await readProof('broken')).cycle, cycle, 'Нужна поломка из этого эксперимента');
   const reportFile = join(results, `mutation-${phase}.json`);
-  const run = spawnSync('node_modules/.bin/cucumber-js', ['--config', 'cucumber.mjs', '--tags', '@controlled',
+  const run = spawnSync('node_modules/.bin/cucumber-js', ['--config', 'cucumber.mjs', '--tags', '@lifetime',
     '--format', `json:${reportFile}`], { stdio: 'inherit', shell: false });
   if (run.error) throw run.error;
   const report = JSON.parse(await readFile(reportFile, 'utf8'));
