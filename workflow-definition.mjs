@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { publicError } from './run-store.mjs';
-import { roleSkills } from './role-skills.mjs';
+import { roleSkills, bundledSkills } from './role-skills.mjs';
 
 export const outcomes = {
   worker: ['done'], reviewer: ['approve', 'changes'],
@@ -11,19 +11,49 @@ const object = value => value !== null && typeof value === 'object' && !Array.is
 const identifier = value => typeof value === 'string' && /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(value) &&
   !['__proto__', 'constructor', 'prototype'].includes(value);
 
+const settings = ['model', 'reasoning', 'tools', 'skills', 'memory'];
+
+function validateSettings(value, role, reject) {
+  if (value.model !== undefined && (!object(value.model) ||
+    Object.keys(value.model).some(key => !['provider', 'modelId'].includes(key)) ||
+    !['provider', 'modelId'].every(key => typeof value.model[key] === 'string' && value.model[key].trim()))) reject('неверная модель.');
+  if (value.reasoning !== undefined && value.reasoning !== null &&
+    (typeof value.reasoning !== 'string' || !value.reasoning.trim())) reject('неверный reasoning.');
+  if (value.memory !== undefined && typeof value.memory !== 'boolean') reject('memory должен быть boolean.');
+  for (const field of ['tools', 'skills']) {
+    if (value[field] === undefined) continue;
+    const allowed = field === 'tools' ? roleTools[role] : bundledSkills.map(skill => skill.name);
+    if (!Array.isArray(value[field]) || new Set(value[field]).size !== value[field].length ||
+      value[field].some(item => !allowed.includes(item))) reject('неверный список ' + field + '.');
+  }
+}
+
 export function validateWorkflow(value) {
   const reject = message => { throw publicError('Workflow: ' + message); };
   if (!object(value)) reject('ожидается объект.');
-  if (Object.keys(value).some(key => !['task', 'entry', 'nodes', 'transitions', 'merge'].includes(key))) reject('неизвестное поле.');
+  if (Object.keys(value).some(key => !['task', 'entry', 'nodes', 'transitions', 'merge', 'roles', 'workspace'].includes(key))) reject('неизвестное поле.');
   if (typeof value.task !== 'string' || !value.task.trim()) reject('нужно непустое task.');
   if (!object(value.nodes) || !Object.keys(value.nodes).length) reject('нужны nodes.');
   if (!object(value.transitions)) reject('нужны transitions.');
   if (!identifier(value.entry) || !Object.hasOwn(value.nodes, value.entry)) reject('entry должен указывать на участника.');
   if (value.merge !== undefined && typeof value.merge !== 'boolean') reject('merge должен быть boolean.');
+  if (value.workspace !== undefined && !['worktree', 'directory'].includes(value.workspace)) reject('неверный workspace.');
+  if (value.roles !== undefined) {
+    if (!object(value.roles)) reject('roles должен быть объектом.');
+    for (const [role, defaults] of Object.entries(value.roles)) {
+      if (!Object.hasOwn(outcomes, role) || !object(defaults) ||
+        Object.keys(defaults).some(key => !settings.includes(key))) reject('неверные настройки роли.');
+      validateSettings(defaults, role, reject);
+    }
+  }
   for (const [id, node] of Object.entries(value.nodes)) {
     if (!identifier(id) || !object(node) || !Object.hasOwn(outcomes, node.role)) reject('неверный участник ' + id);
-    if (Object.keys(node).some(key => !['role', 'instructions'].includes(key)) ||
+    if (Object.keys(node).some(key => !['role', 'instructions', 'required', ...settings].includes(key)) ||
       (node.instructions !== undefined && typeof node.instructions !== 'string')) reject('неверные настройки ' + id);
+    validateSettings(node, node.role, reject);
+    if (node.required !== undefined && (typeof node.required !== 'boolean' ||
+      !['reviewer', 'verifier'].includes(node.role))) reject('required допустим только для проверяющих.');
+    if (value.workspace === 'directory' && node.role === 'worker') reject('directory поддерживает только read-only роли.');
     const routes = value.transitions[id];
     if (!object(routes) || Object.keys(routes).some(key => !outcomes[node.role].includes(key))) reject('неверные переходы ' + id);
     for (const outcome of outcomes[node.role]) {
@@ -42,7 +72,8 @@ export function validateWorkflow(value) {
   }
   if (seen.size !== Object.keys(value.nodes).length) reject('есть недостижимые участники.');
   if (![...seen].some(id => Object.values(value.transitions[id]).includes(null))) reject('нужен завершающий переход null.');
-  if (value.merge && !['reviewer', 'verifier'].every(role => Object.values(value.nodes).some(node => node.role === role))) {
+  if (value.merge && value.workspace === 'directory') reject('directory не поддерживает merge.');
+  if (value.merge && !['reviewer', 'verifier'].every(role => Object.values(value.nodes).some(node => node.role === role && node.required !== false))) {
     reject('merge требует reviewer и verifier.');
   }
   return structuredClone(value);
@@ -60,15 +91,43 @@ export function parseVerdict(text, role) {
   return result;
 }
 
-export function rolePermissions(role) {
-  const actions = role === 'planner' ? [] : ['read', 'glob', 'grep'];
-  if (role !== 'orchestrator' && role !== 'planner') actions.push('webfetch', 'websearch');
-  if (role === 'worker') actions.push('shell', 'edit', 'write');
-  if (role === 'verifier') actions.push('shell');
+export const roleTools = {
+  worker: ['read', 'glob', 'grep', 'webfetch', 'websearch', 'shell', 'edit', 'write'],
+  reviewer: ['read', 'glob', 'grep', 'webfetch', 'websearch'],
+  verifier: ['read', 'glob', 'grep', 'webfetch', 'websearch', 'shell'],
+  orchestrator: ['read', 'glob', 'grep'], planner: [],
+};
+
+export function rolePermissions(role, config = {}) {
+  const actions = config.tools ?? roleTools[role];
+  const skills = config.skills === undefined ? roleSkills[role] ?? [] :
+    config.skills.map(name => bundledSkills.find(skill => skill.name === name));
   return [{ action: '*', resource: '*', effect: 'deny' },
     ...actions.map(action => ({ action, resource: '*', effect: 'allow' })),
-    ...(roleSkills[role] ?? []).map(skill =>
+    ...skills.map(skill =>
       ({ action: 'skill', resource: skill.id, effect: 'allow' }))];
+}
+
+export function participantSettings(definition, id) {
+  const node = definition.nodes[id];
+  return { memory: true, ...definition.roles?.[node.role], ...node };
+}
+
+export function participantAgent(role, config) {
+  const agent = { mode: 'primary', system: roleSystemPrompt(role), permissions: rolePermissions(role, config) };
+  const id = `dwf-${role}-${createHash('sha256').update(JSON.stringify({ system: agent.system,
+    permissions: agent.permissions })).digest('hex').slice(0, 16)}`;
+  return { id, agent };
+}
+
+export function checkApprovals(state, revision) {
+  for (const [id, node] of Object.entries(state.definition.nodes)) {
+    if (!['reviewer', 'verifier'].includes(node.role) || node.required === false) continue;
+    const latest = state.visits.findLast(visit => visit.node === id);
+    if (latest?.verdict?.outcome !== 'approve' || latest.revision !== revision) {
+      throw publicError(`Для завершения нужно одобрение ${id} текущей версии.`);
+    }
+  }
 }
 
 const commonInstructions = [

@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 const schemaVersion = 1;
 export const publicError = message => Object.assign(new Error(message), { publicMessage: message });
@@ -152,11 +153,55 @@ export function presets(root) {
   } finally { db.close(); }
 }
 
-export function updateWorkflow(root, state, owner, complete = false) {
+export function queueWorkflowCommand(root, id, kind, node, text) {
+  if (!['stop', 'steer'].includes(kind)) throw publicError('Неизвестная команда workflow.');
   const db = open(root, true);
   try {
+    db.exec('BEGIN IMMEDIATE');
+    workflowTable(db);
+    const row = db.prepare('SELECT state FROM workflows WHERE id = ?').get(id);
+    if (!row) throw publicError('Workflow не найден.');
+    const state = JSON.parse(row.state);
+    const stopped = state.controls?.find(command => command.kind === 'stop');
+    if (kind === 'stop' && stopped) return stopped;
+    if (state.status !== 'running' || state.finalizing || stopped) throw publicError('Workflow уже завершает работу и не принимает команды.');
+    if (kind === 'steer' && (!Object.hasOwn(state.definition.nodes, node) ||
+      typeof text !== 'string' || !text.trim())) throw publicError('Нужны известный участник и непустое уточнение.');
+    const command = { id: randomUUID(), kind, status: 'pending', createdAt: Date.now(),
+      ...(kind === 'steer' ? { node, text } : {}) };
+    state.controls ??= [];
+    state.controls.push(command);
+    db.prepare('UPDATE workflows SET state = ? WHERE id = ?').run(JSON.stringify(state), id);
+    db.exec('COMMIT');
+    return command;
+  } finally {
+    if (db.isTransaction) db.exec('ROLLBACK');
+    db.close();
+  }
+}
+
+export function updateWorkflow(root, state, owner, complete = false, finalize = false) {
+  const db = open(root, true);
+  try {
+    db.exec('BEGIN IMMEDIATE');
+    const row = db.prepare('SELECT state FROM workflows WHERE id = ? AND owner = ?').get(state.id, owner);
+    if (!row) throw publicError('Контроллер workflow потерял владение запуском.');
+    const saved = JSON.parse(row.state);
+    if (saved.controls?.length) {
+      const known = new Map((state.controls ?? []).map(command => [command.id, command]));
+      state.controls = saved.controls.map(command => known.get(command.id) ?? command);
+    }
+    if (finalize) {
+      if (state.controls?.some(command => command.status === 'pending')) return false;
+      state.finalizing = true;
+    }
     const result = db.prepare('UPDATE workflows SET state = ?, owner = ?, expires = ? WHERE id = ? AND owner = ?')
       .run(JSON.stringify(state), complete ? null : owner, complete ? 0 : Date.now() + 30000, state.id, owner);
     if (result.changes !== 1) throw publicError('Контроллер workflow потерял владение запуском.');
-  } finally { db.close(); }
+    db.exec('COMMIT');
+    return true;
+  } finally {
+    if (db.isTransaction) db.exec('ROLLBACK');
+    db.close();
+  }
 }

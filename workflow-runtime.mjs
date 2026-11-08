@@ -4,10 +4,10 @@ import { openSync, closeSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as pause } from 'node:timers/promises';
-import { admit, checkRoleAgents, connect, readExecution } from './opencode-runtime.mjs';
+import { admit, checkRoleAgents, connect, readExecution, stopSessions } from './opencode-runtime.mjs';
 import { claimWorkflow, getWorkflow, updateWorkflow, workflowHasOwner, publicError } from './run-store.mjs';
-import { parseVerdict, rolePermissions, rolePrompt, roleAgents } from './workflow-definition.mjs';
-import { mergeWorkspace, tree, writeReviewDiff } from './workflow-git.mjs';
+import { parseVerdict, rolePermissions, rolePrompt, roleAgents, checkApprovals } from './workflow-definition.mjs';
+import { mergeWorkspace, snapshot, writeReviewDiff } from './workflow-git.mjs';
 
 export function publicWorkflow(state) {
   const current = state.visits.at(-1);
@@ -24,6 +24,7 @@ export function publicWorkflow(state) {
       ...(current.progress ? { progress: current.progress } : {}) },
     history: state.visits.map(visit => ({ node: visit.node, sessionId: visit.sessionId,
       ...(visit.verdict ? { result: visit.verdict, revision: visit.revision } : {}) })),
+    ...(state.controls ? { controls: state.controls } : {}),
     ...(state.error ? { error: state.error } : {}),
     ...(state.service ? { service: { status: 'unavailable' } } : {}),
     ...(result ? { result } : {}) };
@@ -80,11 +81,12 @@ function acknowledge() {
 
 function request(state, visit) {
   const node = state.definition.nodes[visit.node];
-  const permissions = state.rolePermissions?.[node.role] ?? rolePermissions(node.role).filter(rule =>
+  const participant = state.participants?.[visit.node];
+  const permissions = participant?.agent.permissions ?? state.rolePermissions?.[node.role] ?? rolePermissions(node.role).filter(rule =>
     rule.action !== 'skill' || state.roleAgents?.[node.role] === roleAgents[node.role]);
   return { id: state.id, sessionId: visit.sessionId, inputId: visit.inputId,
     request: { text: visit.prompt, session: { title: `DWF ${node.role} ${visit.node}`,
-      agent: state.roleAgents?.[node.role] ?? 'build', model: state.model, location: { directory: state.workspace.path },
+      agent: participant?.id ?? state.roleAgents?.[node.role] ?? 'build', model: participant?.model ?? state.model, location: { directory: state.workspace.path },
       metadata: { dwfRunId: state.id },
       permissions: [...permissions, ...(visit.review ? [{ action: 'external_directory',
         resource: join(dirname(visit.review.path), '*'), effect: 'allow' }] : [])] } } };
@@ -100,23 +102,38 @@ export async function runWorkflow(root, id) {
   const save = complete => updateWorkflow(root, state, owner, complete);
   try {
     if (state.status !== 'running') { save(true); acknowledge(); return; }
-    let client = await connect(root);
+    let client = await connect(root, state.participants);
     if (state.roleAgents) await checkRoleAgents(client, state.workspace.path, state.roleAgents);
     let acknowledged = false;
     while (state.status === 'running') {
       save(false);
+      const stop = state.controls?.find(command => command.kind === 'stop' && command.status === 'pending');
+      if (stop) {
+        try { await stopSessions(client, state); }
+        catch (error) {
+          if (error.publicMessage) throw error;
+          state.service = 'unavailable';
+          save(false);
+          await pause(1000);
+          try { client = await connect(root, state.participants); } catch { /* Retry this durable stop. */ }
+          continue;
+        }
+        for (const command of state.controls) if (command.status === 'pending') command.status = 'cancelled';
+        stop.status = 'applied';
+        state.status = 'cancelled';
+        delete state.service;
+        save(true);
+        break;
+      }
       let visit = state.visits.at(-1);
       if (!visit || visit.verdict) {
-        const next = visit ? state.definition.transitions[visit.node][visit.verdict.outcome] : state.definition.entry;
+        const steering = state.controls?.find(command => command.kind === 'steer' && command.status === 'pending');
+        const next = steering?.node ?? (visit ? state.definition.transitions[visit.node][visit.verdict.outcome] : state.definition.entry);
         if (next === null) {
+          if (!updateWorkflow(root, state, owner, false, true)) continue;
+          const revision = snapshot(state.workspace);
+          checkApprovals(state, revision);
           if (state.definition.merge) {
-            const revision = tree(state.workspace.path);
-            for (const role of ['reviewer', 'verifier']) {
-              const approved = state.visits.findLast(item => state.definition.nodes[item.node].role === role);
-              if (approved?.verdict?.outcome !== 'approve' || approved.revision !== revision) {
-                throw publicError('Для merge нужны одобрения reviewer и verifier текущей версии кода.');
-              }
-            }
             state.result = { summary: visit.verdict.summary, commit: mergeWorkspace(state.workspace, revision) };
           } else state.result = visit.verdict;
           state.status = 'succeeded';
@@ -124,16 +141,22 @@ export async function runWorkflow(root, id) {
           break;
         }
         const node = state.definition.nodes[next];
-        const revision = tree(state.workspace.path);
+        const revision = snapshot(state.workspace);
+        if (!steering && state.participants?.[next]?.memory === false) delete state.sessions[next];
         state.sessions[next] ??= 'ses_' + randomUUID();
         const inputId = 'msg_' + randomUUID();
         // A reviewer session from an older release lacks permission to read review artifacts.
         const earlierReview = state.visits.find(item => item.node === next);
-        const review = node.role === 'reviewer' && (!earlierReview || earlierReview.review) ? writeReviewDiff(state.workspace, revision,
+        const review = node.role === 'reviewer' && state.workspace.mode !== 'directory' && (!earlierReview || earlierReview.review) ? writeReviewDiff(state.workspace, revision,
           join(root, 'workflows', id, 'reviews', `${inputId}.diff`)) : undefined;
         visit = { node: next, sessionId: state.sessions[next], inputId, revision, startedAt: Date.now(),
           ...(review ? { review } : {}),
           prompt: rolePrompt(state.definition, next, visit?.verdict, revision, state.visits, Boolean(state.roleAgents), review, state.workspace) };
+        if (steering) {
+          visit.prompt += `\n\nУточнение пользователя для этого участника:\n${steering.text}`;
+          visit.steering = steering.id;
+          steering.status = 'delivered';
+        }
         state.visits.push(visit);
         save(false);
       }
@@ -154,21 +177,23 @@ export async function runWorkflow(root, id) {
         state.service = 'unavailable';
         save(false);
         await pause(1000);
-        try { client = await connect(root); } catch { /* Retain the pending visit and retry service discovery. */ }
+        try { client = await connect(root, state.participants); } catch { /* Retain the pending visit and retry service discovery. */ }
         continue;
       }
       delete state.service;
       if (!outcome) { await pause(300); continue; }
       if (outcome.status !== 'succeeded') throw publicError(outcome.error);
       const role = state.definition.nodes[visit.node].role;
-      if (role !== 'worker' && tree(state.workspace.path) !== visit.revision) {
+      if (role !== 'worker' && snapshot(state.workspace) !== visit.revision) {
         throw publicError('Проверяющий участник изменил рабочее дерево. Требуется новая проверка.');
       }
       visit.verdict = parseVerdict(outcome.result, role);
-      visit.revision = tree(state.workspace.path);
+      visit.revision = snapshot(state.workspace);
+      if (visit.steering) state.controls.find(command => command.id === visit.steering).status = 'applied';
       if (visit.verdict.outcome === 'blocked') throw publicError(visit.verdict.summary);
       save(false);
     }
+    if (!acknowledged) acknowledge();
   } catch (error) {
     state.status = 'failed';
     state.error = error.publicMessage ?? 'Контроллер workflow завершился с ошибкой. Рабочее дерево сохранено.';

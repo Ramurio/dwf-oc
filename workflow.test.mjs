@@ -6,9 +6,9 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as pause } from 'node:timers/promises';
-import { validateWorkflow, parseVerdict, rolePermissions, rolePrompt, roleSystemPrompt, roleAgents, outcomes } from './workflow-definition.mjs';
-import { createWorkflow, getWorkflow, claimWorkflow, updateWorkflow, workflowHasOwner, savePreset, presets } from './run-store.mjs';
-import { git, prepareWorkspace, tree, mergeWorkspace, writeReviewDiff } from './workflow-git.mjs';
+import { validateWorkflow, parseVerdict, rolePermissions, rolePrompt, roleSystemPrompt, roleAgents, outcomes, participantSettings, participantAgent, checkApprovals } from './workflow-definition.mjs';
+import { createWorkflow, getWorkflow, claimWorkflow, updateWorkflow, workflowHasOwner, savePreset, presets, queueWorkflowCommand } from './run-store.mjs';
+import { git, prepareWorkspace, tree, mergeWorkspace, writeReviewDiff, snapshot } from './workflow-git.mjs';
 import { roleSkills } from './role-skills.mjs';
 import { publicWorkflow, watchEvent } from './workflow-runtime.mjs';
 import { launch, waitFor, within, watchStates } from './acceptance/harness.mjs';
@@ -49,6 +49,96 @@ test('вердикт читается структурированно, отсу
   assert.throws(() => parseVerdict('Всё отлично!', 'reviewer'));
   assert.throws(() => parseVerdict('{"outcome":"done","summary":"Готово"}', 'reviewer'));
   assert.throws(() => parseVerdict('{"outcome":"approve","summary":""}', 'verifier'));
+});
+
+test('каждый обязательный проверяющий должен одобрить текущую версию', () => {
+  const definition = sampleWorkflow('Task');
+  definition.nodes.secondReview = { role: 'reviewer' };
+  const state = { definition, visits: [
+    { node: 'review', revision: 'old', verdict: { outcome: 'approve' } },
+    { node: 'secondReview', revision: 'current', verdict: { outcome: 'approve' } },
+    { node: 'verify', revision: 'current', verdict: { outcome: 'approve' } },
+  ] };
+  assert.throws(() => checkApprovals(state, 'current'), /review/);
+  state.visits.push({ node: 'review', revision: 'current', verdict: { outcome: 'approve' } });
+  assert.doesNotThrow(() => checkApprovals(state, 'current'));
+  for (const verdict of [undefined, { outcome: 'changes' }, { outcome: 'blocked' }]) {
+    state.visits.push({ node: 'review', revision: 'current', verdict });
+    assert.throws(() => checkApprovals(state, 'current'), /review/);
+    state.visits.pop();
+  }
+  delete state.definition.nodes.review;
+  state.definition.nodes.secondReview.required = false;
+  state.visits = state.visits.filter(visit => visit.node === 'verify');
+  assert.doesNotThrow(() => checkApprovals(state, 'current'));
+});
+
+test('управляющие команды переживают сохранение контроллера и сериализованы с завершением', async t => {
+  const root = await fixture(t);
+  const state = { id: 'commands', definition: sampleWorkflow('Task'), status: 'running', visits: [] };
+  createWorkflow(root, state);
+  assert(claimWorkflow(root, state.id, 'owner'));
+  const command = queueWorkflowCommand(root, state.id, 'steer', 'implement', 'Refine behavior');
+  assert.equal(updateWorkflow(root, state, 'owner', false, true), false);
+  assert.equal(state.controls[0].id, command.id);
+  state.controls[0].status = 'applied';
+  assert(updateWorkflow(root, state, 'owner', false, true));
+  assert.throws(() => queueWorkflowCommand(root, state.id, 'stop'), /не принимает/);
+  state.status = 'succeeded';
+  updateWorkflow(root, state, 'owner', true);
+  assert.throws(() => queueWorkflowCommand(root, state.id, 'steer', 'implement', 'Late'), /не принимает/);
+  const other = { id: 'stop', definition: state.definition, status: 'running', visits: [] };
+  createWorkflow(root, other);
+  assert(claimWorkflow(root, other.id, 'owner'));
+  const stopped = queueWorkflowCommand(root, other.id, 'stop');
+  updateWorkflow(root, other, 'owner');
+  assert.equal(other.controls[0].id, stopped.id);
+  assert.deepEqual(queueWorkflowCommand(root, other.id, 'stop'), stopped);
+  assert.throws(() => queueWorkflowCommand(root, other.id, 'steer', 'implement', 'Late'), /не принимает/);
+});
+
+test('настройки участника наследуются, пустые списки заменяют defaults', () => {
+  const definition = sampleWorkflow('Task');
+  definition.roles = { worker: { model: { provider: 'test', modelId: 'base' }, reasoning: 'high',
+    tools: ['read'], skills: ['code-work'], memory: false } };
+  definition.nodes.implement = { role: 'worker', tools: [], skills: [], reasoning: null };
+  validateWorkflow(definition);
+  const settings = participantSettings(definition, 'implement');
+  assert.deepEqual(settings, { role: 'worker', model: { provider: 'test', modelId: 'base' },
+    reasoning: null, tools: [], skills: [], memory: false });
+  assert.deepEqual(participantAgent('worker', settings).agent.permissions,
+    [{ action: '*', resource: '*', effect: 'deny' }]);
+  assert.equal(participantSettings(definition, 'review').memory, true);
+  for (const value of [{ model: {} }, { tools: ['invented'] }, { skills: ['missing'] },
+    { memory: 'false' }, { reasoning: '' }, { tools: ['read', 'read'] }]) {
+    const invalid = structuredClone(definition);
+    Object.assign(invalid.nodes.implement, value);
+    assert.throws(() => validateWorkflow(invalid), /Workflow:/);
+  }
+  const restricted = structuredClone(definition);
+  restricted.nodes.review.tools = ['write'];
+  assert.throws(() => validateWorkflow(restricted), /tools/);
+});
+
+test('read-only workflow получает каталог без Git и стабильный снимок файлов', async t => {
+  const root = await fixture(t);
+  const directory = join(root, 'documents');
+  await mkdir(directory);
+  await writeFile(join(root, 'AGENTS.md'), 'Inherited instructions');
+  await writeFile(join(directory, 'note.txt'), 'Original note');
+  const workspace = prepareWorkspace(join(root, 'state'), directory, 'run', 'directory');
+  assert.equal(workspace.path, directory);
+  assert(workspace.instructions.some(item => item.content === 'Inherited instructions'));
+  const original = snapshot(workspace);
+  assert.equal(snapshot(workspace), original);
+  await writeFile(join(directory, 'note.txt'), 'Changed note');
+  assert.notEqual(snapshot(workspace), original);
+  const definition = { task: 'Read notes', workspace: 'directory', entry: 'read',
+    nodes: { read: { role: 'reviewer' } }, transitions: { read: { approve: null, changes: null } } };
+  validateWorkflow(definition);
+  assert.throws(() => validateWorkflow({ ...definition, merge: true }), /directory/);
+  definition.nodes.read.role = 'worker';
+  assert.throws(() => validateWorkflow(definition), /read-only/);
 });
 
 test('системные обязанности отделены от поручения, старые workflow сохраняют инструкции', () => {

@@ -39,7 +39,7 @@ async function writeOnce(filename, contents) {
   }
 }
 
-async function serviceConfig(directory) {
+async function serviceConfig(directory, participants = {}) {
   const configDirectory = join(directory, 'config');
   await mkdir(configDirectory, { recursive: true, mode: 0o700 });
   const skillDirectory = join(directory, 'skills');
@@ -77,7 +77,8 @@ async function serviceConfig(directory) {
   catch (error) { if (error.code !== 'ENOENT') throw error; }
   const agents = { [plannerId]: planner,
     ...Object.fromEntries(Object.entries(roleAgents).map(([role, id]) => [id,
-      { mode: 'primary', system: roleSystemPrompt(role), permissions: rolePermissions(role) }])) };
+      { mode: 'primary', system: roleSystemPrompt(role), permissions: rolePermissions(role) }])),
+    ...Object.fromEntries(Object.values(participants).map(item => [item.id, item.agent])) };
   const content = JSON.stringify({ ...managed,
     skills: skillDirectories,
     policies: [...(managed.policies ?? []).filter(policy => policy.action !== 'skill.use'), ...skillPolicies],
@@ -114,19 +115,20 @@ export async function checkRoleAgents(client, workspace, agents) {
   }
 }
 
-export async function connect(root) {
+export async function connect(root, participants) {
   const directory = join(root, 'opencode');
   const state = join(directory, 'state');
   const registration = join(state, 'opencode', 'service.json');
   await mkdir(directory, { recursive: true, mode: 0o700 });
   return withServiceLock(root, async () => {
-    const config = await serviceConfig(directory);
+    const config = await serviceConfig(directory, participants);
     const env = { OPENCODE_CONFIG_DIR: join(directory, 'config'),
       XDG_CONFIG_HOME: join(directory, 'xdg-config'), XDG_DATA_HOME: join(directory, 'data'),
       XDG_CACHE_HOME: join(directory, 'cache'), XDG_STATE_HOME: state,
       OPENCODE_DB: join(directory, 'opencode.sqlite'), OPENCODE_CONFIG: '',
       OPENCODE_DISABLE_AUTOUPDATE: 'true', OPENCODE_DISABLE_PROJECT_CONFIG: 'true',
       OPENCODE_DISABLE_CLAUDE_CODE: 'true',
+      OPENCODE_DISABLE_FILEWATCHER: 'false',
       OPENCODE_CONFIG_CONTENT: JSON.stringify({ ...config, update: 'disable', snapshots: false,
         mcp: { servers: {} }, agents: { ...config.agents, 'dwf-planner': planner } }) };
     const version = execFileSync(executable, ['--version'], { encoding: 'utf8', timeout: 30_000 }).trim();
@@ -167,6 +169,29 @@ export async function admit(client, run) {
   if (session.metadata?.dwfRunId !== run.id) throw publicError('Сессия OpenCode не принадлежит этому запуску DWF.');
   // The native inbox reconciles the persisted ID both before and after promotion to history.
   await client.session.prompt({ sessionID: run.sessionId, id: run.inputId, text: run.request.text });
+}
+
+export async function stopSessions(client, state) {
+  const sessions = new Set(state.visits.map(visit => visit.sessionId));
+  for (const sessionID of sessions) {
+    try {
+      const session = await client.session.get({ sessionID });
+      if (session.metadata?.dwfRunId !== state.id) throw publicError('Сессия остановки принадлежит другому запуску.');
+      for (const input of await client.session.inbox.list({ sessionID })) {
+        await client.session.inbox.cancel({ sessionID, inboxID: input.id });
+      }
+      await client.session.interrupt({ sessionID, resume: false });
+    } catch (error) {
+      if (!isSessionNotFoundError(error)) throw error;
+    }
+  }
+  const location = { directory: state.workspace.path };
+  const shells = await client.shell.list({ location });
+  for (const shell of shells.data) {
+    if (shell.status === 'running' && sessions.has(shell.metadata?.sessionID)) {
+      await client.shell.remove({ id: shell.id, location });
+    }
+  }
 }
 
 export function sessionRequest(workspace, model, runId, task) {
