@@ -309,6 +309,12 @@ export async function readExecution(client, run) {
         outcome = undefined;
       }
     }
+    if (outcome?.status === 'succeeded') {
+      const latest = await readMessages(client, run.sessionId);
+      const checked = outcomeFromMessages(latest, run.inputId);
+      if (JSON.stringify(checked) !== JSON.stringify(outcome)) outcome = undefined;
+      messages = latest;
+    }
   }
   return { outcome, progress: progressFromMessages(messages, run.inputId) };
 }

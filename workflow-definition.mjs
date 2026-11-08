@@ -118,8 +118,9 @@ export function participantVisits(visits) {
 
 export function parseVerdict(text, role) {
   const fenced = [...text.matchAll(/```(?:json)?\s*\n([\s\S]*?)```/g)].at(-1);
+  const finalObject = text.match(/(?:^|\n)[ \t]*(\{[\s\S]*\})\s*$/);
   let result;
-  try { result = JSON.parse(fenced ? fenced[1] : text); }
+  try { result = JSON.parse(fenced?.[1] ?? finalObject?.[1] ?? text); }
   catch { throw publicError('Участник вернул неверный JSON результата.'); }
   if (!object(result) || ![...outcomes[role], 'blocked'].includes(result.outcome) ||
     typeof result.summary !== 'string' || !result.summary.trim()) {

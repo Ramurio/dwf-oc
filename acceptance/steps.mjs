@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, join } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Before, After, Given, When, Then, setDefaultTimeout } from '@cucumber/cucumber';
 import { OpenCode } from '@opencode/client';
@@ -183,7 +183,9 @@ Given('подготовлен workflow ролей с независимыми п
         return { toolCalls: [{ name: 'read', arguments: { path: review.path } }] };
       }
       this.reviewMaterials ??= [];
-      this.reviewMaterials.push(review);
+      const workspace = prompt.match(/^Project workspace: (.+)$/m)?.[1];
+      assert(workspace, 'Reviewer должен получить рабочий каталог для относительного пути');
+      this.reviewMaterials.push({ ...review, path: resolve(workspace, review.path) });
     }
     assert(!prompt.includes('Work within the current project'), 'Постоянные инструкции должны быть в system');
     assert(prompt.includes('Проверить обмен замечаниями'), 'Поручение должно остаться в пользовательском сообщении');

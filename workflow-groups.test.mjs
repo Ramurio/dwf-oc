@@ -84,6 +84,24 @@ test('conflicting worker changes preserve the parent tree and every branch resul
   assert.deepEqual(groupVerdict(visit).results.map(result => result.result.summary), ['first', 'second']);
 });
 
+test('group deletes a file created by an earlier worker without staging it', async t => {
+  const { root, state } = await fixture(t);
+  await writeFile(join(state.workspace.path, 'temporary.txt'), 'earlier worker');
+  const visit = prepareGroup(root, state, 'work');
+  await rm(join(visit.children[0].workspace.path, 'temporary.txt'));
+  for (const child of visit.children) {
+    await writeFile(join(child.workspace.path, `${child.node}.txt`), child.node);
+    child.verdict = { outcome: 'done', summary: 'updated' };
+    child.revision = snapshot(child.workspace);
+  }
+  const persisted = structuredClone(visit);
+  integrateGroup(root, state, visit);
+  await assert.rejects(readFile(join(state.workspace.path, 'temporary.txt')), { code: 'ENOENT' });
+  assert.equal(await readFile(join(state.workspace.path, 'second.txt'), 'utf8'), 'second');
+  integrateGroup(root, state, persisted);
+  assert.equal(persisted.integratedRevision, visit.integratedRevision);
+});
+
 test('map groups preserve item identities and require approval from every current member', async t => {
   const { root, state } = await fixture(t);
   state.definition.nodes.first = { role: 'reviewer' };

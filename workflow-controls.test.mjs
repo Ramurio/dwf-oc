@@ -220,7 +220,7 @@ test('steering a prepared map child retains its identity before group admission'
       review: { approve: 'verify', changes: null }, verify: { approve: null, changes: null } } };
   const children = ['alpha', 'beta'].map(id => ({ node: 'review', participant: `jobs/${id}`, required: true,
     item: { id }, sessionId: `ses_${id}`, inputId: `msg_${id}`, revision: 'original', prompt: `Item ${id}` }));
-  const f = await fixture(t, { definition, visits: [{ node: 'jobs', inputId: 'group_1', revision: 'original', children }] });
+  const f = await fixture(t, { definition, visits: [{ node: 'jobs', inputId: 'group_1', revision: 'original', admissionStarted: false, children }] });
   f.command('steer', 'jobs/alpha', 'Check the updated condition');
   const watchdog = setTimeout(() => f.command('stop'), 2000);
   t.after(() => clearTimeout(watchdog));
@@ -234,4 +234,62 @@ test('steering a prepared map child retains its identity before group admission'
   assert.equal(f.admitted.length, 3);
   assert.match(f.admitted[0].request.text, /updated condition/);
   assert.doesNotMatch(f.admitted[1].request.text, /updated condition/);
+});
+
+test('group admission retry preserves the first steering and delivers a second separately', async t => {
+  const definition = { task: 'Lost group acknowledgement', workspace: 'directory', entry: 'jobs',
+    nodes: { review: { role: 'reviewer' }, verify: { role: 'verifier' } },
+    groups: { jobs: { member: 'review', items: [{ id: 'alpha' }] } },
+    transitions: { jobs: { done: 'verify', changes: null, failed: null },
+      review: { approve: 'verify', changes: null }, verify: { approve: null, changes: null } } };
+  const child = { node: 'review', participant: 'jobs/alpha', required: true, item: { id: 'alpha' },
+    sessionId: 'ses_alpha', inputId: 'msg_alpha', revision: 'original', prompt: 'Alpha' };
+  const f = await fixture(t, { definition, visits: [{ node: 'jobs', inputId: 'group_1',
+    revision: 'original', admissionStarted: false, children: [child] }] });
+  f.command('steer', 'jobs/alpha', 'First clarification');
+  const admit = io.admit;
+  let calls = 0;
+  io.admit = async request => {
+    assert.equal(f.state().visits.at(-1).admissionStarted, true);
+    await admit(request);
+    if (++calls === 1) throw new Error('Acknowledgement lost after acceptance');
+  };
+  let connections = 0;
+  io.connect = async () => {
+    if (++connections === 2) f.command('steer', 'jobs/alpha', 'Second clarification');
+    return {};
+  };
+  await f.run();
+  assert.equal(f.state().status, 'succeeded', f.state().error);
+  assert.deepEqual(f.state().controls.map(command => command.status), ['applied', 'applied']);
+  const requests = f.admitted.filter(request => request.sessionId === 'ses_alpha');
+  assert.equal(requests.length, 3);
+  assert.equal(requests[0].inputId, requests[1].inputId);
+  assert.equal(requests[0].request.text, requests[1].request.text);
+  assert.doesNotMatch(requests[1].request.text, /Second clarification/);
+  assert.notEqual(requests[1].inputId, requests[2].inputId);
+  assert.match(requests[2].request.text, /Second clarification/);
+});
+
+test('ordinary admission retry retains the original input before applying later steering', async t => {
+  const f = await fixture(t);
+  const admit = io.admit;
+  let calls = 0;
+  io.admit = async request => {
+    assert.equal(f.state().visits.at(-1).admissionStarted, true);
+    await admit(request);
+    if (++calls === 1) throw new Error('Acknowledgement lost after acceptance');
+  };
+  let connections = 0;
+  io.connect = async () => {
+    if (++connections === 2) f.command('steer', 'review', 'Later clarification');
+    return {};
+  };
+  await f.run();
+  assert.equal(f.state().status, 'succeeded', f.state().error);
+  assert.equal(f.state().controls[0].status, 'applied');
+  assert.equal(f.admitted[0].inputId, f.admitted[1].inputId);
+  assert.equal(f.admitted[0].request.text, f.admitted[1].request.text);
+  assert.notEqual(f.admitted[1].inputId, f.admitted[2].inputId);
+  assert.match(f.admitted[2].request.text, /Later clarification/);
 });

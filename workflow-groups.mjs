@@ -25,7 +25,7 @@ export function prepareGroup(root, state, id, previous) {
     return { ...item, sessionId, inputId, revision,
       startedAt: Date.now(), workspace, prompt, ...(review ? { review } : {}) };
   });
-  return { node: id, inputId: 'group_' + randomUUID(), revision, startedAt: Date.now(), children };
+  return { node: id, inputId: 'group_' + randomUUID(), revision, startedAt: Date.now(), admissionStarted: false, children };
 }
 
 export function groupVerdict(visit) {
@@ -59,7 +59,10 @@ export function integrateGroup(root, state, visit) {
   const current = snapshot(state.workspace);
   if (current !== visit.revision && current !== revision) throw publicError('Рабочее дерево изменилось во время параллельной группы.');
   // Recompute from persisted child trees after a crash between read-tree and the state commit.
-  if (current !== revision) git(state.workspace.path, ['read-tree', '--reset', '-u', revision]);
+  if (current !== revision) {
+    git(state.workspace.path, ['read-tree', visit.revision]);
+    git(state.workspace.path, ['read-tree', '--reset', '-u', revision]);
+  }
   if (snapshot(state.workspace) !== revision) throw publicError('Объединённый результат группы требует повторной проверки.');
   visit.integratedRevision = revision;
 }

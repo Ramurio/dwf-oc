@@ -109,6 +109,7 @@ test('терминальный ответ перечитывается посл�
     { data: [user, streaming], cursor: { next: 'tail' } },
     { data: [idle('succeeded')], cursor: {} },
     { data: [user, final, idle('succeeded')], cursor: {} },
+    { data: [user, final, idle('succeeded')], cursor: {} },
   ];
   const client = { session: { active: async () => ({}), inbox: { list: async () => [] } }, message: { list: async query => {
     requests.push(query);
@@ -118,7 +119,7 @@ test('терминальный ответ перечитывается посл�
   } } };
   assert.deepEqual(await readOutcome(client, { sessionId: 'session', inputId }),
     { status: 'succeeded', result: final.content[0].text, answerId: final.id });
-  assert.equal(requests.length, 3);
+  assert.equal(requests.length, 4);
   assert.equal(requests[1].cursor, 'tail');
   assert.equal(requests[2].cursor, undefined);
 });
@@ -131,6 +132,17 @@ test('ранний idle не завершается при активной се
         inbox: { list: async () => pending === 'inbox' ? [{ id: 'pending' }] : [] } } };
     assert.equal(await readOutcome(client, { sessionId: 'session', inputId }), undefined);
   }
+});
+
+test('ответ изменившийся во время проверки activity ожидает нового полного опроса', async () => {
+  const early = assistant('approve');
+  const late = assistant('changes');
+  let current = early;
+  const client = { message: { list: async () => ({ data: [user, current, idle('succeeded')], cursor: {} }) },
+    session: { active: async () => { current = late; return {}; }, inbox: { list: async () => [] } } };
+  assert.equal(await readOutcome(client, { sessionId: 'session', inputId }), undefined);
+  assert.deepEqual(await readOutcome(client, { sessionId: 'session', inputId }),
+    { status: 'succeeded', result: 'changes', answerId: late.id });
 });
 
 test('перечитывание не скрывает подтверждённую ошибку и не опрашивает незавершённый ответ дважды', async () => {

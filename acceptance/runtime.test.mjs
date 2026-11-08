@@ -11,7 +11,7 @@ import { Service } from '@opencode/client/service';
 import { createSandbox, cliJson, transcript, waitFor, writeJson, taggedProcesses } from './harness.mjs';
 import { createControlledHttpProvider, nativeProviderConfig } from './controlled-http-provider.mjs';
 import { getWorkflow } from '../run-store.mjs';
-import { captureStopSessions, stopSessions } from '../opencode-runtime.mjs';
+import { captureStopSessions, outcomeFromMessages, readExecution, stopSessions } from '../opencode-runtime.mjs';
 
 const cli = [process.execPath, fileURLToPath(new URL('../dwf.mjs', import.meta.url))];
 const verdict = (outcome = 'approve') => JSON.stringify({ outcome, summary: `Observed ${outcome}` });
@@ -287,6 +287,50 @@ test('a resumed background verifier supersedes its initial approval', { timeout:
   assert.equal(result.visits[0].verdict.outcome, 'changes');
 });
 
+test('native completion during an activity request cannot return an older approval', { timeout: 60000 }, async t => {
+  const definition = { task: 'Observe a moving native completion', workspace: 'directory', entry: 'verify',
+    nodes: { verify: { role: 'verifier', tools: ['shell'], skills: [] } },
+    transitions: { verify: { approve: null, changes: null } } };
+  let replies = 0;
+  const sandbox = await fixture(t, definition, () => {
+    if (++replies === 1) return {
+      toolCalls: [{ name: 'shell', arguments: { command: 'sleep 3; exit 1', background: true } }],
+    };
+    return verdict(replies === 2 ? 'approve' : 'changes');
+  }, true);
+  const endpoint = await Service.discover({ file: join(sandbox.state, 'opencode/state/opencode/service.json') });
+  const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) });
+  const state = getWorkflow(sandbox.state, sandbox.runId);
+  const visit = state.visits[0];
+  const latest = async () => outcomeFromMessages((await client.message.list({
+    sessionID: visit.sessionId, limit: 100, order: 'asc',
+  })).data, visit.inputId);
+  await sandbox.release();
+  await waitFor(async () => (await latest())?.result.includes('approve'), 10000, 'early native approval');
+  const controller = taggedProcesses(sandbox.token).find(item =>
+    execFileSync('ps', ['-p', String(item.pid), '-o', 'command='], { encoding: 'utf8' }).includes('workflow-runtime.mjs'));
+  assert(controller);
+  process.kill(controller.pid, 'SIGKILL');
+  const delayed = { message: client.message, shell: client.shell, session: {
+    inbox: client.session.inbox,
+    active: async () => {
+      await waitFor(async () => (await latest())?.result.includes('changes'), 10000, 'late native changes');
+      return client.session.active();
+    },
+  } };
+  const request = { sessionId: visit.sessionId, inputId: visit.inputId,
+    request: { session: { location: { directory: state.workspace.path } } } };
+  assert.equal((await readExecution(delayed, request)).outcome, undefined);
+  assert.match((await readExecution(client, request)).outcome.result, /changes/);
+  const db = new DatabaseSync(join(sandbox.state, 'dwf.sqlite'));
+  db.prepare('UPDATE workflows SET expires = 0 WHERE id = ?').run(sandbox.runId);
+  db.close();
+  await sandbox.command(['inspect', sandbox.runId]);
+  const result = await sandbox.finish();
+  assert.equal(result.status, 'failed');
+  assert.equal(result.visits[0].verdict.outcome, 'changes');
+});
+
 test('stop catches a resistant shell created after the initial process snapshot', { timeout: 60000 }, async t => {
   const definition = { task: 'Stop a late shell', workspace: 'directory', entry: 'verify',
     nodes: { verify: { role: 'verifier', tools: [], skills: [] } },
@@ -398,18 +442,22 @@ fi
 exit "$result"
 `);
   await chmod(wrapper, 0o700);
-  const definition = { task: 'Integrate parallel files after recovery', entry: 'files', merge: true,
-    nodes: { left: { role: 'worker', tools: ['shell'], skills: [], instructions: 'member=left' },
+  const definition = { task: 'Integrate parallel files after recovery', entry: 'seed', merge: true,
+    nodes: { seed: { role: 'worker', tools: ['shell'], skills: [], instructions: 'member=seed' },
+      left: { role: 'worker', tools: ['shell'], skills: [], instructions: 'member=left' },
       right: { role: 'worker', tools: ['shell'], skills: [], instructions: 'member=right' },
       review: { role: 'reviewer', tools: [], skills: [] }, verify: { role: 'verifier', tools: [], skills: [] } },
     groups: { files: { members: ['left', 'right'] } },
-    transitions: { files: { done: 'review', changes: null, failed: null }, left: { done: 'review' },
+    transitions: { seed: { done: 'files' }, files: { done: 'review', changes: null, failed: null }, left: { done: 'review' },
       right: { done: 'review' }, review: { approve: 'verify', changes: null }, verify: { approve: null, changes: null } } };
   const sandbox = await fixture(t, definition, ({ prompt, toolResults }) => {
-    const member = prompt.includes('member=left') ? 'left' : prompt.includes('member=right') ? 'right' : undefined;
+    const member = prompt.includes('member=seed') ? 'seed' :
+      prompt.includes('member=left') ? 'left' : prompt.includes('member=right') ? 'right' : undefined;
     if (!member) return verdict();
+    const command = member === 'seed' ? 'printf temporary > temporary.txt' :
+      (member === 'left' ? 'rm temporary.txt; ' : '') + `printf ${member} > ${member}.txt`;
     return toolResults.length ? verdict('done') : {
-      toolCalls: [{ name: 'shell', arguments: { command: `printf ${member} > ${member}.txt` } }],
+      toolCalls: [{ name: 'shell', arguments: { command } }],
     };
   }, false, { PATH: bin + ':' + process.env.PATH, DWF_GROUP_CRASH_MARKER: marker });
   await sandbox.release();
@@ -422,8 +470,9 @@ exit "$result"
   assert.equal(result.status, 'succeeded', result.error);
   assert.equal(await readFile(join(sandbox.workspace, 'left.txt'), 'utf8'), 'left');
   assert.equal(await readFile(join(sandbox.workspace, 'right.txt'), 'utf8'), 'right');
+  await assert.rejects(readFile(join(sandbox.workspace, 'temporary.txt')), { code: 'ENOENT' });
   assert.equal(result.visits.filter(visit => visit.node === 'files').length, 1);
-  for (const child of result.visits[0].children) {
+  for (const child of result.visits.find(visit => visit.node === 'files').children) {
     const calls = (await sandbox.events()).filter(event => event.type === 'received' &&
       event.providerSessionId === child.sessionId);
     assert.equal(calls.length, 2);

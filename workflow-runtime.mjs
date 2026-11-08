@@ -202,6 +202,7 @@ export async function runWorkflow(root, id) {
           const review = node.role === 'reviewer' && state.workspace.mode !== 'directory' && (!earlierReview || earlierReview.review) ? writeReviewDiff(state.workspace, revision,
             join(root, 'workflows', id, 'reviews', `${inputId}.diff`)) : undefined;
           visit = { node: next, participant, sessionId, inputId, revision, startedAt: Date.now(),
+            admissionStarted: false,
             ...(steered?.item ? { item: steered.item } : {}),
             ...(node.role === 'verifier' ? { workspace } : {}),
             ...(review ? { review } : {}),
@@ -216,19 +217,29 @@ export async function runWorkflow(root, id) {
           save(false);
         }
       }
+      if (!visit.admitted && visit.admissionStarted === false) {
+        await withWorkflowAction(root, state, owner, () => {
+          if (state.controls?.some(command => command.status === 'pending' && command.kind === 'stop')) {
+            state.visits.pop();
+            return;
+          }
+          const steering = state.controls?.find(command => command.status === 'pending' && command.kind === 'steer');
+          if (steering && !visit.steering) {
+            const child = visit.children?.find(item => item.participant === steering.node);
+            if (!child) { state.visits.pop(); return; }
+            child.prompt += `\n\nУточнение пользователя для этого участника:\n${steering.text}`;
+            child.steering = steering.id;
+            steering.status = 'delivered';
+          }
+          // A lost acknowledgement must retry this exact request, including after recovery.
+          visit.admissionStarted = true;
+        });
+        continue;
+      }
       if (visit.children) {
         if (!visit.admitted) {
           await withWorkflowAction(root, state, owner, async () => {
-            const started = visit.children.some(child => child.admitted);
             if (state.controls?.some(command => command.status === 'pending' && command.kind === 'stop')) return;
-            const steering = state.controls?.find(command => command.status === 'pending' && command.kind === 'steer');
-            if (steering && !started) {
-              const child = visit.children.find(item => item.participant === steering.node);
-              if (!child) { state.visits.pop(); return; }
-              child.prompt += `\n\nУточнение пользователя для этого участника:\n${steering.text}`;
-              child.steering = steering.id;
-              steering.status = 'delivered';
-            }
             await Promise.all(visit.children.filter(child => !child.admitted && !child.error).map(async child => {
               try {
                 await admit(client, request(state, child));
@@ -276,17 +287,21 @@ export async function runWorkflow(root, id) {
         continue;
       }
       if (!visit.admitted) {
-        await withWorkflowAction(root, state, owner, async () => {
-          const pending = state.controls?.some(command => command.status === 'pending' &&
-            (command.kind === 'stop' || !visit.steering));
-          if (pending) {
-            if (!visit.steering) state.visits.pop();
-            return;
-          }
-          await admit(client, request(state, visit));
-          visit.admitted = true;
-          state.sessions[visit.participant ?? visit.node] = visit.sessionId;
-        });
+        try {
+          await withWorkflowAction(root, state, owner, async () => {
+            if (state.controls?.some(command => command.status === 'pending' && command.kind === 'stop')) return;
+            await admit(client, request(state, visit));
+            visit.admitted = true;
+            state.sessions[visit.participant ?? visit.node] = visit.sessionId;
+          });
+        } catch (error) {
+          if (error.publicMessage) throw error;
+          state.service = 'unavailable';
+          save(false);
+          client = undefined;
+          await pause(300);
+          continue;
+        }
         if (!visit.admitted) continue;
       }
       if (!acknowledged) { acknowledge(); acknowledged = true; }

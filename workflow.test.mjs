@@ -47,6 +47,9 @@ test('произвольные имена участников, циклы и з
 
 test('вердикт читается структурированно, отсутствие решения не означает одобрение', () => {
   assert.equal(parseVerdict('```json\n{"outcome":"changes","summary":"Исправить тест"}\n```', 'reviewer').outcome, 'changes');
+  assert.equal(parseVerdict('Checks finished.\n\n{"outcome":"done","summary":"Verified"}', 'worker').outcome, 'done');
+  assert.throws(() => parseVerdict('{"outcome":"changes","summary":"First"}\n{"outcome":"approve","summary":"Second"}', 'reviewer'));
+  assert.throws(() => parseVerdict('{"outcome":"approve","summary":"Checked"}\nMore prose', 'reviewer'));
   assert.throws(() => parseVerdict('Всё отлично!', 'reviewer'));
   assert.throws(() => parseVerdict('{"outcome":"done","summary":"Готово"}', 'reviewer'));
   assert.throws(() => parseVerdict('{"outcome":"approve","summary":""}', 'verifier'));
