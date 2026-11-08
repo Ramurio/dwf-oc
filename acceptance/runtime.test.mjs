@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
-import { mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { OpenCode } from '@opencode/client';
@@ -233,6 +234,32 @@ test('a live background verifier cannot approve files before its command finishe
   assert.equal(await readFile(join(sandbox.workspace, 'untouched.txt'), 'utf8'), 'CHANGED');
 });
 
+test('a resumed background verifier supersedes its initial approval', { timeout: 60000 }, async t => {
+  const definition = { task: 'Verify the background command result', workspace: 'directory', entry: 'verify',
+    nodes: { verify: { role: 'verifier', tools: ['shell'], skills: [] } },
+    transitions: { verify: { approve: null, changes: null } } };
+  let replies = 0;
+  const sandbox = await fixture(t, definition, () => {
+    replies++;
+    if (replies === 1) return {
+      toolCalls: [{ name: 'shell', arguments: { command: 'sleep 2; exit 1', background: true } }],
+    };
+    return verdict(replies === 2 ? 'approve' : 'changes');
+  }, true);
+  const calls = () => sandbox.events().then(events => events.filter(event => event.type === 'received'));
+  const first = await waitFor(async () => (await calls())[0], 10000, 'initial verifier request');
+  await writeJson(join(sandbox.control, 'release.json'), { token: sandbox.token, callIds: [first.callId] });
+  const second = await waitFor(async () => (await calls())[1], 10000, 'early approval request');
+  await writeJson(join(sandbox.control, 'release.json'), { token: sandbox.token, callIds: [first.callId, second.callId] });
+  await waitFor(async () => (await calls())[2], 15000, 'background completion continuation');
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  assert.equal(getWorkflow(sandbox.state, sandbox.runId).status, 'running');
+  await sandbox.release();
+  const result = await sandbox.finish();
+  assert.equal(result.status, 'failed');
+  assert.equal(result.visits[0].verdict.outcome, 'changes');
+});
+
 test('stop catches a resistant shell created after the initial process snapshot', { timeout: 60000 }, async t => {
   const definition = { task: 'Stop a late shell', workspace: 'directory', entry: 'verify',
     nodes: { verify: { role: 'verifier', tools: [], skills: [] } },
@@ -327,6 +354,53 @@ test('map groups use runtime items, isolate writers and merge their complete res
   assert.equal(await readFile(join(sandbox.workspace, 'alpha.txt'), 'utf8'), 'alpha');
   assert.equal(await readFile(join(sandbox.workspace, 'beta.txt'), 'utf8'), 'beta');
   assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: sandbox.workspace, encoding: 'utf8' }), '');
+});
+
+test('writer group recovers after read-tree succeeds and its controller crashes', { timeout: 60000 }, async t => {
+  const bin = await mkdtemp(join(tmpdir(), 'dwf-group-crash-'));
+  t.after(() => rm(bin, { recursive: true, force: true }));
+  const marker = join(bin, 'crashed');
+  const wrapper = join(bin, 'git');
+  await writeFile(wrapper, `#!/bin/sh
+/usr/bin/git "$@"
+result=$?
+if [ "$result" -eq 0 ] && [ "$1 $2 $3" = "read-tree --reset -u" ] && [ ! -e "$DWF_GROUP_CRASH_MARKER" ]; then
+  : > "$DWF_GROUP_CRASH_MARKER"
+  kill -KILL "$PPID"
+fi
+exit "$result"
+`);
+  await chmod(wrapper, 0o700);
+  const definition = { task: 'Integrate parallel files after recovery', entry: 'files', merge: true,
+    nodes: { left: { role: 'worker', tools: ['shell'], skills: [], instructions: 'member=left' },
+      right: { role: 'worker', tools: ['shell'], skills: [], instructions: 'member=right' },
+      review: { role: 'reviewer', tools: [], skills: [] }, verify: { role: 'verifier', tools: [], skills: [] } },
+    groups: { files: { members: ['left', 'right'] } },
+    transitions: { files: { done: 'review', changes: null, failed: null }, left: { done: 'review' },
+      right: { done: 'review' }, review: { approve: 'verify', changes: null }, verify: { approve: null, changes: null } } };
+  const sandbox = await fixture(t, definition, ({ prompt, toolResults }) => {
+    const member = prompt.includes('member=left') ? 'left' : prompt.includes('member=right') ? 'right' : undefined;
+    if (!member) return verdict();
+    return toolResults.length ? verdict('done') : {
+      toolCalls: [{ name: 'shell', arguments: { command: `printf ${member} > ${member}.txt` } }],
+    };
+  }, false, { PATH: bin + ':' + process.env.PATH, DWF_GROUP_CRASH_MARKER: marker });
+  await sandbox.release();
+  await waitFor(() => readFile(marker).catch(() => false), 10000, 'controller crash after read-tree');
+  const db = new DatabaseSync(join(sandbox.state, 'dwf.sqlite'));
+  db.prepare('UPDATE workflows SET expires = 0 WHERE id = ?').run(sandbox.runId);
+  db.close();
+  await sandbox.command(['inspect', sandbox.runId]);
+  const result = await sandbox.finish();
+  assert.equal(result.status, 'succeeded', result.error);
+  assert.equal(await readFile(join(sandbox.workspace, 'left.txt'), 'utf8'), 'left');
+  assert.equal(await readFile(join(sandbox.workspace, 'right.txt'), 'utf8'), 'right');
+  assert.equal(result.visits.filter(visit => visit.node === 'files').length, 1);
+  for (const child of result.visits[0].children) {
+    const calls = (await sandbox.events()).filter(event => event.type === 'received' &&
+      event.providerSessionId === child.sessionId);
+    assert.equal(calls.length, 2);
+  }
 });
 
 test('group reports retain optional branch failures and stop cancels every active member', { timeout: 60000 }, async t => {

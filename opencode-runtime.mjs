@@ -294,6 +294,12 @@ export async function readExecution(client, run) {
   if (outcome !== undefined) {
     messages = await readMessages(client, run.sessionId);
     outcome = outcomeFromMessages(messages, run.inputId);
+    if (outcome?.status === 'succeeded') {
+      const [active, inbox] = await Promise.all([
+        client.session.active(), client.session.inbox.list({ sessionID: run.sessionId }),
+      ]);
+      if (active[run.sessionId] || inbox.length) outcome = undefined;
+    }
     if (client.shell) {
       const shells = await client.shell.list({ location: run.request.session.location });
       const owned = shells.data.filter(shell => shell.metadata?.sessionID === run.sessionId);
@@ -335,9 +341,18 @@ export function outcomeFromMessages(messages, inputId) {
   const start = messages.findIndex(item => item.id === inputId && item.type === 'user');
   if (start < 0) return undefined;
   let answer;
+  let result;
   const parts = [];
   for (const message of messages.slice(start + 1)) {
-    if (message.type === 'user') throw publicError('До завершения исходного поручения появился неподдерживаемый следующий ввод.');
+    if (message.type === 'user') {
+      if (result) return result;
+      throw publicError('До завершения исходного поручения появился неподдерживаемый следующий ввод.');
+    }
+    if (result && ['assistant', 'synthetic'].includes(message.type)) {
+      answer = undefined;
+      result = undefined;
+      parts.length = 0;
+    }
     if (message.type === 'assistant') {
       answer = message;
       if (message.error || !['stop', 'length'].includes(message.finish)) parts.length = 0;
@@ -345,17 +360,19 @@ export function outcomeFromMessages(messages, inputId) {
     }
     if (message.type !== 'idle') continue;
     if (message.outcome !== 'succeeded') {
-      return { status: 'failed', error: message.outcome === 'interrupted'
+      result = { status: 'failed', error: message.outcome === 'interrupted'
         ? 'Поручение участника прервано.' : message.error?.type === 'output-limit'
           ? 'Ответ участника остался оборванным после штатных продолжений по лимиту длины.'
           : 'Модель завершила поручение с ошибкой.' };
+      continue;
     }
     if (!answer || answer.finish !== 'stop' || answer.time.completed === undefined || answer.error) {
-      return { status: 'failed', error: 'Участник не завершил текстовый ответ нормально.' };
+      result = { status: 'failed', error: 'Участник не завершил текстовый ответ нормально.' };
+      continue;
     }
-    const result = parts.join('');
-    return result.trim() ? { status: 'succeeded', result, answerId: answer.id }
+    const text = parts.join('');
+    result = text.trim() ? { status: 'succeeded', result: text, answerId: answer.id }
       : { status: 'failed', error: 'Участник не вернул текстовый результат.' };
   }
-  return undefined;
+  return result;
 }

@@ -220,9 +220,14 @@ export async function runWorkflow(root, id) {
         if (!visit.admitted) {
           await withWorkflowAction(root, state, owner, async () => {
             const started = visit.children.some(child => child.admitted);
-            if (state.controls?.some(command => command.status === 'pending' && (command.kind === 'stop' || !started))) {
-              if (!started) state.visits.pop();
-              return;
+            if (state.controls?.some(command => command.status === 'pending' && command.kind === 'stop')) return;
+            const steering = state.controls?.find(command => command.status === 'pending' && command.kind === 'steer');
+            if (steering && !started) {
+              const child = visit.children.find(item => item.participant === steering.node);
+              if (!child) { state.visits.pop(); return; }
+              child.prompt += `\n\nУточнение пользователя для этого участника:\n${steering.text}`;
+              child.steering = steering.id;
+              steering.status = 'delivered';
             }
             await Promise.all(visit.children.filter(child => !child.admitted && !child.error).map(async child => {
               try {
@@ -251,6 +256,9 @@ export async function runWorkflow(root, id) {
           } catch (error) {
             if (error.publicMessage) child.error = error.publicMessage;
             else { state.service = 'unavailable'; client = undefined; }
+          }
+          if (child.steering && (child.verdict || child.error)) {
+            state.controls.find(command => command.id === child.steering).status = 'applied';
           }
         }
         save(false);

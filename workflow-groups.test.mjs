@@ -56,11 +56,17 @@ test('parallel workers have isolated trees and integrate all independent changes
     child.revision = snapshot(child.workspace);
   }
   await assert.rejects(readFile(join(state.workspace.path, 'first.txt')), { code: 'ENOENT' });
+  const persisted = structuredClone(visit);
   integrateGroup(root, state, visit);
   assert.equal(await readFile(join(state.workspace.path, 'first.txt'), 'utf8'), 'first');
   assert.equal(await readFile(join(state.workspace.path, 'second.txt'), 'utf8'), 'second');
   await assert.rejects(readFile(join(source, 'first.txt')), { code: 'ENOENT' });
   assert.equal(groupVerdict(visit).results.length, 2);
+  integrateGroup(root, state, persisted);
+  assert.equal(persisted.integratedRevision, visit.integratedRevision);
+  await writeFile(join(state.workspace.path, 'external.txt'), 'unrelated change');
+  assert.throws(() => integrateGroup(root, state, persisted), /изменилось/);
+  assert.equal(await readFile(join(state.workspace.path, 'external.txt'), 'utf8'), 'unrelated change');
 });
 
 test('conflicting worker changes preserve the parent tree and every branch result', async t => {

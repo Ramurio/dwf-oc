@@ -44,15 +44,22 @@ export function integrateGroup(root, state, visit) {
   const writers = visit.children.filter(child => state.definition.nodes[child.node].role === 'worker' &&
     child.verdict?.outcome === 'done');
   if (!writers.length) return;
-  if (snapshot(state.workspace) !== visit.revision) throw publicError('Рабочее дерево изменилось во время параллельной группы.');
-  const combined = verificationWorkspace(root, state.id, state.workspace, visit.revision, visit.inputId);
-  for (const child of writers) {
-    const patch = writeReviewDiff({ ...child.workspace, base: visit.revision }, child.revision,
-      join(root, 'workflows', state.id, 'groups', `${child.inputId}.diff`));
-    if (patch.bytes) git(combined.path, ['apply', '--3way', '--index', patch.path]);
+  const combined = verificationWorkspace(root, state.id, state.workspace, visit.revision, 'group_' + randomUUID());
+  let revision;
+  try {
+    for (const child of writers) {
+      const patch = writeReviewDiff({ ...child.workspace, base: visit.revision }, child.revision,
+        join(root, 'workflows', state.id, 'groups', `${child.inputId}.diff`));
+      if (patch.bytes) git(combined.path, ['apply', '--3way', '--index', patch.path]);
+    }
+    revision = snapshot(combined);
+  } finally {
+    git(state.workspace.path, ['worktree', 'remove', '--force', combined.path]);
   }
-  const revision = snapshot(combined);
-  git(state.workspace.path, ['read-tree', '--reset', '-u', revision]);
+  const current = snapshot(state.workspace);
+  if (current !== visit.revision && current !== revision) throw publicError('Рабочее дерево изменилось во время параллельной группы.');
+  // Recompute from persisted child trees after a crash between read-tree and the state commit.
+  if (current !== revision) git(state.workspace.path, ['read-tree', '--reset', '-u', revision]);
   if (snapshot(state.workspace) !== revision) throw publicError('Объединённый результат группы требует повторной проверки.');
   visit.integratedRevision = revision;
 }

@@ -88,6 +88,16 @@ test('неполный ответ, окончательная ошибка и о
   assert.equal(outcomeFromMessages([assistant('посторонний'), idle('succeeded')], inputId), undefined);
 });
 
+test('возобновление после idle отменяет ранний ответ и принимает поздний результат отдельно', () => {
+  const first = [user, assistant('early approve'), idle('succeeded')];
+  const resumed = [...first, { type: 'synthetic' }];
+  assert.equal(outcomeFromMessages(resumed, inputId), undefined);
+  assert.equal(outcomeFromMessages([...resumed, { type: 'assistant', content: [] }], inputId), undefined);
+  const final = assistant('later changes');
+  assert.deepEqual(outcomeFromMessages([...resumed, final, idle('succeeded')], inputId),
+    { status: 'succeeded', result: 'later changes', answerId: final.id });
+});
+
 test('терминальный ответ перечитывается после появления idle на следующей странице', async () => {
   const streaming = assistant('Проверяю');
   delete streaming.finish;
@@ -100,7 +110,7 @@ test('терминальный ответ перечитывается посл�
     { data: [idle('succeeded')], cursor: {} },
     { data: [user, final, idle('succeeded')], cursor: {} },
   ];
-  const client = { message: { list: async query => {
+  const client = { session: { active: async () => ({}), inbox: { list: async () => [] } }, message: { list: async query => {
     requests.push(query);
     const page = pages.shift();
     assert(page, 'Лишний запрос истории');
@@ -111,6 +121,16 @@ test('терминальный ответ перечитывается посл�
   assert.equal(requests.length, 3);
   assert.equal(requests[1].cursor, 'tail');
   assert.equal(requests[2].cursor, undefined);
+});
+
+test('ранний idle не завершается при активной сессии или ожидающем inbox', async () => {
+  const messages = [user, assistant('early approve'), idle('succeeded')];
+  for (const pending of ['active', 'inbox']) {
+    const client = { message: { list: async () => ({ data: messages, cursor: {} }) },
+      session: { active: async () => pending === 'active' ? { session: true } : {},
+        inbox: { list: async () => pending === 'inbox' ? [{ id: 'pending' }] : [] } } };
+    assert.equal(await readOutcome(client, { sessionId: 'session', inputId }), undefined);
+  }
 });
 
 test('перечитывание не скрывает подтверждённую ошибку и не опрашивает незавершённый ответ дважды', async () => {

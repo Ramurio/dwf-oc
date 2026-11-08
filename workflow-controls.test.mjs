@@ -39,13 +39,13 @@ async function fixture(t, options = {}) {
   const root = await mkdtemp(join(tmpdir(), 'dwf-control-test-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const id = 'controlled';
-  const definition = { task: 'Controlled scheduling', workspace: 'directory', entry: 'review',
+  const definition = options.definition ?? { task: 'Controlled scheduling', workspace: 'directory', entry: 'review',
     nodes: { review: { role: 'reviewer' }, verify: { role: 'verifier' } },
     transitions: { review: { approve: 'verify', changes: 'verify' }, verify: { approve: null, changes: null } } };
   if (options.merge) definition.merge = true;
   if (options.memory === false) definition.transitions.verify.changes = 'review';
   createWorkflow(root, { id, definition, workspace: { mode: 'directory', path: root },
-    status: 'running', visits: [], sessions: {},
+    status: 'running', visits: options.visits ?? [], sessions: {},
     ...(options.memory === false ? { participants: { review: { memory: false, agent: { permissions: [] } } } } : {}) });
   const admitted = [];
   io = globalThis.dwfControlIO = {
@@ -210,4 +210,28 @@ test('a transient reconnect failure preserves the resumable running state', asyn
   await f.run();
   assert.equal(f.state().status, 'succeeded', f.state().error);
   assert.equal(f.admitted.length, 2);
+});
+
+test('steering a prepared map child retains its identity before group admission', async t => {
+  const definition = { task: 'Prepared group steering', workspace: 'directory', entry: 'jobs',
+    nodes: { review: { role: 'reviewer' }, verify: { role: 'verifier' } },
+    groups: { jobs: { member: 'review', items: [{ id: 'alpha' }, { id: 'beta' }] } },
+    transitions: { jobs: { done: 'verify', changes: null, failed: null },
+      review: { approve: 'verify', changes: null }, verify: { approve: null, changes: null } } };
+  const children = ['alpha', 'beta'].map(id => ({ node: 'review', participant: `jobs/${id}`, required: true,
+    item: { id }, sessionId: `ses_${id}`, inputId: `msg_${id}`, revision: 'original', prompt: `Item ${id}` }));
+  const f = await fixture(t, { definition, visits: [{ node: 'jobs', inputId: 'group_1', revision: 'original', children }] });
+  f.command('steer', 'jobs/alpha', 'Check the updated condition');
+  const watchdog = setTimeout(() => f.command('stop'), 2000);
+  t.after(() => clearTimeout(watchdog));
+  await f.run();
+  clearTimeout(watchdog);
+  const state = f.state();
+  assert.equal(state.status, 'succeeded', state.error);
+  assert.equal(state.controls[0].status, 'applied');
+  assert.equal(state.visits[0].children[0].sessionId, 'ses_alpha');
+  assert.equal(state.visits[0].children[0].item.id, 'alpha');
+  assert.equal(f.admitted.length, 3);
+  assert.match(f.admitted[0].request.text, /updated condition/);
+  assert.doesNotMatch(f.admitted[1].request.text, /updated condition/);
 });
