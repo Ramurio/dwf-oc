@@ -1,0 +1,504 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-11-08T23:42:24.601772+00:00",
+  "model": {
+    "provider": "openai",
+    "modelId": "gpt-6.1-sol-ultrafast",
+    "reasoning": "high"
+  },
+  "environment": {
+    "os": "macOS arm64",
+    "node": "26.8.1",
+    "openCode": "2.2.5",
+    "python": "3.14.6",
+    "pytest": "8.3.5",
+    "go": "1.27.3",
+    "mypy": "1.18.2"
+  },
+  "protocol": {
+    "qualification": "Original baseline lacks the requested behavior and reference passes the independent checks. Full reference and baseline regressions are recorded privately.",
+    "attempts": "Fresh native tester session and archive of the same original commit per repeat. Testers compose DWF through the skill and public CLI. DWF participants implement, review and verify.",
+    "isolation": "One synthetic Git commit, no remotes or future objects, kernel filesystem and network restrictions, model-only proxy, per-attempt state and caches, same-sandbox signals. Boundary probes run before admission.",
+    "assessment": "Integrated tree assessed outside the participant boundary with candidate tests, original tests and independent checks. Different correct implementations are accepted.",
+    "usage": "Completed DWF participant and tester messages are reported separately. Evaluator usage excluded. Reasoning and cache counters are reported separately; no monetary estimate is inferred from unfilled provider costs.",
+    "privateEvidence": "Original accepted PR provenance, reference revisions, hidden checks, task text, native transcripts, command logs, generated trees and exact reproduction configurations are retained in the separate evaluation store."
+  },
+  "typing": {
+    "baseline": {
+      "exit": 1
+    },
+    "reference": {
+      "exit": 0
+    },
+    "candidate-first": {
+      "exit": 0
+    },
+    "candidate-repeat": {
+      "exit": 0
+    }
+  },
+  "trials": [
+    {
+      "attempt": "5d0d1308-930b-42ee-ba5f-f644cc7051f8",
+      "project": "chi",
+      "outcome": "environment_rejected",
+      "runtimeRevision": "5b82e32835724e5ff9b0f28e674049975663c264",
+      "baselineRevision": "7f9b7448f51d28804fac98c0a17bc2a7cec1079f",
+      "baselineTree": "03cfea8157f6c36c26adf700b9201dea2767a7f5",
+      "skillHash": "f06123402d44004ba13cbf3d4aa0896c3ea9ed3ed6459d0de340c7dbf0472af0",
+      "promptHash": "07dc8c547e0e96471d0af35c8501b3286c4e2161fbc057a5eec28510f0ac41f2",
+      "boundaryCheckPassed": true,
+      "workflows": [
+        {
+          "id": "e7ac3bfc-7ca6-41d4-a523-7f5e8e7bfdd5",
+          "status": "failed",
+          "commit": null
+        }
+      ],
+      "externalCheckExitCodes": {},
+      "participantUsage": {
+        "input": 78091,
+        "output": 8385,
+        "reasoning": 1805,
+        "cachedRead": 300160,
+        "cachedWrite": 0,
+        "sessions": 3,
+        "providerCostFilled": false
+      },
+      "testerUsage": {
+        "input": 30020,
+        "output": 2118,
+        "reasoning": 744,
+        "cachedRead": 174208,
+        "cachedWrite": 0,
+        "sessions": 1,
+        "providerCostFilled": false
+      },
+      "usageComplete": true,
+      "note": "The original HTTP tests require arbitrary localhost listeners unavailable inside the selected isolation boundary. Replaced by a computational project."
+    },
+    {
+      "attempt": "72ce063a-a883-4469-b3d7-0310c5eae1f0",
+      "project": "click",
+      "outcome": "accepted",
+      "runtimeRevision": "5b82e32835724e5ff9b0f28e674049975663c264",
+      "baselineRevision": "8a47580a00f3404e7071b9ecfec3692a1e18309f",
+      "baselineTree": "163366aab835a523175b60ec6fa6813774fac930",
+      "skillHash": "f06123402d44004ba13cbf3d4aa0896c3ea9ed3ed6459d0de340c7dbf0472af0",
+      "promptHash": "649eedb37d34e7533e5be764bde34cd3dba433ff96e15f13e85c0951a87d826a",
+      "boundaryCheckPassed": true,
+      "workflows": [
+        {
+          "id": "6e27e7d7-8c40-47af-a9a5-68766f63f501",
+          "status": "succeeded",
+          "commit": "3ebc5f2b8f8137700391afc1a9645ac7ab27295f"
+        }
+      ],
+      "externalCheckExitCodes": {
+        "candidate-tests": 0,
+        "hidden-behavior": 0,
+        "original-candidate": 1,
+        "compatible-candidate": 0,
+        "original-reference": 1,
+        "compatible-reference": 1
+      },
+      "participantUsage": {
+        "input": 160031,
+        "output": 14945,
+        "reasoning": 5666,
+        "cachedRead": 1663488,
+        "cachedWrite": 0,
+        "sessions": 4,
+        "providerCostFilled": false
+      },
+      "testerUsage": {
+        "input": 45245,
+        "output": 1874,
+        "reasoning": 409,
+        "cachedRead": 194816,
+        "cachedWrite": 0,
+        "sessions": 1,
+        "providerCostFilled": false
+      },
+      "usageComplete": true,
+      "note": "657 candidate tests and independent behavior/type checks passed. Original tests have one list-versus-tuple representation mismatch also changed upstream. With only the upstream info-dict test update, all 625 original tests pass. 22 skips and one xfail are inherited."
+    },
+    {
+      "attempt": "2843c0a0-6fec-4458-92aa-80a0249a6858",
+      "project": "p-limit",
+      "outcome": "bootstrap_failed",
+      "runtimeRevision": "96f30ff71bfaacac715e33058b86794d78a81adf",
+      "baselineRevision": "850768f5655dc46547802789e13af3cf35c3d7b0",
+      "baselineTree": "676759e85a0b85a5c9b0bbcaec5d67a0a5f9fb7c",
+      "skillHash": "f06123402d44004ba13cbf3d4aa0896c3ea9ed3ed6459d0de340c7dbf0472af0",
+      "promptHash": "12a8b85550e7e388f93ebc23672c5d42fddcf79588d9d108c0c74b1538edac71",
+      "boundaryCheckPassed": true,
+      "workflows": [],
+      "externalCheckExitCodes": {},
+      "participantUsage": {
+        "input": 0,
+        "output": 0,
+        "reasoning": 0,
+        "cachedRead": 0,
+        "cachedWrite": 0,
+        "sessions": 0,
+        "providerCostFilled": false
+      },
+      "testerUsage": {
+        "input": 0,
+        "output": 0,
+        "reasoning": 0,
+        "cachedRead": 0,
+        "cachedWrite": 0,
+        "sessions": 0,
+        "providerCostFilled": false
+      },
+      "usageComplete": true,
+      "note": "The native skill index was not ready. Fixed by waiting for the required skill before tester admission."
+    },
+    {
+      "attempt": "4353fcf4-dc7b-402b-9033-b6d24efd9f39",
+      "project": "p-limit",
+      "outcome": "accepted",
+      "runtimeRevision": "5b82e32835724e5ff9b0f28e674049975663c264",
+      "baselineRevision": "850768f5655dc46547802789e13af3cf35c3d7b0",
+      "baselineTree": "676759e85a0b85a5c9b0bbcaec5d67a0a5f9fb7c",
+      "skillHash": "f06123402d44004ba13cbf3d4aa0896c3ea9ed3ed6459d0de340c7dbf0472af0",
+      "promptHash": "12a8b85550e7e388f93ebc23672c5d42fddcf79588d9d108c0c74b1538edac71",
+      "boundaryCheckPassed": true,
+      "workflows": [
+        {
+          "id": "e94ac788-21cb-4550-bcad-365575e3e4c8",
+          "status": "succeeded",
+          "commit": "e2816a33b51cade7ac3585453a16542527719120"
+        }
+      ],
+      "externalCheckExitCodes": {
+        "candidate-tests": 0,
+        "hidden-behavior": 0,
+        "original-regression": 0
+      },
+      "participantUsage": {
+        "input": 66163,
+        "output": 12307,
+        "reasoning": 3104,
+        "cachedRead": 413440,
+        "cachedWrite": 0,
+        "sessions": 4,
+        "providerCostFilled": false
+      },
+      "testerUsage": {
+        "input": 44009,
+        "output": 1965,
+        "reasoning": 479,
+        "cachedRead": 182528,
+        "cachedWrite": 0,
+        "sessions": 1,
+        "providerCostFilled": false
+      },
+      "usageComplete": true,
+      "note": "18 candidate tests, 10 original tests, lint, type declarations and independent behavior checks passed."
+    },
+    {
+      "attempt": "ce4c8db8-e81d-43c5-b639-29ca347fd1ed",
+      "project": "click",
+      "outcome": "accepted",
+      "runtimeRevision": "585fe4fa8c9c069b3cd699a9de661a369a31b1a6",
+      "baselineRevision": "8a47580a00f3404e7071b9ecfec3692a1e18309f",
+      "baselineTree": "163366aab835a523175b60ec6fa6813774fac930",
+      "skillHash": "b3ae72c998ee752e8670cb73732e2e1661e82582b97a7f1f3be2fccfbed3e48a",
+      "promptHash": "649eedb37d34e7533e5be764bde34cd3dba433ff96e15f13e85c0951a87d826a",
+      "boundaryCheckPassed": true,
+      "workflows": [
+        {
+          "id": "4a8108e4-d071-4111-8714-f257e99a00e2",
+          "status": "succeeded",
+          "commit": "4572763355843c8450dfa4b145f16e04c2a69233"
+        }
+      ],
+      "externalCheckExitCodes": {
+        "candidate-tests": 0,
+        "hidden-behavior": 0,
+        "original-regression": 0,
+        "compatible-regression": 1
+      },
+      "participantUsage": {
+        "input": 174704,
+        "output": 19533,
+        "reasoning": 10347,
+        "cachedRead": 2450944,
+        "cachedWrite": 0,
+        "sessions": 4,
+        "providerCostFilled": false
+      },
+      "testerUsage": {
+        "input": 27077,
+        "output": 1630,
+        "reasoning": 901,
+        "cachedRead": 108160,
+        "cachedWrite": 0,
+        "sessions": 1,
+        "providerCostFilled": false
+      },
+      "usageComplete": true,
+      "note": "659 candidate tests, all 625 unmodified original tests and independent behavior/type checks passed. This implementation preserves the original list representation. Applying the optional upstream tuple assertion produces one expected representation mismatch. 22 skips and one xfail are inherited."
+    },
+    {
+      "attempt": "cfa173d7-6d89-4ae5-9111-2c816ebce92c",
+      "project": "expr",
+      "outcome": "accepted",
+      "runtimeRevision": "585fe4fa8c9c069b3cd699a9de661a369a31b1a6",
+      "baselineRevision": "de0da09604e38f105e7ba37c95627368695d19e6",
+      "baselineTree": "0908cb9bea281532d9639acf94281a8d1ab7135a",
+      "skillHash": "b3ae72c998ee752e8670cb73732e2e1661e82582b97a7f1f3be2fccfbed3e48a",
+      "promptHash": "6affc8099c7aabfb638e048be3bc9955413d5a0fd5b5c5326169e46b6c021ea2",
+      "boundaryCheckPassed": true,
+      "workflows": [
+        {
+          "id": "34ea0170-a1a1-4356-92e2-7375a711ba3d",
+          "status": "succeeded",
+          "commit": "865d30fae2ca2bfa4691e212e7e6debe2358ec25"
+        }
+      ],
+      "externalCheckExitCodes": {
+        "candidate-regression": 0,
+        "hidden-behavior": 0,
+        "original-regression": 0
+      },
+      "participantUsage": {
+        "input": 207855,
+        "output": 18193,
+        "reasoning": 5992,
+        "cachedRead": 2447744,
+        "cachedWrite": 0,
+        "sessions": 4,
+        "providerCostFilled": false
+      },
+      "testerUsage": {
+        "input": 34149,
+        "output": 2105,
+        "reasoning": 1126,
+        "cachedRead": 228608,
+        "cachedWrite": 0,
+        "sessions": 1,
+        "providerCostFilled": false
+      },
+      "usageComplete": true,
+      "note": "Candidate and original root-module go test -race ./... suites and independent byte-literal checks passed. Separate debug/repl modules had unavailable offline dependencies and were not tested."
+    },
+    {
+      "attempt": "ea628bdf-638a-4319-aa47-fa203b4b67da",
+      "project": "expr",
+      "outcome": "not_clean_repeat",
+      "runtimeRevision": "585fe4fa8c9c069b3cd699a9de661a369a31b1a6",
+      "baselineRevision": "de0da09604e38f105e7ba37c95627368695d19e6",
+      "baselineTree": "0908cb9bea281532d9639acf94281a8d1ab7135a",
+      "skillHash": "b3ae72c998ee752e8670cb73732e2e1661e82582b97a7f1f3be2fccfbed3e48a",
+      "promptHash": "6affc8099c7aabfb638e048be3bc9955413d5a0fd5b5c5326169e46b6c021ea2",
+      "boundaryCheckPassed": true,
+      "workflows": [
+        {
+          "id": "18536fa2-cb40-4ec7-8872-00dc95f759de",
+          "status": "failed",
+          "commit": null
+        },
+        {
+          "id": "8308f08f-5346-42df-9fe8-197f4102381b",
+          "status": "succeeded",
+          "commit": "4041dd0c1f3afc14ab57f897b7309fa5d694fa1c"
+        }
+      ],
+      "externalCheckExitCodes": {},
+      "participantUsage": {
+        "input": 173288,
+        "output": 15968,
+        "reasoning": 3225,
+        "cachedRead": 1055232,
+        "cachedWrite": 0,
+        "sessions": 5,
+        "providerCostFilled": false
+      },
+      "testerUsage": {
+        "input": 47528,
+        "output": 3751,
+        "reasoning": 1130,
+        "cachedRead": 276608,
+        "cachedWrite": 0,
+        "sessions": 1,
+        "providerCostFilled": false
+      },
+      "usageComplete": true,
+      "note": "The first workflow failed parsing prose followed by valid plain JSON. The tester copied its result into a second workflow. The merged replacement is retained as evidence and excluded from successful clean repeats."
+    },
+    {
+      "attempt": "1b724e23-ff87-4623-b0ae-853aa554aef7",
+      "project": "p-limit",
+      "outcome": "dependency_setup_failed",
+      "runtimeRevision": "585fe4fa8c9c069b3cd699a9de661a369a31b1a6",
+      "baselineRevision": "850768f5655dc46547802789e13af3cf35c3d7b0",
+      "baselineTree": "676759e85a0b85a5c9b0bbcaec5d67a0a5f9fb7c",
+      "skillHash": "b3ae72c998ee752e8670cb73732e2e1661e82582b97a7f1f3be2fccfbed3e48a",
+      "promptHash": "12a8b85550e7e388f93ebc23672c5d42fddcf79588d9d108c0c74b1538edac71",
+      "boundaryCheckPassed": true,
+      "workflows": [
+        {
+          "id": "8cfe420e-04bd-459a-bd17-d6db5e8d44ba",
+          "status": "failed",
+          "commit": null
+        }
+      ],
+      "externalCheckExitCodes": {},
+      "participantUsage": {
+        "input": 33713,
+        "output": 5262,
+        "reasoning": 2395,
+        "cachedRead": 151040,
+        "cachedWrite": 0,
+        "sessions": 1,
+        "providerCostFilled": false
+      },
+      "testerUsage": {
+        "input": 43654,
+        "output": 2399,
+        "reasoning": 1099,
+        "cachedRead": 309120,
+        "cachedWrite": 0,
+        "sessions": 1,
+        "providerCostFilled": false
+      },
+      "usageComplete": true,
+      "note": "The offline npm cache lacked registry metadata. No integrated result. The replacement cache was preflighted on the original baseline."
+    },
+    {
+      "attempt": "dd1014d1-d578-4159-8676-c11c501f626e",
+      "project": "p-limit",
+      "outcome": "review_blocked",
+      "runtimeRevision": "585fe4fa8c9c069b3cd699a9de661a369a31b1a6",
+      "baselineRevision": "850768f5655dc46547802789e13af3cf35c3d7b0",
+      "baselineTree": "676759e85a0b85a5c9b0bbcaec5d67a0a5f9fb7c",
+      "skillHash": "b3ae72c998ee752e8670cb73732e2e1661e82582b97a7f1f3be2fccfbed3e48a",
+      "promptHash": "12a8b85550e7e388f93ebc23672c5d42fddcf79588d9d108c0c74b1538edac71",
+      "boundaryCheckPassed": true,
+      "workflows": [
+        {
+          "id": "d711218d-66ba-408b-b2ae-beb5be5912d6",
+          "status": "failed",
+          "commit": null
+        }
+      ],
+      "externalCheckExitCodes": {},
+      "participantUsage": {
+        "input": 36078,
+        "output": 3992,
+        "reasoning": 1020,
+        "cachedRead": 110080,
+        "cachedWrite": 0,
+        "sessions": 2,
+        "providerCostFilled": false
+      },
+      "testerUsage": {
+        "input": 23885,
+        "output": 2281,
+        "reasoning": 886,
+        "cachedRead": 256384,
+        "cachedWrite": 0,
+        "sessions": 1,
+        "providerCostFilled": false
+      },
+      "usageComplete": true,
+      "note": "The reviewer transcribed the absolute diff path incorrectly. Fixed by providing a workspace-relative diff path and tested with native read permissions."
+    },
+    {
+      "attempt": "bf562901-4d4d-4090-87e2-9e9bb1808d83",
+      "project": "p-limit",
+      "outcome": "accepted",
+      "runtimeRevision": "bb28fba1dc87d9ee4de125c9cc34846c967015be",
+      "baselineRevision": "850768f5655dc46547802789e13af3cf35c3d7b0",
+      "baselineTree": "676759e85a0b85a5c9b0bbcaec5d67a0a5f9fb7c",
+      "skillHash": "b3ae72c998ee752e8670cb73732e2e1661e82582b97a7f1f3be2fccfbed3e48a",
+      "promptHash": "12a8b85550e7e388f93ebc23672c5d42fddcf79588d9d108c0c74b1538edac71",
+      "boundaryCheckPassed": true,
+      "workflows": [
+        {
+          "id": "c8b6eb57-5ef6-4950-831e-a1b4742a87c5",
+          "status": "succeeded",
+          "commit": "f53ec53adf56bdab590b4d36dc8e1dfc78399717"
+        }
+      ],
+      "externalCheckExitCodes": {
+        "candidate-tests": 0,
+        "hidden-behavior": 0,
+        "original-regression": 0
+      },
+      "participantUsage": {
+        "input": 53959,
+        "output": 8471,
+        "reasoning": 1123,
+        "cachedRead": 217216,
+        "cachedWrite": 0,
+        "sessions": 4,
+        "providerCostFilled": false
+      },
+      "testerUsage": {
+        "input": 42414,
+        "output": 1798,
+        "reasoning": 1421,
+        "cachedRead": 192000,
+        "cachedWrite": 0,
+        "sessions": 1,
+        "providerCostFilled": false
+      },
+      "usageComplete": true,
+      "note": "18 candidate tests, 10 original tests, lint, type declarations and independent behavior checks passed."
+    },
+    {
+      "attempt": "92a7b0c6-9201-4c64-9b2c-d49ad87396be",
+      "project": "expr",
+      "outcome": "accepted",
+      "runtimeRevision": "d56790d60c6bc66c937646029081fd2e19a2b0c1",
+      "baselineRevision": "de0da09604e38f105e7ba37c95627368695d19e6",
+      "baselineTree": "0908cb9bea281532d9639acf94281a8d1ab7135a",
+      "skillHash": "b3ae72c998ee752e8670cb73732e2e1661e82582b97a7f1f3be2fccfbed3e48a",
+      "promptHash": "6affc8099c7aabfb638e048be3bc9955413d5a0fd5b5c5326169e46b6c021ea2",
+      "boundaryCheckPassed": true,
+      "workflows": [
+        {
+          "id": "b6f3dc81-f52d-46a1-ab6e-c3f26c9081c5",
+          "status": "succeeded",
+          "commit": "943a6348cda84c43817129b211b068f971af8bce"
+        }
+      ],
+      "externalCheckExitCodes": {
+        "candidate-regression": 0,
+        "hidden-behavior": 0,
+        "original-regression": 0
+      },
+      "participantUsage": {
+        "input": 202261,
+        "output": 15490,
+        "reasoning": 5327,
+        "cachedRead": 1695616,
+        "cachedWrite": 0,
+        "sessions": 4,
+        "providerCostFilled": false
+      },
+      "testerUsage": {
+        "input": 30632,
+        "output": 1854,
+        "reasoning": 707,
+        "cachedRead": 133632,
+        "cachedWrite": 0,
+        "sessions": 1,
+        "providerCostFilled": false
+      },
+      "usageComplete": true,
+      "note": "Clean repeat in one workflow on d56790d. Candidate and original root-module go test -race ./... suites and independent byte-literal checks passed. Reviewer and verifier approved after two findings were corrected. Separate debug/repl modules were outside the root-module test run."
+    }
+  ],
+  "rejectedQualification": [
+    {
+      "project": "httprouter",
+      "reason": "The original Unicode case-insensitive-path regression fails for both baseline and reference under the available Go toolchain. No task trial counted."
+    }
+  ]
+}

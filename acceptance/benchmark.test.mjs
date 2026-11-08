@@ -32,6 +32,7 @@ test('benchmark archives a pristine baseline with no future Git objects or runti
   assert.equal(execFileSync('git', ['-C', first.workspace, 'remote'], { encoding: 'utf8' }).trim(), '');
   assert.throws(() => execFileSync('git', ['-C', first.workspace, 'cat-file', '-e', future], { stdio: 'pipe' }));
   await assert.rejects(readFile(join(first.runtime, '.beads/issues.jsonl')), { code: 'ENOENT' });
+  await assert.rejects(readFile(join(first.runtime, 'acceptance/benchmark-results.json')), { code: 'ENOENT' });
   await assert.rejects(readFile(join(first.runtime, 'docs/autonomous-goal.md')), { code: 'ENOENT' });
   await assert.rejects(prepareBenchmark({ ...settings, root: join(source, 'benchmark') }), /outside/);
 });
