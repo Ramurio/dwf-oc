@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, openSync, closeSync, fsyncSync, renameSync, chmodSync, statSync, readFileSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
+import { mkdtempSync, mkdirSync, rmSync, openSync, closeSync, fsyncSync, renameSync, chmodSync, statSync, readFileSync, readdirSync, lstatSync, readlinkSync } from 'node:fs';
+import { randomUUID, createHash } from 'node:crypto';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { publicError } from './run-store.mjs';
@@ -18,11 +18,8 @@ export function git(cwd, args, extraEnv = {}) {
   }
 }
 
-export function prepareWorkspace(root, cwd, id) {
-  const source = git(cwd, ['rev-parse', '--show-toplevel']);
-  const branch = git(source, ['symbolic-ref', '--short', 'HEAD']);
-  if (git(source, ['status', '--porcelain'])) throw publicError('Для запуска workflow нужна чистая исходная Git-ветка.');
-  const base = git(source, ['rev-parse', 'HEAD']);
+export function prepareWorkspace(root, cwd, id, mode = 'worktree') {
+  const source = mode === 'directory' ? cwd : git(cwd, ['rev-parse', '--show-toplevel']);
   const instructions = [];
   let parent = dirname(source);
   while (parent !== source) {
@@ -33,11 +30,43 @@ export function prepareWorkspace(root, cwd, id) {
     if (next === parent) break;
     parent = next;
   }
-  const path = join(root, 'workflows', id, 'worktree');
   mkdirSync(join(root, 'workflows', id), { recursive: true, mode: 0o700 });
+  if (mode === 'directory') return { mode, source, path: source, instructions };
+  const branch = git(source, ['symbolic-ref', '--short', 'HEAD']);
+  if (git(source, ['status', '--porcelain'])) throw publicError('Для запуска workflow нужна чистая исходная Git-ветка.');
+  const base = git(source, ['rev-parse', 'HEAD']);
+  const path = join(root, 'workflows', id, 'worktree');
   const candidate = 'dwf/' + id;
   git(source, ['worktree', 'add', '-b', candidate, path, base]);
   return { source, branch, base, path, candidate, instructions };
+}
+
+export function snapshot(workspace) {
+  if (workspace.mode !== 'directory') return tree(workspace.path);
+  const hash = createHash('sha256');
+  function visit(directory) {
+    for (const name of readdirSync(join(workspace.path, directory)).sort()) {
+      const path = join(directory, name);
+      const absolute = join(workspace.path, path);
+      const info = lstatSync(absolute);
+      hash.update(JSON.stringify([path, info.mode]));
+      if (info.isSymbolicLink()) hash.update(JSON.stringify(readlinkSync(absolute)));
+      else if (info.isDirectory()) visit(path);
+      else if (info.isFile()) hash.update(createHash('sha256').update(readFileSync(absolute)).digest());
+      else throw publicError('Read-only каталог содержит неподдерживаемый тип файла.');
+    }
+  }
+  visit('');
+  return hash.digest('hex');
+}
+
+export function verificationWorkspace(root, id, workspace, revision, inputId) {
+  if (workspace.mode === 'directory') return workspace;
+  const path = join(root, 'workflows', id, 'verification', inputId);
+  const commit = git(workspace.path, ['commit-tree', revision, '-p', git(workspace.path, ['rev-parse', 'HEAD']),
+    '-m', 'DWF verification snapshot']);
+  git(workspace.path, ['worktree', 'add', '--detach', path, commit]);
+  return { ...workspace, path };
 }
 
 export function tree(workspace) {

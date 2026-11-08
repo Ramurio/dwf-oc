@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { access, cp, mkdir, readFile, realpath, rename, writeFile } from 'node:fs/promises';
+import { access, cp, mkdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve, relative, sep, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,7 +25,7 @@ function git(project, args) {
     stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 }
 
-async function canonical(path) {
+export async function canonical(path) {
   try { return await realpath(path); }
   catch (error) {
     if (error.code !== 'ENOENT') throw error;
@@ -76,7 +76,20 @@ function environment(profile, stateDirectory) {
     PATH: join(projectDirectory, 'node_modules/.bin') + delimiter + (process.env.PATH ?? '') };
 }
 
-export async function connectTester(root, stateDirectory, prepare = false) {
+export async function authorizeTester(client, stateDirectory) {
+  if ((await client.credential.list()).length !== 0) return;
+  try {
+    const credentials = JSON.parse(execFileSync(executable, ['auth', 'export', 'openai', '--standalone'],
+      { env: { ...process.env, ...environment(join(stateDirectory, 'opencode'), stateDirectory) },
+        encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 1024 * 1024 }));
+    for (const credential of credentials.filter(item => item.active)) {
+      await client.credential.create({ integrationID: credential.integrationID,
+        label: credential.label, value: credential.value, activate: true });
+    }
+  } catch { throw new Error('Не удалось подключить существующий вход OpenCode к профилю тестера.'); }
+}
+
+export async function connectTester(root, stateDirectory, prepare = false, launch = {}) {
   const profile = join(root, 'opencode');
   const configDirectory = join(profile, 'config');
   await mkdir(configDirectory, { recursive: true, mode: 0o700 });
@@ -84,7 +97,7 @@ export async function connectTester(root, stateDirectory, prepare = false) {
   catch (error) { if (error.code !== 'ENOENT') throw error; prepare = true; }
   if (prepare) {
     const skills = join(profile, 'skills');
-    await cp(join(homedir(), '.codex/skills/dwf-oc'), join(skills, 'dwf-oc'), { recursive: true });
+    await cp(launch.skillDirectory ?? join(homedir(), '.codex/skills/dwf-oc'), join(skills, 'dwf-oc'), { recursive: true });
     await save(join(configDirectory, 'opencode.json'), { update: 'disable', snapshots: false,
       mcp: { servers: {} }, skills: [skills],
       plugins: ['-opencode.skill', '-opencode.config.compatibility', 'opencode.config.skill', 'opencode.tool.skill'],
@@ -92,22 +105,13 @@ export async function connectTester(root, stateDirectory, prepare = false) {
         { action: 'skill.use', resource: 'dwf-oc', effect: 'allow' }] });
   }
   const endpoint = await Service.ensure({ file: join(profile, 'state/opencode/service.json'), version,
-    command: [executable, 'serve', '--service', '--hostname', '127.0.0.1', '--port', '0'],
-    env: environment(profile, stateDirectory),
+    command: [...launch.commandPrefix ?? [], executable, 'serve', '--service', '--hostname', '127.0.0.1', '--port', String(launch.port ?? 0)],
+    env: { ...launch.env, ...environment(profile, stateDirectory),
+      PATH: join(projectDirectory, 'node_modules/.bin') + delimiter + (launch.env?.PATH ?? process.env.PATH ?? '') },
     onStart(reason) { if (reason === 'version-mismatch') throw new Error('Версия OpenCode тестера изменилась.'); } });
   const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) });
-  if ((await client.credential.list()).length === 0) {
-    // Transfer through the native credential API without writing secrets to the test journal.
-    try {
-      const credentials = JSON.parse(execFileSync(executable, ['auth', 'export', 'openai', '--standalone'],
-        { env: { ...process.env, ...environment(join(stateDirectory, 'opencode'), stateDirectory) },
-          encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 1024 * 1024 }));
-      for (const credential of credentials.filter(item => item.active)) {
-        await client.credential.create({ integrationID: credential.integrationID,
-          label: credential.label, value: credential.value, activate: true });
-      }
-    } catch { throw new Error('Не удалось подключить существующий вход OpenCode к профилю тестера.'); }
-  }
+  // Transfer through the native credential API without writing secrets to the test journal.
+  if (launch.authorize !== false) await authorizeTester(client, launch.credentialStateDirectory ?? stateDirectory);
   return client;
 }
 
@@ -127,6 +131,25 @@ export async function admitTester(client, attempt) {
   }
   if (session.metadata?.testerAttemptId !== attempt.id) throw new Error('Сессия принадлежит другой пробе.');
   await client.session.prompt({ sessionID: attempt.sessionId, id: attempt.inputId, text: attempt.prompt });
+}
+
+export async function checkTester(client, attempt) {
+  const location = { directory: attempt.workspace };
+  const available = await client.model.list({ location });
+  if (!available.data.some(item => item.providerID === model.providerID && item.id === model.id &&
+    item.enabled && item.variants.some(variant => variant.id === model.variant))) {
+    throw new Error('Тестеру недоступна GPT-6.1 Sol Ultrafast с reasoning high.');
+  }
+  const deadline = Date.now() + 15000;
+  for (;;) {
+    const skills = await client.skill.list({ location });
+    if (skills.data.some(skill => skill.id === 'dwf-oc')) {
+      await save(join(attempt.directory, 'skills.json'), skills.data);
+      return;
+    }
+    if (Date.now() >= deadline) throw new Error('OpenCode не загрузил скилл dwf-oc.');
+    await pause(100);
+  }
 }
 
 async function messagesFor(client, sessionId) {
@@ -156,7 +179,14 @@ export function testerState(attempt, messages) {
   const assistants = turn.filter(message => message.type === 'assistant');
   const last = assistants.at(-1);
   let report = '';
-  for (const message of assistants) {
+  let completed = false;
+  for (const message of turn) {
+    if (completed && ['assistant', 'synthetic', 'user'].includes(message.type)) {
+      report = '';
+      completed = false;
+    }
+    if (message.type === 'idle') completed = true;
+    if (message.type !== 'assistant') continue;
     if (message.error || !['stop', 'length'].includes(message.finish)) report = '';
     else report += message.content.filter(part => part.type === 'text').map(part => part.text).join('');
   }
@@ -175,24 +205,31 @@ export async function inspectTester(client, attempt) {
   if (state.status !== 'running') {
     messages = await messagesFor(client, attempt.sessionId);
     state = testerState(attempt, messages);
+    let pendingShells = [];
+    let busy = false;
     if (messages.findLast(message => message.type === 'idle')?.outcome === 'succeeded') {
       const [shells, active, inbox] = await Promise.all([
         client.shell.list({ location: { directory: attempt.workspace } }),
         client.session.active(), client.session.inbox.list({ sessionID: attempt.sessionId }),
       ]);
-      const pendingShells = shells.data.filter(shell =>
+      pendingShells = shells.data.filter(shell =>
         shell.status === 'running' && shell.metadata.sessionID === attempt.sessionId).map(shell => shell.id);
-      if (pendingShells.length || active[attempt.sessionId] || inbox.length) {
-        state.status = 'running';
-        state.pendingShells = pendingShells;
-        delete state.report;
-        delete state.error;
-      }
+      busy = pendingShells.length > 0 || Boolean(active[attempt.sessionId]) || inbox.length > 0;
+    }
+    messages = await messagesFor(client, attempt.sessionId);
+    const latest = testerState(attempt, messages);
+    if (busy || JSON.stringify(latest) !== JSON.stringify(state)) {
+      state = { ...latest, status: 'running' };
+      if (pendingShells.length) state.pendingShells = pendingShells;
+    } else {
+      state = latest;
     }
   }
+  if (state.status === 'running') { delete state.report; delete state.error; }
   await save(join(attempt.directory, 'messages.json'), visibleMessages(messages));
   await save(join(attempt.directory, 'state.json'), state);
   if (state.report !== undefined) await writeFile(join(attempt.directory, 'report.md'), state.report, { mode: 0o600 });
+  else await rm(join(attempt.directory, 'report.md'), { force: true });
   return state;
 }
 
@@ -235,14 +272,7 @@ async function main() {
     process.stdout.write(JSON.stringify({ attempt: attempt.directory, sessionId: attempt.sessionId,
       workspace: attempt.workspace, base: attempt.base }) + '\n');
     const client = await connectTester(attempt.root, attempt.stateDirectory, true);
-    const available = await client.model.list({ location: { directory: attempt.workspace } });
-    if (!available.data.some(item => item.providerID === model.providerID && item.id === model.id &&
-      item.enabled && item.variants.some(variant => variant.id === model.variant))) {
-      throw new Error('Тестеру недоступна GPT-6.1 Sol Ultrafast с reasoning high.');
-    }
-    const skills = await client.skill.list({ location: { directory: attempt.workspace } });
-    if (!skills.data.some(skill => skill.id === 'dwf-oc')) throw new Error('OpenCode не загрузил скилл dwf-oc.');
-    await save(join(attempt.directory, 'skills.json'), skills.data);
+    await checkTester(client, attempt);
     await admitTester(client, attempt);
     const state = await observe(attempt, true);
     process.exitCode = state.status === 'succeeded' ? 0 : 1;

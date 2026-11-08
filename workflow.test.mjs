@@ -6,9 +6,10 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as pause } from 'node:timers/promises';
-import { validateWorkflow, parseVerdict, rolePermissions, rolePrompt, roleSystemPrompt, roleAgents, outcomes } from './workflow-definition.mjs';
-import { createWorkflow, getWorkflow, claimWorkflow, updateWorkflow, workflowHasOwner, savePreset, presets } from './run-store.mjs';
-import { git, prepareWorkspace, tree, mergeWorkspace, writeReviewDiff } from './workflow-git.mjs';
+import { validateWorkflow, parseVerdict, rolePermissions, rolePrompt, roleSystemPrompt, roleAgents, outcomes, participantSettings, participantAgent, checkApprovals } from './workflow-definition.mjs';
+import { createWorkflow, getWorkflow, claimWorkflow, updateWorkflow, workflowHasOwner, savePreset, presets, queueWorkflowCommand, withWorkflowAction } from './run-store.mjs';
+import { git, prepareWorkspace, tree, mergeWorkspace, writeReviewDiff, snapshot, verificationWorkspace } from './workflow-git.mjs';
+import { DatabaseSync } from 'node:sqlite';
 import { roleSkills } from './role-skills.mjs';
 import { publicWorkflow, watchEvent } from './workflow-runtime.mjs';
 import { launch, waitFor, within, watchStates } from './acceptance/harness.mjs';
@@ -46,9 +47,183 @@ test('произвольные имена участников, циклы и з
 
 test('вердикт читается структурированно, отсутствие решения не означает одобрение', () => {
   assert.equal(parseVerdict('```json\n{"outcome":"changes","summary":"Исправить тест"}\n```', 'reviewer').outcome, 'changes');
+  assert.equal(parseVerdict('Checks finished.\n\n{"outcome":"done","summary":"Verified"}', 'worker').outcome, 'done');
+  assert.throws(() => parseVerdict('{"outcome":"changes","summary":"First"}\n{"outcome":"approve","summary":"Second"}', 'reviewer'));
+  assert.throws(() => parseVerdict('{"outcome":"approve","summary":"Checked"}\nMore prose', 'reviewer'));
   assert.throws(() => parseVerdict('Всё отлично!', 'reviewer'));
   assert.throws(() => parseVerdict('{"outcome":"done","summary":"Готово"}', 'reviewer'));
   assert.throws(() => parseVerdict('{"outcome":"approve","summary":""}', 'verifier'));
+});
+
+test('fenced results obey the same final and unambiguous boundary as plain JSON', () => {
+  const approval = '{"outcome":"approve","summary":"Earlier"}';
+  const rejection = '{"outcome":"changes","summary":"Final"}';
+  const fenced = `\`\`\`json\n${approval}\n\`\`\``;
+  assert.equal(parseVerdict(`Checks finished.\n${fenced}`, 'reviewer').outcome, 'approve');
+  assert.equal(parseVerdict(`Checked type {value: number}.\n${approval}`, 'reviewer').outcome, 'approve');
+  const nested = { outcome: 'approve', summary: 'A "quoted } brace" and \\ escape', detail: { items: [{ ok: true }] } };
+  assert.deepEqual(parseVerdict(JSON.stringify(nested), 'reviewer'), nested);
+  for (const text of [
+    `${fenced}\n${rejection}`,
+    `${approval}\n\`\`\`json\n${rejection}\n\`\`\``,
+    `${fenced}\n\`\`\`json\n${rejection}\n\`\`\``,
+    `${fenced}\nThe final check failed.`,
+    `First verdict ${approval}\n${rejection}`,
+    `${approval}\n{"outcome":`,
+  ]) assert.throws(() => parseVerdict(text, 'reviewer'));
+});
+
+test('каждый обязательный проверяющий должен одобрить текущую версию', () => {
+  const definition = sampleWorkflow('Task');
+  definition.nodes.secondReview = { role: 'reviewer' };
+  const state = { definition, visits: [
+    { node: 'review', revision: 'old', verdict: { outcome: 'approve' } },
+    { node: 'secondReview', revision: 'current', verdict: { outcome: 'approve' } },
+    { node: 'verify', revision: 'current', verdict: { outcome: 'approve' } },
+  ] };
+  assert.throws(() => checkApprovals(state, 'current'), /review/);
+  state.visits.push({ node: 'review', revision: 'current', verdict: { outcome: 'approve' } });
+  assert.doesNotThrow(() => checkApprovals(state, 'current'));
+  for (const verdict of [undefined, { outcome: 'changes' }, { outcome: 'blocked' }]) {
+    state.visits.push({ node: 'review', revision: 'current', verdict });
+    assert.throws(() => checkApprovals(state, 'current'), /review/);
+    state.visits.pop();
+  }
+  delete state.definition.nodes.review;
+  state.definition.nodes.secondReview.required = false;
+  state.definition.merge = false;
+  state.visits = state.visits.filter(visit => visit.node === 'verify');
+  assert.doesNotThrow(() => checkApprovals(state, 'current'));
+});
+
+test('управляющие команды переживают сохранение контроллера и сериализованы с завершением', async t => {
+  const root = await fixture(t);
+  const state = { id: 'commands', definition: sampleWorkflow('Task'), status: 'running', visits: [] };
+  createWorkflow(root, state);
+  assert(claimWorkflow(root, state.id, 'owner'));
+  const command = queueWorkflowCommand(root, state.id, 'steer', 'implement', 'Refine behavior');
+  assert.equal(updateWorkflow(root, state, 'owner', false, true), false);
+  assert.equal(state.controls[0].id, command.id);
+  state.controls[0].status = 'applied';
+  assert(updateWorkflow(root, state, 'owner', false, true));
+  assert.throws(() => queueWorkflowCommand(root, state.id, 'stop'), /не принимает/);
+  state.status = 'succeeded';
+  updateWorkflow(root, state, 'owner', true);
+  assert.throws(() => queueWorkflowCommand(root, state.id, 'steer', 'implement', 'Late'), /не принимает/);
+  const other = { id: 'stop', definition: state.definition, status: 'running', visits: [] };
+  createWorkflow(root, other);
+  assert(claimWorkflow(root, other.id, 'owner'));
+  const stopped = queueWorkflowCommand(root, other.id, 'stop');
+  updateWorkflow(root, other, 'owner');
+  assert.equal(other.controls[0].id, stopped.id);
+  assert.deepEqual(queueWorkflowCommand(root, other.id, 'stop'), stopped);
+  assert.throws(() => queueWorkflowCommand(root, other.id, 'steer', 'implement', 'Late'), /не принимает/);
+});
+
+test('устаревший владелец не выполняет внешние действия после takeover и stop', async t => {
+  const root = await fixture(t);
+  const state = { id: 'fencing', definition: sampleWorkflow('Task'), status: 'running', visits: [] };
+  createWorkflow(root, state);
+  claimWorkflow(root, state.id, 'old');
+  const db = new DatabaseSync(join(root, 'dwf.sqlite'));
+  db.prepare('UPDATE workflows SET expires = 0 WHERE id = ?').run(state.id);
+  db.close();
+  assert(claimWorkflow(root, state.id, 'new'));
+  const current = getWorkflow(root, state.id);
+  queueWorkflowCommand(root, state.id, 'stop');
+  current.status = 'cancelled';
+  updateWorkflow(root, current, 'new', true);
+  let called = false;
+  await assert.rejects(withWorkflowAction(root, state, 'old', () => { called = true; }), { code: 'DWF_OWNER_LOST' });
+  assert.equal(called, false);
+  assert.equal(getWorkflow(root, state.id).status, 'cancelled');
+});
+
+test('admission и принятие управляющей команды сериализуются на реальной SQLite', async t => {
+  const root = await fixture(t);
+  const state = { id: 'serialized', definition: sampleWorkflow('Task'), status: 'running', visits: [] };
+  createWorkflow(root, state);
+  claimWorkflow(root, state.id, 'owner');
+  let client;
+  await withWorkflowAction(root, state, 'owner', async () => {
+    client = launch([process.execPath], ['--input-type=module', '-e', `
+      import {queueWorkflowCommand} from './run-store.mjs';
+      process.stdout.write('attempting\\n');
+      queueWorkflowCommand(process.argv[1], 'serialized', 'stop');
+      process.stdout.write('accepted\\n');
+    `, root], { env: process.env });
+    await waitFor(() => client.stdout.includes('attempting'), 5000, 'concurrent control request');
+    await pause(50);
+    assert.equal(client.exited, false);
+    assert(!client.stdout.includes('accepted'));
+  });
+  assert.equal((await within(client.exit, 5000, 'control after admission')).code, 0);
+  await within(client.close, 5000, 'control output');
+  assert.equal(getWorkflow(root, state.id).controls[0].kind, 'stop');
+});
+
+test('verifier получает только переносимые файлы из проверяемого дерева', async t => {
+  const root = await fixture(t);
+  const source = join(root, 'source');
+  await mkdir(source);
+  git(source, ['init', '-b', 'main']);
+  git(source, ['config', 'user.name', 'Test']);
+  git(source, ['config', 'user.email', 'test@example.invalid']);
+  await writeFile(join(source, '.gitignore'), 'local-only.js\n');
+  await writeFile(join(source, 'index.js'), 'import "./local-only.js";\n');
+  git(source, ['add', '.']);
+  git(source, ['commit', '-m', 'base']);
+  const workspace = prepareWorkspace(root, source, 'portable');
+  await writeFile(join(workspace.path, 'local-only.js'), 'console.log("hidden dependency");\n');
+  const revision = snapshot(workspace);
+  const verification = verificationWorkspace(root, 'portable', workspace, revision, 'attempt');
+  assert.equal(snapshot(verification), revision);
+  assert(!(await readdir(verification.path)).includes('local-only.js'));
+  assert.throws(() => execFileSync(process.execPath, ['index.js'], { cwd: verification.path, stdio: 'pipe' }), /Command failed/);
+});
+
+test('настройки участника наследуются, пустые списки заменяют defaults', () => {
+  const definition = sampleWorkflow('Task');
+  definition.roles = { worker: { model: { provider: 'test', modelId: 'base' }, reasoning: 'high',
+    tools: ['read'], skills: ['code-work'], memory: false } };
+  definition.nodes.implement = { role: 'worker', tools: [], skills: [], reasoning: null };
+  validateWorkflow(definition);
+  const settings = participantSettings(definition, 'implement');
+  assert.deepEqual(settings, { role: 'worker', model: { provider: 'test', modelId: 'base' },
+    reasoning: null, tools: [], skills: [], memory: false });
+  assert.deepEqual(participantAgent('worker', settings).agent.permissions,
+    [{ action: '*', resource: '*', effect: 'deny' }]);
+  assert.equal(participantSettings(definition, 'review').memory, true);
+  for (const value of [{ model: {} }, { tools: ['invented'] }, { skills: ['missing'] },
+    { memory: 'false' }, { reasoning: '' }, { tools: ['read', 'read'] }]) {
+    const invalid = structuredClone(definition);
+    Object.assign(invalid.nodes.implement, value);
+    assert.throws(() => validateWorkflow(invalid), /Workflow:/);
+  }
+  const restricted = structuredClone(definition);
+  restricted.nodes.review.tools = ['write'];
+  assert.throws(() => validateWorkflow(restricted), /tools/);
+});
+
+test('read-only workflow получает каталог без Git и стабильный снимок файлов', async t => {
+  const root = await fixture(t);
+  const directory = join(root, 'documents');
+  await mkdir(directory);
+  await writeFile(join(root, 'AGENTS.md'), 'Inherited instructions');
+  await writeFile(join(directory, 'note.txt'), 'Original note');
+  const workspace = prepareWorkspace(join(root, 'state'), directory, 'run', 'directory');
+  assert.equal(workspace.path, directory);
+  assert(workspace.instructions.some(item => item.content === 'Inherited instructions'));
+  const original = snapshot(workspace);
+  assert.equal(snapshot(workspace), original);
+  await writeFile(join(directory, 'note.txt'), 'Changed note');
+  assert.notEqual(snapshot(workspace), original);
+  const definition = { task: 'Read notes', workspace: 'directory', entry: 'read',
+    nodes: { read: { role: 'reviewer' } }, transitions: { read: { approve: null, changes: null } } };
+  validateWorkflow(definition);
+  assert.throws(() => validateWorkflow({ ...definition, merge: true }), /directory/);
+  definition.nodes.read.role = 'worker';
+  assert.throws(() => validateWorkflow(definition), /read-only/);
 });
 
 test('системные обязанности отделены от поручения, старые workflow сохраняют инструкции', () => {
@@ -121,6 +296,9 @@ test('reviewer получает путь, базу, снимок и размер
   const review = { base: 'initial-commit', revision: 'reviewed-tree', path: '/state/review.diff', bytes: 512 };
   const prompt = rolePrompt(definition, 'review', undefined, review.revision, [], true, review);
   assert(prompt.includes(JSON.stringify(review)));
+  const relativePrompt = rolePrompt(definition, 'review', undefined, review.revision, [], true, review, { path: '/state/worktree' });
+  assert(relativePrompt.includes('"path":"../review.diff"'));
+  assert.equal(review.path, '/state/review.diff');
   assert(!rolePrompt(definition, 'implement', undefined, 'tree', [], true).includes('Материалы ревью'));
 });
 
