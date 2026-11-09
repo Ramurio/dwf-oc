@@ -148,7 +148,7 @@ function verdictObjects(text) {
 }
 
 export function parseVerdict(text, role) {
-  const unfenced = text.replace(/```(?:json)?\s*\n([\s\S]*?)```/g, '\n$1\n');
+  const unfenced = text.replace(/```(?:json)?\s*\n([\s\S]*)```/g, '\n$1\n');
   const objects = verdictObjects(unfenced);
   if (objects.length !== 1 || unfenced.slice(objects[0].end).trim()) {
     throw publicError('Участник вернул неверный JSON результата.');

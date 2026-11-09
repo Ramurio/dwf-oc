@@ -339,6 +339,18 @@ test('native completion during an activity request cannot return an older approv
   assert.equal(result.visits[0].verdict.outcome, 'changes');
 });
 
+test('public CLI retains literal code fences inside a fenced verdict', { timeout: 60000 }, async t => {
+  const definition = { task: 'Return a literal code fence in the summary', workspace: 'directory', entry: 'verify',
+    nodes: { verify: { role: 'verifier', tools: [], skills: [] } },
+    transitions: { verify: { approve: null, changes: null } } };
+  const result = { outcome: 'approve', summary: 'Checked code example ```js\nconst x = { ok: true };\n```' };
+  const sandbox = await fixture(t, definition, () => `\`\`\`json\n${JSON.stringify(result)}\n\`\`\``);
+  await sandbox.release();
+  const state = await sandbox.finish();
+  assert.equal(state.status, 'succeeded', state.error);
+  assert.deepEqual(state.visits[0].verdict, result);
+});
+
 test('stop catches a resistant shell created after the initial process snapshot', { timeout: 60000 }, async t => {
   const definition = { task: 'Stop a late shell', workspace: 'directory', entry: 'verify',
     nodes: { verify: { role: 'verifier', tools: [], skills: [] } },

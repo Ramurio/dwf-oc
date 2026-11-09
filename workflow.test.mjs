@@ -73,6 +73,16 @@ test('fenced results obey the same final and unambiguous boundary as plain JSON'
   ]) assert.throws(() => parseVerdict(text, 'reviewer'));
 });
 
+test('literal code fences inside verdict strings preserve the complete JSON', () => {
+  for (const summary of ['literal ``` text', '```js\nconst x = { ok: true };\n```', 'ending with ```']) {
+    const result = { outcome: 'approve', summary };
+    const json = JSON.stringify(result);
+    for (const text of [json, `\`\`\`json\n${json}\n\`\`\``, `Checked.\n\`\`\`\n${json}\`\`\``]) {
+      assert.deepEqual(parseVerdict(text, 'reviewer'), result);
+    }
+  }
+});
+
 test('каждый обязательный проверяющий должен одобрить текущую версию', () => {
   const definition = sampleWorkflow('Task');
   definition.nodes.secondReview = { role: 'reviewer' };
