@@ -102,7 +102,7 @@ function finishParticipant(state, visit, outcome) {
   const role = state.definition.nodes[visit.node].role;
   const revision = snapshot(visit.workspace ?? state.workspace);
   if (role !== 'worker' && revision !== visit.revision) {
-    throw publicError('Проверяющий участник изменил рабочее дерево. Требуется новая проверка.');
+    throw publicError('Рабочее дерево изменилось во время проверки. Требуется новая проверка.');
   }
   if (outcome.status !== 'succeeded') throw publicError(outcome.error);
   visit.verdict = parseVerdict(outcome.result, role);

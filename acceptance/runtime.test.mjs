@@ -258,7 +258,7 @@ test('a live background verifier cannot approve files before its command finishe
   await sandbox.release();
   const result = await sandbox.finish();
   assert.equal(result.status, 'failed');
-  assert.match(result.error, /изменил рабочее дерево/);
+  assert.equal(result.error, 'Рабочее дерево изменилось во время проверки. Требуется новая проверка.');
   assert.equal(await readFile(join(sandbox.workspace, 'untouched.txt'), 'utf8'), 'CHANGED');
 });
 
