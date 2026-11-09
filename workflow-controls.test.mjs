@@ -4,7 +4,7 @@ import { registerHooks } from 'node:module';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createWorkflow, getWorkflow, queueWorkflowCommand } from './run-store.mjs';
+import { claimWorkflow, createWorkflow, getWorkflow, queueWorkflowCommand, updateWorkflow } from './run-store.mjs';
 
 // Schedule commands at native I/O boundaries while exercising the real controller and store.
 let io;
@@ -34,6 +34,7 @@ registerHooks({
   },
 });
 const { runWorkflow } = await import('./workflow-runtime.mjs');
+const { prepareGroup } = await import('./workflow-groups.mjs');
 
 async function fixture(t, options = {}) {
   const root = await mkdtemp(join(tmpdir(), 'dwf-control-test-'));
@@ -267,6 +268,37 @@ test('steering a prepared map child retains its identity before group admission'
   assert.equal(f.admitted.length, 3);
   assert.match(f.admitted[0].request.text, /updated condition/);
   assert.doesNotMatch(f.admitted[1].request.text, /updated condition/);
+});
+
+test('steering a prepared repeated group keeps its fresh memory-disabled session and group route', async t => {
+  const definition = { task: 'Clarify a repeated group', workspace: 'directory', entry: 'jobs',
+    nodes: { review: { role: 'reviewer' }, verify: { role: 'verifier' } },
+    groups: { jobs: { members: ['review'] } },
+    transitions: { jobs: { done: 'verify', changes: null, failed: null },
+      review: { approve: null, changes: null }, verify: { approve: null, changes: null } } };
+  const previous = { node: 'jobs', revision: 'original', verdict: { outcome: 'done', summary: 'First group' },
+    children: [{ node: 'review', participant: 'review', sessionId: 'ses_previous', revision: 'original',
+      verdict: { outcome: 'approve', summary: 'First review' } }] };
+  const f = await fixture(t, { definition, memory: false, visits: [previous] });
+  assert.equal(claimWorkflow(f.root, f.id, 'prepare-test'), true);
+  const state = f.state();
+  state.sessions.review = 'ses_previous';
+  const prepared = prepareGroup(f.root, state, 'jobs', previous.verdict);
+  state.visits.push(prepared);
+  updateWorkflow(f.root, state, 'prepare-test', true);
+  const freshSession = prepared.children[0].sessionId;
+  assert.notEqual(freshSession, 'ses_previous');
+  f.command('steer', 'review', 'Clarify the second group visit');
+  await f.run();
+  const result = f.state();
+  assert.equal(result.status, 'succeeded', result.error);
+  assert.equal(result.controls[0].status, 'applied');
+  assert.deepEqual(result.visits.map(visit => visit.node), ['jobs', 'jobs', 'verify']);
+  assert.equal(result.visits[1].children[0].sessionId, freshSession);
+  assert.equal(result.sessions.review, freshSession);
+  assert.equal(f.admitted.length, 2);
+  assert.equal(f.admitted[0].sessionId, freshSession);
+  assert.match(f.admitted[0].request.text, /Clarify the second group visit/);
 });
 
 test('group admission retry preserves the first steering and delivers a second separately', async t => {
