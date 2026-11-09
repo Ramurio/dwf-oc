@@ -4,7 +4,7 @@ import { registerHooks } from 'node:module';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createWorkflow, getWorkflow, queueWorkflowCommand } from './run-store.mjs';
+import { claimWorkflow, createWorkflow, getWorkflow, queueWorkflowCommand, updateWorkflow } from './run-store.mjs';
 
 // Schedule commands at native I/O boundaries while exercising the real controller and store.
 let io;
@@ -33,7 +33,8 @@ registerHooks({
     return next(url, context);
   },
 });
-const { runWorkflow } = await import('./workflow-runtime.mjs');
+const { publicWorkflow, runWorkflow } = await import('./workflow-runtime.mjs');
+const { prepareGroup } = await import('./workflow-groups.mjs');
 
 async function fixture(t, options = {}) {
   const root = await mkdtemp(join(tmpdir(), 'dwf-control-test-'));
@@ -88,6 +89,39 @@ test('accepted steering recovers a malformed answer in the same session', async 
   assert.equal(state.visits[0].sessionId, state.visits[1].sessionId);
   assert.equal(state.controls[0].status, 'applied');
 });
+
+for (const [target, visits] of [
+  ['work', ['work', 'work', 'review', 'verify', 'finish']],
+  ['review', ['work', 'review', 'verify', 'finish']],
+  ['verify', ['work', 'verify', 'finish']],
+]) {
+  test(`steering to ${target} continues its route and retains mandatory approval checks`, async t => {
+    const definition = { task: 'Clarify the compatibility check', workspace: 'directory', entry: 'work',
+      nodes: { work: { role: 'worker' }, review: { role: 'reviewer' },
+        verify: { role: 'verifier' }, finish: { role: 'orchestrator' } },
+      transitions: { work: { done: 'review' }, review: { approve: 'verify', changes: 'work' },
+        verify: { approve: 'finish', changes: 'work' }, finish: { done: null } } };
+    const f = await fixture(t, { definition });
+    let queued = false;
+    io.read = async () => {
+      const state = f.state();
+      if (!queued) {
+        queued = true;
+        f.command('steer', target, 'Check the additional compatibility scenario');
+      }
+      const role = definition.nodes[state.visits.at(-1).node].role;
+      const outcome = ['reviewer', 'verifier'].includes(role) ? 'approve' : 'done';
+      return { outcome: { status: 'succeeded', result: JSON.stringify({ outcome, summary: 'Checked' }) } };
+    };
+    await f.run();
+    const state = f.state();
+    assert.deepEqual(state.visits.map(visit => visit.node), visits);
+    assert.equal(state.controls[0].status, 'applied');
+    assert.equal(state.status, target === 'verify' ? 'failed' : 'succeeded');
+    if (target === 'verify') assert.match(state.error, /review/);
+    if (target === 'work') assert.equal(state.visits[0].sessionId, state.visits[1].sessionId);
+  });
+}
 
 for (const kind of ['stop', 'steer']) {
   test(`${kind} queued while preparing a transition runs before the next admission`, async t => {
@@ -235,6 +269,148 @@ test('steering a prepared map child retains its identity before group admission'
   assert.match(f.admitted[0].request.text, /updated condition/);
   assert.doesNotMatch(f.admitted[1].request.text, /updated condition/);
 });
+
+test('steering a prepared repeated group keeps its fresh memory-disabled session and group route', async t => {
+  const definition = { task: 'Clarify a repeated group', workspace: 'directory', entry: 'jobs',
+    nodes: { review: { role: 'reviewer' }, verify: { role: 'verifier' } },
+    groups: { jobs: { members: ['review'] } },
+    transitions: { jobs: { done: 'verify', changes: null, failed: null },
+      review: { approve: null, changes: null }, verify: { approve: null, changes: null } } };
+  const previous = { node: 'jobs', revision: 'original', verdict: { outcome: 'done', summary: 'First group' },
+    children: [{ node: 'review', participant: 'review', sessionId: 'ses_previous', revision: 'original',
+      verdict: { outcome: 'approve', summary: 'First review' } }] };
+  const f = await fixture(t, { definition, memory: false, visits: [previous] });
+  assert.equal(claimWorkflow(f.root, f.id, 'prepare-test'), true);
+  const state = f.state();
+  state.sessions.review = 'ses_previous';
+  const prepared = prepareGroup(f.root, state, 'jobs', previous.verdict);
+  state.visits.push(prepared);
+  updateWorkflow(f.root, state, 'prepare-test', true);
+  const freshSession = prepared.children[0].sessionId;
+  assert.notEqual(freshSession, 'ses_previous');
+  f.command('steer', 'review', 'Clarify the second group visit');
+  await f.run();
+  const result = f.state();
+  assert.equal(result.status, 'succeeded', result.error);
+  assert.equal(result.controls[0].status, 'applied');
+  assert.deepEqual(result.visits.map(visit => visit.node), ['jobs', 'jobs', 'verify']);
+  assert.equal(result.visits[1].children[0].sessionId, freshSession);
+  assert.equal(result.sessions.review, freshSession);
+  assert.equal(f.admitted.length, 2);
+  assert.equal(f.admitted[0].sessionId, freshSession);
+  assert.match(f.admitted[0].request.text, /Clarify the second group visit/);
+});
+
+test('discarding a prepared map group retains every accepted child clarification', async t => {
+  const items = [{ id: 'alpha', detail: 'first' }, { id: 'beta', detail: 'second' }];
+  const definition = { task: 'Retain accepted mapped recipients', workspace: 'directory', entry: 'jobs',
+    nodes: { review: { role: 'reviewer' }, verify: { role: 'verifier' } },
+    groups: { jobs: { member: 'review', items } },
+    transitions: { jobs: { done: 'verify', changes: null, failed: null },
+      review: { approve: 'verify', changes: null }, verify: { approve: null, changes: null } } };
+  const f = await fixture(t, { definition, memory: false });
+  assert.equal(claimWorkflow(f.root, f.id, 'prepare-test'), true);
+  const state = f.state();
+  state.visits.push(prepareGroup(f.root, state, 'jobs'));
+  updateWorkflow(f.root, state, 'prepare-test', true);
+  f.command('steer', 'verify', 'Visit the external node first');
+  for (const item of items) f.command('steer', `jobs/${item.id}`, `Clarify ${item.id}`);
+  assert(f.state().controls.every(command => !Object.hasOwn(command, 'target')));
+  const watchdog = setTimeout(() => f.command('stop'), 2000);
+  t.after(() => clearTimeout(watchdog));
+  await f.run();
+  clearTimeout(watchdog);
+  const result = f.state();
+  assert.equal(result.status, 'failed');
+  assert.match(result.error, /jobs/);
+  assert.deepEqual(result.visits.map(visit => visit.node), ['verify', 'review', 'review', 'verify']);
+  assert.deepEqual(result.visits.filter(visit => visit.node === 'review').map(visit => visit.item), items);
+  assert.deepEqual(result.controls.map(command => command.status), ['applied', 'applied', 'applied']);
+  assert.equal(f.admitted.length, 4);
+  for (const [index, item] of items.entries()) {
+    const section = f.admitted[index + 1].request.text.split('Элемент параллельной группы:\n').at(-1);
+    assert.deepEqual(JSON.parse(section.split('\n\nУточнение пользователя')[0]), item);
+  }
+  assert(publicWorkflow(result).controls.every(command => !Object.hasOwn(command, 'target')));
+});
+
+test('discarded map items keep their accepted data and previous session', async t => {
+  const item = { id: 'alpha', detail: 'current item' };
+  const definition = { task: 'Keep the accepted item and established conversation', workspace: 'directory', entry: 'jobs',
+    nodes: { review: { role: 'reviewer' }, verify: { role: 'verifier' } },
+    groups: { jobs: { member: 'review', items: [item] } },
+    transitions: { jobs: { done: 'verify', changes: null, failed: null },
+      review: { approve: 'verify', changes: null }, verify: { approve: null, changes: null } } };
+  const previous = { node: 'jobs', revision: 'original', verdict: { outcome: 'done', summary: 'Previous group' },
+    children: [{ node: 'review', participant: 'jobs/alpha', sessionId: 'ses_previous', revision: 'original',
+      item: { id: 'alpha', detail: 'old item' }, verdict: { outcome: 'approve', summary: 'Previous review' } }] };
+  const f = await fixture(t, { definition, memory: false, visits: [previous] });
+  assert.equal(claimWorkflow(f.root, f.id, 'prepare-test'), true);
+  const state = f.state();
+  state.sessions['jobs/alpha'] = 'ses_previous';
+  const prepared = prepareGroup(f.root, state, 'jobs', previous.verdict);
+  assert.notEqual(prepared.children[0].sessionId, 'ses_previous');
+  state.visits.push(prepared);
+  updateWorkflow(f.root, state, 'prepare-test', true);
+  f.command('steer', 'verify', 'Visit the external node first');
+  f.command('steer', 'jobs/alpha', 'Clarify the current item');
+  await f.run();
+  const result = f.state();
+  assert.equal(result.status, 'succeeded', result.error);
+  assert.deepEqual(result.visits.map(visit => visit.node), ['jobs', 'verify', 'review', 'verify']);
+  assert.equal(result.visits[2].sessionId, 'ses_previous');
+  assert.deepEqual(result.visits[2].item, item);
+});
+
+test('an unresolvable persisted steering target fails without a retry loop', async t => {
+  const f = await fixture(t);
+  assert.equal(claimWorkflow(f.root, f.id, 'prepare-test'), true);
+  const state = f.state();
+  state.controls = [{ id: 'legacy-command', kind: 'steer', node: 'jobs/missing',
+    text: 'Earlier accepted clarification', status: 'pending', createdAt: 0 }];
+  updateWorkflow(f.root, state, 'prepare-test', true);
+  const watchdog = setTimeout(() => f.command('stop'), 2000);
+  t.after(() => clearTimeout(watchdog));
+  await f.run();
+  clearTimeout(watchdog);
+  assert.equal(f.state().status, 'failed');
+  assert.match(f.state().error, /jobs\/missing/);
+  assert.equal(f.admitted.length, 0);
+});
+
+for (const [kind, group, targets] of [
+  ['fixed', { members: ['review', 'secondReview'] }, ['review', 'secondReview']],
+  ['map', { member: 'review', items: [{ id: 'alpha' }, { id: 'beta' }] }, ['jobs/alpha', 'jobs/beta']],
+]) {
+  test(`two queued clarifications for a prepared ${kind} group preserve delivery order and the final node route`, async t => {
+    const definition = { task: 'Clarify two prepared group members', workspace: 'directory', entry: 'jobs',
+      nodes: { review: { role: 'reviewer' }, secondReview: { role: 'reviewer', required: kind === 'fixed' },
+        verify: { role: 'verifier' } },
+      groups: { jobs: group },
+      transitions: { jobs: { done: 'verify', changes: null, failed: null },
+        review: { approve: null, changes: null }, secondReview: { approve: null, changes: null },
+        verify: { approve: null, changes: null } } };
+    const f = await fixture(t, { definition, memory: false });
+    assert.equal(claimWorkflow(f.root, f.id, 'prepare-test'), true);
+    const state = f.state();
+    const prepared = prepareGroup(f.root, state, 'jobs');
+    state.visits.push(prepared);
+    updateWorkflow(f.root, state, 'prepare-test', true);
+    f.command('steer', targets[0], 'First queued clarification');
+    f.command('steer', targets[1], 'Second queued clarification');
+    await f.run();
+    const result = f.state();
+    assert.equal(result.status, 'failed');
+    assert.match(result.error, /verify/);
+    assert.deepEqual(result.controls.map(command => command.status), ['applied', 'applied']);
+    assert.deepEqual(result.visits.map(visit => visit.node), ['jobs', prepared.children[1].node]);
+    assert.equal(f.admitted.length, 3);
+    assert.match(f.admitted[0].request.text, /First queued clarification/);
+    assert.doesNotMatch(f.admitted[1].request.text, /Second queued clarification/);
+    assert.match(f.admitted[2].request.text, /Second queued clarification/);
+    assert.equal(f.admitted[1].sessionId, f.admitted[2].sessionId);
+  });
+}
 
 test('group admission retry preserves the first steering and delivers a second separately', async t => {
   const definition = { task: 'Lost group acknowledgement', workspace: 'directory', entry: 'jobs',

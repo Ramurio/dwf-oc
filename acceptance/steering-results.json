@@ -1,0 +1,252 @@
+{
+  "schemaVersion": 1,
+  "series": "steering-guidance",
+  "disposition": "independently_approved",
+  "recordedAt": "2026-11-09T02:30:34.222799+00:00",
+  "skillRevision": "17f9db49788fe968f0a3759bcffd1affd2df46eb",
+  "model": {
+    "providerID": "openai",
+    "id": "gpt-6.1-sol-ultrafast",
+    "variant": "high"
+  },
+  "protocol": "Fresh baseline copies and native tester sessions. Each user task requires an additional clarification after DWF starts. The tester chooses its recipient through the public CLI and follows the same workflow through integration.",
+  "comparability": "These two controlled steering scenarios add a process instruction to the original tasks. They are separate from the 20 ordinary trials and 12 accepted clean repeats.",
+  "providerCostsFilled": false,
+  "trials": [
+    {
+      "attempt": "01b47645-0553-4167-ac3b-673c162cf5d1",
+      "project": "more-itertools",
+      "outcome": "accepted_controlled_steering",
+      "runtimeRevision": "a7751c85ad79e49e727d97f7580d9583d38e265b",
+      "baselineRevision": "775e4974292431acbda362b208d6b9b78bf1b07c",
+      "baselineTree": "95d5a399fd28f8fb46d0f6ec2a1fe0e185e3a8fd",
+      "skillHash": "6864d24828fdb88b2a48b1e51d1f20c32dfbd49afa35f7a69e4f011a7bab9594",
+      "promptHash": "4e5f36f4fec9f3599525ba762a1410994d17ea5a1b8cee9ce539530569a34d53",
+      "boundaryCheckPassed": true,
+      "workflow": "5db3e08f-a4e5-49e7-8ec4-aa3d75174c74",
+      "integrationCommit": "cde5aa208cc2c690a8f2ede33ecc2d65afd4091a",
+      "integrationVerified": true,
+      "steeredParticipant": "implement",
+      "steeringApplied": true,
+      "steeringPreservedSession": true,
+      "visitedNodes": [
+        "implement",
+        "implement",
+        "review",
+        "verify",
+        "implement",
+        "review",
+        "verify",
+        "implement",
+        "review",
+        "verify",
+        "summary"
+      ],
+      "finalRevision": "cf9764376de40601e5be3119e33067116662f1f6",
+      "finalApprovalRoles": [
+        "reviewer",
+        "verifier"
+      ],
+      "nativeVerdictCount": 11,
+      "candidateTests": 668,
+      "originalTests": 654,
+      "externalCheckExitCodes": {
+        "candidate-regression": 0,
+        "hidden-behavior": 0,
+        "original-test-files": 0
+      },
+      "usage": {
+        "participants": {
+          "input": 193826,
+          "output": 20438,
+          "reasoning": 15811,
+          "cachedRead": 2447744,
+          "cachedWrite": 0,
+          "sessions": 4,
+          "assistantMessages": 81,
+          "incompleteMessages": 0
+        },
+        "tester": {
+          "input": 45459,
+          "output": 2177,
+          "reasoning": 846,
+          "cachedRead": 176640,
+          "cachedWrite": 0,
+          "sessions": 1,
+          "assistantMessages": 14,
+          "incompleteMessages": 0
+        }
+      }
+    },
+    {
+      "attempt": "d4d1f825-f366-4041-9ce3-59d37c6908b4",
+      "project": "p-limit",
+      "outcome": "accepted_controlled_steering",
+      "runtimeRevision": "a7751c85ad79e49e727d97f7580d9583d38e265b",
+      "baselineRevision": "850768f5655dc46547802789e13af3cf35c3d7b0",
+      "baselineTree": "676759e85a0b85a5c9b0bbcaec5d67a0a5f9fb7c",
+      "skillHash": "6864d24828fdb88b2a48b1e51d1f20c32dfbd49afa35f7a69e4f011a7bab9594",
+      "promptHash": "67fe5e7780e9e365df8afcf14584e2c4cfaf377d202b8a214aaed64d9690fc14",
+      "boundaryCheckPassed": true,
+      "workflow": "5ca112a4-9541-4636-a7c7-c91a6cc05b9d",
+      "integrationCommit": "cb073d9c0d41cbe675eb599f289cdc096e8d59c6",
+      "integrationVerified": true,
+      "steeredParticipant": "implement",
+      "steeringApplied": true,
+      "steeringPreservedSession": true,
+      "visitedNodes": [
+        "implement",
+        "implement",
+        "review",
+        "verify",
+        "summary"
+      ],
+      "finalRevision": "63d4e0b9c4ed735235f8a673f047cff1064c39ed",
+      "finalApprovalRoles": [
+        "reviewer",
+        "verifier"
+      ],
+      "nativeVerdictCount": 5,
+      "candidateTests": 18,
+      "originalTests": 10,
+      "externalCheckExitCodes": {
+        "candidate-tests": 0,
+        "hidden-behavior": 0,
+        "original-regression": 0
+      },
+      "usage": {
+        "participants": {
+          "input": 87306,
+          "output": 10099,
+          "reasoning": 2914,
+          "cachedRead": 424320,
+          "cachedWrite": 0,
+          "sessions": 4,
+          "assistantMessages": 46,
+          "incompleteMessages": 0
+        },
+        "tester": {
+          "input": 45109,
+          "output": 1646,
+          "reasoning": 326,
+          "cachedRead": 132224,
+          "cachedWrite": 0,
+          "sessions": 1,
+          "assistantMessages": 12,
+          "incompleteMessages": 0
+        }
+      }
+    }
+  ],
+  "regression": {
+    "sourceRevision": "2cf17d5d267b8bf536f981ece5dacfa8f3917ab1",
+    "harness": 31,
+    "product": 72,
+    "cucumberScenarios": 12,
+    "cucumberSteps": 116,
+    "native": 22,
+    "initialFullRun": {
+      "result": "failed",
+      "nativePassed": 20,
+      "nativeFailed": 1,
+      "failure": "The crash test attempted to reset its workflow lease before SQLite released the killed controller transaction."
+    },
+    "followUp": "A bounded SQLite wait and finally-close are shared by the three test lease resets. The existing crash probe holds the transaction for one second before SIGKILL.",
+    "negativeControl": "The delayed crash probe fails with SQLITE_BUSY without the bounded wait.",
+    "targetedChecksPassed": 9,
+    "priorCompleteRegression": {
+      "sourceRevision": "f47885455f7664473d5e4f443db3bc574b5b5b89",
+      "harness": 31,
+      "product": 67,
+      "cucumberScenarios": 12,
+      "cucumberSteps": 116,
+      "native": 21
+    },
+    "inheritedInstructions": "The full suite passed with TMPDIR below a parent AGENTS.md. The original strict-equality fixture failed the negative control; its corrected suffix assertion passed all 31 harness tests.",
+    "beforeMapTargetFix": {
+      "sourceRevision": "da7f004144c9412ed149c3c4d398d29427af97c2",
+      "harness": 31,
+      "product": 69,
+      "cucumberScenarios": 12,
+      "cucumberSteps": 116,
+      "native": 21
+    },
+    "mapSteering": {
+      "controllerCasesPassed": 3,
+      "nativeRecoveryCasesPassed": 1,
+      "negativeControl": "The three controller cases and the native recovery case fail against 743457c with the prior runtime.",
+      "recovery": "The native fixture seeds the pre-admission boundary with real prepareGroup and native configuration. Public CLI commands queue three clarifications, then a real controller SIGKILL and inspect exercise persisted target recovery.",
+      "coverage": "Accepted mapped node/item data, prior real session with the current item, explicit failure for an unresolvable legacy target, private target metadata, FIFO delivery and mandatory-approval refusal."
+    }
+  },
+  "documentationRevision": "b7ab4ce6517544e4890b44cd9ff56b204cf63c8c",
+  "independentAudits": [
+    {
+      "workflow": "9dde1abe-86db-4db0-a9b0-9f0bba56306d",
+      "reviewedRevision": "5003678765c7f91cf726ba2f979f3e499971d0e5",
+      "skillRevision": "17f9db49788fe968f0a3759bcffd1affd2df46eb",
+      "disposition": "changes",
+      "finding": "Prepared repeated groups with memory=false retain the fresh session of that prepared visit. The earlier instruction promised the previous session too broadly.",
+      "verification": "16 native verdicts and both trial summaries were independently reconciled. One verifier ran 43 focused checks. Another verifier could not run its required checks because its external directory was denied.",
+      "followUp": "Document the prepared-group case, retain its group route, and add a regression using the actual group preparation.",
+      "archiveSha256": "5141de69737e19c27e706f6bff5793eaecbd44a5cafce40d6f38e24497d9f784"
+    },
+    {
+      "workflow": "c58c2102-4939-4875-aa66-2a3fccf128ca",
+      "reviewedRevision": "73305bfeb153065cb5b4acb1f9cc24e418b30206",
+      "skillRevision": "4acf55dafd2fa031032cd70b6621c11e790a7955",
+      "disposition": "changes",
+      "findings": [
+        "Only the first queued clarification is folded into a prepared group. Later commands use standalone visits and can bypass the group transition.",
+        "The tester fixture incorrectly expected no parent AGENTS.md above TMPDIR.",
+        "Skill bytes were hash-checked, but their binding to external Git commit IDs could not be independently checked from the supplied data."
+      ],
+      "verification": "The auditors reconciled 16 native verdicts, archive trees, usage and final approvals. Fresh checks passed 67 product, 12 Cucumber scenarios and 21 native tests. Full npm test failed at one of 31 harness tests under inherited instructions.",
+      "probeLimitation": "An auditor mock accessed a group as a node and hung. After a technical observation from the lead, the auditor corrected its mock and completed bounded replays. The product failure claim was not retained.",
+      "archiveSha256": "9a71e41ddba5bda08a7d12bd8e33a94e3c189dfa01c4ac7d179b7ee45fd68f18"
+    },
+    {
+      "workflow": "459d4853-1aa9-4440-8900-e1757a4d5133",
+      "reviewedRevision": "743457cfcb23c3a09c992dba0b8050b17ee34e39",
+      "skillRevision": "b7ab4ce6517544e4890b44cd9ff56b204cf63c8c",
+      "disposition": "changes",
+      "workflowStatus": "failed",
+      "findings": [
+        "An external clarification before a prepared map-child clarification discards the only child mapping. The second command remains pending and the controller retries indefinitely. The tester reproduced this on both target and base.",
+        "The summary reviewer retained blocked because its necessary execution checks lacked an immediate required verifier in the chosen graph."
+      ],
+      "verification": "Fresh full npm test passed 31 harness, 69 product, 12 Cucumber scenarios / 116 steps and 21 native tests. The tester also passed 16 queue probes and nine crash/recovery replays. It checked 56 source hashes, 13 skill Git objects, unchanged trial rows and 16 historical verdicts.",
+      "followUp": "Persist accepted mapped recipient data before discarding preparation, add bounded and native recovery regressions, and provide an immediate required verifier for reviewer execution handoffs in the next independent audit.",
+      "archiveSha256": "4120ef107f08d6012d7599e5d1fd47e0f863b266828b8774eaae276698bf9bfd"
+    },
+    {
+      "reviewedRevision": "abb0c423c61d2a510049deb3dab86ce54aed3981",
+      "skillRevision": "b7ab4ce6517544e4890b44cd9ff56b204cf63c8c",
+      "archiveSha256": "27fb1dbb3e1d9d83756975b8a4ffde47af00b6c7a1b907b91e1d27a52d03e4e5",
+      "workflow": "3e45e7e4-4a0c-4984-a7ea-3cc41821d5e8",
+      "disposition": "blocked",
+      "workflowStatus": "failed",
+      "finding": "The evidence verifier finished its code and provenance checks but could not inspect the current workflow state outside its workspace. It attempted to verify its own future terminal status.",
+      "verification": "Three participants approved. The verifier completed 101 evidence checks and 22 controller tests before returning blocked for the external workflow-state check.",
+      "followUp": "The lead clarified that the external tester observes actual terminal status after participants finish. The tester retained this failed workflow and created a second workflow with four fresh participant sessions on the same source revision."
+    },
+    {
+      "reviewedRevision": "abb0c423c61d2a510049deb3dab86ce54aed3981",
+      "skillRevision": "b7ab4ce6517544e4890b44cd9ff56b204cf63c8c",
+      "archiveSha256": "27fb1dbb3e1d9d83756975b8a4ffde47af00b6c7a1b907b91e1d27a52d03e4e5",
+      "workflow": "ab6fba0e-ed98-4b0d-aee4-d2f55f68a43f",
+      "disposition": "approve",
+      "workflowStatus": "succeeded",
+      "snapshot": "623d938ecd10e2bae3ca65f03a2996493c61247a",
+      "verification": "Four fresh participants approved the same snapshot. Both verifiers and the external tester independently completed the full suite with 31 harness, 72 product, 12 Cucumber scenarios / 116 steps and 22 native tests. The external tester then confirmed actual succeeded, merge:false and unchanged source files.",
+      "provenance": "56 source hashes, 13 skill Git objects and both path chains were checked. Controlled trial rows and the ordinary benchmark summary stayed unchanged.",
+      "additionalChecks": "Independent bounded queue checks, negative controls, repeated crash tests and native checks of an established session with the current map item passed.",
+      "limitations": [
+        "The pre-admission boundary is seeded with real prepareGroup. A naturally timed public-start race was not measured.",
+        "One verifier initially interrupted a full run with a one-second shell timeout and used an invalid cross-run session fixture. Both attempts are retained and excluded from passing results. Corrected complete runs and same-run native session checks passed.",
+        "The lead supplied a scope clarification between the two workflows. The first failed verdict remains unchanged, and the second workflow uses new participants.",
+        "The historical OSS corpus and unchanged usage counters were not rerun in this audit."
+      ]
+    }
+  ]
+}

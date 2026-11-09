@@ -29,7 +29,7 @@ export function publicWorkflow(state) {
       ...(current.progress ? { progress: current.progress } : {}) },
     history: state.visits.map(visit => ({ node: visit.node, sessionId: visit.sessionId,
       ...(visit.verdict ? { result: visit.verdict, revision: visit.revision } : {}) })),
-    ...(state.controls ? { controls: state.controls } : {}),
+    ...(state.controls ? { controls: state.controls.map(({ target, ...command }) => command) } : {}),
     ...(state.error ? { error: state.error } : {}),
     ...(state.service ? { service: { status: 'unavailable' } } : {}),
     ...(result ? { result } : {}) };
@@ -102,7 +102,7 @@ function finishParticipant(state, visit, outcome) {
   const role = state.definition.nodes[visit.node].role;
   const revision = snapshot(visit.workspace ?? state.workspace);
   if (role !== 'worker' && revision !== visit.revision) {
-    throw publicError('Проверяющий участник изменил рабочее дерево. Требуется новая проверка.');
+    throw publicError('Рабочее дерево изменилось во время проверки. Требуется новая проверка.');
   }
   if (outcome.status !== 'succeeded') throw publicError(outcome.error);
   visit.verdict = parseVerdict(outcome.result, role);
@@ -153,7 +153,10 @@ export async function runWorkflow(root, id) {
       let visit = state.visits.at(-1);
       if (!visit || visit.verdict) {
         const steering = state.controls?.find(command => command.kind === 'steer' && command.status === 'pending');
-        const steered = steering && participantVisits(state.visits).findLast(item => item.participant === steering.node);
+        const steered = steering && {
+          ...participantVisits(state.visits).findLast(item => item.participant === steering.node),
+          ...steering.target,
+        };
         const next = steered?.node ?? steering?.node ?? (visit ? state.definition.transitions[visit.node][visit.verdict.outcome] : state.definition.entry);
         if (next === null) {
           if (visit.children && visit.verdict.outcome !== 'done') {
@@ -190,6 +193,14 @@ export async function runWorkflow(root, id) {
           save(false);
         } else {
           const node = state.definition.nodes[next];
+          if (!node) {
+            await withWorkflowAction(root, state, owner, () => {
+              if (state.controls?.some(command => command.kind === 'stop' && command.status === 'pending')) return;
+              state.status = 'failed';
+              state.error = `Не найден участник workflow ${next}.`;
+            });
+            continue;
+          }
           const revision = snapshot(state.workspace);
           const participant = steered?.participant ?? next;
           const sessionId = steering ? steered?.sessionId ?? state.sessions[participant] ?? 'ses_' + randomUUID()
@@ -226,7 +237,17 @@ export async function runWorkflow(root, id) {
           const steering = state.controls?.find(command => command.status === 'pending' && command.kind === 'steer');
           if (steering && !visit.steering) {
             const child = visit.children?.find(item => item.participant === steering.node);
-            if (!child) { state.visits.pop(); return; }
+            if (!child) {
+              for (const command of state.controls ?? []) {
+                const target = visit.children?.find(item => item.participant === command.node);
+                if (command.kind === 'steer' && command.status === 'pending' && target) {
+                  command.target ??= { node: target.node, participant: target.participant,
+                    ...(target.item ? { item: target.item } : {}) };
+                }
+              }
+              state.visits.pop();
+              return;
+            }
             child.prompt += `\n\nУточнение пользователя для этого участника:\n${steering.text}`;
             child.steering = steering.id;
             steering.status = 'delivered';
