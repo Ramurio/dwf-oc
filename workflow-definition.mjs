@@ -157,7 +157,8 @@ export function parseVerdict(text, role) {
   const json = text.slice(start, end).replaceAll('`', '\\u0060');
   const framed = text.slice(0, start) + json + text.slice(end);
   const unfenced = framed.replace(/```(?:json)?\s*\n([\s\S]*?)```/g, '\n$1\n');
-  if (!unfenced.trimEnd().endsWith(json)) {
+  const normalizedObjects = verdictObjects(unfenced);
+  if (normalizedObjects.length !== 1 || unfenced.slice(normalizedObjects[0].end).trim()) {
     throw publicError('Участник вернул неверный JSON результата.');
   }
   if (!object(result) || ![...outcomes[role], 'blocked'].includes(result.outcome) ||

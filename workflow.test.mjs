@@ -93,6 +93,13 @@ test('closed code blocks cannot consume backticks from a following plain verdict
   }
 });
 
+test('a repeated verdict inside an incomplete trailing object is rejected', () => {
+  const json = '{"outcome":"approve","summary":"Checked"}';
+  for (const prefix of ['{', 'Trailing prose {', '{"duplicate":']) {
+    assert.throws(() => parseVerdict(json + '\n' + prefix + json, 'reviewer'));
+  }
+});
+
 test('каждый обязательный проверяющий должен одобрить текущую версию', () => {
   const definition = sampleWorkflow('Task');
   definition.nodes.secondReview = { role: 'reviewer' };
