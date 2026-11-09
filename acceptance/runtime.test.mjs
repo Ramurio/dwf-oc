@@ -17,6 +17,14 @@ import { inspectTester } from './tester.mjs';
 const cli = [process.execPath, fileURLToPath(new URL('../dwf.mjs', import.meta.url))];
 const verdict = (outcome = 'approve') => JSON.stringify({ outcome, summary: `Observed ${outcome}` });
 
+function expireWorkflowLease(sandbox) {
+  const db = new DatabaseSync(join(sandbox.state, 'dwf.sqlite'));
+  try {
+    db.exec('PRAGMA busy_timeout = 10000');
+    db.prepare('UPDATE workflows SET expires = 0 WHERE id = ?').run(sandbox.runId);
+  } finally { db.close(); }
+}
+
 async function fixture(t, definition, reply, directory = false, overrides = {}) {
   const sandbox = await createSandbox();
   const provider = await createControlledHttpProvider({ directory: sandbox.control, token: sandbox.token, reply });
@@ -330,9 +338,7 @@ test('native completion during an activity request cannot return an older approv
   assert.equal(tester.status, 'running');
   assert.match((await readExecution(client, request)).outcome.result, /changes/);
   assert.equal(JSON.parse((await inspectTester(client, attempt)).report).outcome, 'changes');
-  const db = new DatabaseSync(join(sandbox.state, 'dwf.sqlite'));
-  db.prepare('UPDATE workflows SET expires = 0 WHERE id = ?').run(sandbox.runId);
-  db.close();
+  expireWorkflowLease(sandbox);
   await sandbox.command(['inspect', sandbox.runId]);
   const result = await sandbox.finish();
   assert.equal(result.status, 'failed');
@@ -425,9 +431,7 @@ test('fixed groups run concurrently and recover without repeating completed memb
     execFileSync('ps', ['-p', String(item.pid), '-o', 'command='], { encoding: 'utf8' }).includes('workflow-runtime.mjs'));
   assert(controller);
   process.kill(controller.pid, 'SIGKILL');
-  const db = new DatabaseSync(join(sandbox.state, 'dwf.sqlite'));
-  db.prepare('UPDATE workflows SET expires = 0 WHERE id = ?').run(sandbox.runId);
-  db.close();
+  expireWorkflowLease(sandbox);
   await sandbox.command(['inspect', sandbox.runId]);
   await sandbox.release();
   const result = await sandbox.finish();
@@ -481,6 +485,8 @@ test('writer group recovers after read-tree succeeds and its controller crashes'
 result=$?
 if [ "$result" -eq 0 ] && [ "$1 $2 $3" = "read-tree --reset -u" ] && [ ! -e "$DWF_GROUP_CRASH_MARKER" ]; then
   : > "$DWF_GROUP_CRASH_MARKER"
+  # Keep the controller transaction locked after the test observes the marker.
+  sleep 1
   kill -KILL "$PPID"
 fi
 exit "$result"
@@ -506,9 +512,7 @@ exit "$result"
   }, false, { PATH: bin + ':' + process.env.PATH, DWF_GROUP_CRASH_MARKER: marker });
   await sandbox.release();
   await waitFor(() => readFile(marker).catch(() => false), 10000, 'controller crash after read-tree');
-  const db = new DatabaseSync(join(sandbox.state, 'dwf.sqlite'));
-  db.prepare('UPDATE workflows SET expires = 0 WHERE id = ?').run(sandbox.runId);
-  db.close();
+  expireWorkflowLease(sandbox);
   await sandbox.command(['inspect', sandbox.runId]);
   const result = await sandbox.finish();
   assert.equal(result.status, 'succeeded', result.error);
