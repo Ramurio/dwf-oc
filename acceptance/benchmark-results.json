@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "recordedAt": "2026-11-08T23:53:34.669472+00:00",
+  "recordedAt": "2026-11-09T00:25:06.583502+00:00",
   "model": {
     "provider": "openai",
     "modelId": "gpt-6.1-sol-ultrafast",
@@ -38,6 +38,49 @@
     }
   },
   "trials": [
+    {
+      "attempt": "161681c6-d410-4438-b62f-0bc3f01097b1",
+      "project": "more-itertools",
+      "outcome": "accepted",
+      "runtimeRevision": "84a36dd0a9ebceff2feb371e53ad40b03a6215e5",
+      "baselineRevision": "775e4974292431acbda362b208d6b9b78bf1b07c",
+      "baselineTree": "95d5a399fd28f8fb46d0f6ec2a1fe0e185e3a8fd",
+      "skillHash": "b3ae72c998ee752e8670cb73732e2e1661e82582b97a7f1f3be2fccfbed3e48a",
+      "promptHash": "56665e981ecb853972f9e18574fc96b31791f98d85a4e70e2d693e73ae6aefcd",
+      "boundaryCheckPassed": true,
+      "workflows": [
+        {
+          "id": "001b9bbb-29ad-41f2-b311-954a44dd3c9f",
+          "status": "succeeded",
+          "commit": "ffadf7ecdf05295d1a6f9764fe45c2b05dc6ef14"
+        }
+      ],
+      "externalCheckExitCodes": {
+        "candidate-regression": 0,
+        "hidden-behavior": 0,
+        "original-test-files": 0
+      },
+      "participantUsage": {
+        "input": 115461,
+        "output": 15470,
+        "reasoning": 9973,
+        "cachedRead": 864640,
+        "cachedWrite": 0,
+        "sessions": 4,
+        "providerCostFilled": false
+      },
+      "testerUsage": {
+        "input": 29919,
+        "output": 1531,
+        "reasoning": 504,
+        "cachedRead": 126208,
+        "cachedWrite": 0,
+        "sessions": 1,
+        "providerCostFilled": false
+      },
+      "usageComplete": true,
+      "note": "Second clean workflow for the same PR587 baseline merged on runtime 84a36dd. External Python 3.14.6 suites ran 670 candidate tests and 654 tests from the original files, each with four skips. All 13 independent checks passed. Participants used Python 3.9.6 and ran 669 tests with one skip plus 1800 randomized read schedules. All six original native verdicts were revalidated exactly. Reviewer incorrectly claimed a recoverable-source behavior existed in the baseline and prompted an additional change. Both baseline and reference lack that behavior on Python 3.9.6 and 3.14.6. This review-quality defect is tracked separately as dwf-oc-2dp.2. Runtime checks were limited to Python 3.9.6 and 3.14.6."
+    },
     {
       "attempt": "5d0d1308-930b-42ee-ba5f-f644cc7051f8",
       "project": "chi",
@@ -493,12 +536,103 @@
       },
       "usageComplete": true,
       "note": "Clean repeat in one workflow on d56790d. Candidate and original root-module go test -race ./... suites and independent byte-literal checks passed. Reviewer and verifier approved after two findings were corrected. Separate debug/repl modules were outside the root-module test run."
+    },
+    {
+      "attempt": "242c294d-7a8d-4728-a230-2bd4a2be29ee",
+      "project": "more-itertools",
+      "outcome": "reference_disqualified",
+      "runtimeRevision": "90b464a0b6420a9f32c4249ec12d4d642f77eeac",
+      "baselineRevision": "93e50a42b9d7ae77595918d6951cd876fee92473",
+      "baselineTree": "8c24ffac3f30f90c04cf6c7a07639a143924382c",
+      "skillHash": "b3ae72c998ee752e8670cb73732e2e1661e82582b97a7f1f3be2fccfbed3e48a",
+      "promptHash": "21020943d87c556dbb0fcffeee20e461442392b96e631b66232435bf6b1130c0",
+      "boundaryCheckPassed": true,
+      "workflows": [
+        {
+          "id": "544af593-d058-4982-a2dc-aff2d4f14395",
+          "status": "succeeded",
+          "commit": "ddcddf32693bc7aec8ba6a7af9591b3de22c5c53"
+        }
+      ],
+      "externalCheckExitCodes": {
+        "candidate-regression": 0,
+        "hidden-behavior": 0,
+        "original-test-files": 0
+      },
+      "participantUsage": {
+        "input": 84946,
+        "output": 8150,
+        "reasoning": 3577,
+        "cachedRead": 219392,
+        "cachedWrite": 0,
+        "sessions": 4,
+        "providerCostFilled": false
+      },
+      "testerUsage": {
+        "input": 32432,
+        "output": 1594,
+        "reasoning": 379,
+        "cachedRead": 87168,
+        "cachedWrite": 0,
+        "sessions": 1,
+        "providerCostFilled": false
+      },
+      "usageComplete": true,
+      "note": "The implementation merged in one workflow. Candidate suite ran 413 tests and the original test files ran 403, each with four skips. All 13 independent checks passed. An added memory-retention holdout exposed linear retention in the accepted PR292 reference itself. This trial is diagnostic and excluded from accepted clean repeats. A separately qualified memory-fix case uses PR587."
+    },
+    {
+      "attempt": "bc41e21b-46e6-4aae-ba5b-4d26a1532b5f",
+      "project": "more-itertools",
+      "outcome": "accepted",
+      "runtimeRevision": "d7fb17f75a361795e2ba93b5d61476e7048c95de",
+      "baselineRevision": "775e4974292431acbda362b208d6b9b78bf1b07c",
+      "baselineTree": "95d5a399fd28f8fb46d0f6ec2a1fe0e185e3a8fd",
+      "skillHash": "b3ae72c998ee752e8670cb73732e2e1661e82582b97a7f1f3be2fccfbed3e48a",
+      "promptHash": "56665e981ecb853972f9e18574fc96b31791f98d85a4e70e2d693e73ae6aefcd",
+      "boundaryCheckPassed": true,
+      "workflows": [
+        {
+          "id": "f7097ce6-8435-4f87-8f91-a9f4d2ab520c",
+          "status": "succeeded",
+          "commit": "08e3d5fd96a753165e1b843419d8973e6ee01c5f"
+        }
+      ],
+      "externalCheckExitCodes": {
+        "candidate-regression": 0,
+        "hidden-behavior": 0,
+        "original-test-files": 0
+      },
+      "participantUsage": {
+        "input": 95127,
+        "output": 10779,
+        "reasoning": 4701,
+        "cachedRead": 571392,
+        "cachedWrite": 0,
+        "sessions": 4,
+        "providerCostFilled": false
+      },
+      "testerUsage": {
+        "input": 45040,
+        "output": 2147,
+        "reasoning": 951,
+        "cachedRead": 176768,
+        "cachedWrite": 0,
+        "sessions": 1,
+        "providerCostFilled": false
+      },
+      "usageComplete": true,
+      "note": "One clean workflow for the PR587 memory fix merged. External Python 3.14.6 suites ran 668 candidate tests and 654 tests from the original files, each with four skips. All 13 independent checks passed. Participants used Python 3.9.6 and ran 667 tests with one skip. All four original native verdicts were revalidated exactly by the corrected positional-boundary parser. Runtime checks were limited to Python 3.9.6 and 3.14.6."
     }
   ],
   "rejectedQualification": [
     {
       "project": "httprouter",
       "reason": "The original Unicode case-insensitive-path regression fails for both baseline and reference under the available Go toolchain. No task trial counted."
+    },
+    {
+      "project": "more-itertools",
+      "case": "ichunked-feature-pr292",
+      "reason": "The reference passed the initial functional qualification but failed added checks for bounded memory retention. Its otherwise successful trial is retained as diagnostic evidence and excluded from accepted repeats. The subsequent PR587 memory-fix case has a separate baseline and reference."
     }
   ]
 }
