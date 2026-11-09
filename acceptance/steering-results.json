@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "series": "steering-guidance",
   "disposition": "pending_independent_audit",
-  "recordedAt": "2026-11-09T01:28:17.967850+00:00",
+  "recordedAt": "2026-11-09T02:08:06.796499+00:00",
   "skillRevision": "17f9db49788fe968f0a3759bcffd1affd2df46eb",
   "model": {
     "providerID": "openai",
@@ -139,12 +139,12 @@
     }
   ],
   "regression": {
-    "sourceRevision": "da7f004144c9412ed149c3c4d398d29427af97c2",
+    "sourceRevision": "2cf17d5d267b8bf536f981ece5dacfa8f3917ab1",
     "harness": 31,
-    "product": 69,
+    "product": 72,
     "cucumberScenarios": 12,
     "cucumberSteps": 116,
-    "native": 21,
+    "native": 22,
     "initialFullRun": {
       "result": "failed",
       "nativePassed": 20,
@@ -162,7 +162,22 @@
       "cucumberSteps": 116,
       "native": 21
     },
-    "inheritedInstructions": "The full suite passed with TMPDIR below a parent AGENTS.md. The original strict-equality fixture failed the negative control; its corrected suffix assertion passed all 31 harness tests."
+    "inheritedInstructions": "The full suite passed with TMPDIR below a parent AGENTS.md. The original strict-equality fixture failed the negative control; its corrected suffix assertion passed all 31 harness tests.",
+    "beforeMapTargetFix": {
+      "sourceRevision": "da7f004144c9412ed149c3c4d398d29427af97c2",
+      "harness": 31,
+      "product": 69,
+      "cucumberScenarios": 12,
+      "cucumberSteps": 116,
+      "native": 21
+    },
+    "mapSteering": {
+      "controllerCasesPassed": 3,
+      "nativeRecoveryCasesPassed": 1,
+      "negativeControl": "The three controller cases and the native recovery case fail against 743457c with the prior runtime.",
+      "recovery": "The native fixture seeds the pre-admission boundary with real prepareGroup and native configuration. Public CLI commands queue three clarifications, then a real controller SIGKILL and inspect exercise persisted target recovery.",
+      "coverage": "Accepted mapped node/item data, prior real session with the current item, explicit failure for an unresolvable legacy target, private target metadata, FIFO delivery and mandatory-approval refusal."
+    }
   },
   "documentationRevision": "b7ab4ce6517544e4890b44cd9ff56b204cf63c8c",
   "independentAudits": [
@@ -189,6 +204,20 @@
       "verification": "The auditors reconciled 16 native verdicts, archive trees, usage and final approvals. Fresh checks passed 67 product, 12 Cucumber scenarios and 21 native tests. Full npm test failed at one of 31 harness tests under inherited instructions.",
       "probeLimitation": "An auditor mock accessed a group as a node and hung. After a technical observation from the lead, the auditor corrected its mock and completed bounded replays. The product failure claim was not retained.",
       "archiveSha256": "9a71e41ddba5bda08a7d12bd8e33a94e3c189dfa01c4ac7d179b7ee45fd68f18"
+    },
+    {
+      "workflow": "459d4853-1aa9-4440-8900-e1757a4d5133",
+      "reviewedRevision": "743457cfcb23c3a09c992dba0b8050b17ee34e39",
+      "skillRevision": "b7ab4ce6517544e4890b44cd9ff56b204cf63c8c",
+      "disposition": "changes",
+      "workflowStatus": "failed",
+      "findings": [
+        "An external clarification before a prepared map-child clarification discards the only child mapping. The second command remains pending and the controller retries indefinitely. The tester reproduced this on both target and base.",
+        "The summary reviewer retained blocked because its necessary execution checks lacked an immediate required verifier in the chosen graph."
+      ],
+      "verification": "Fresh full npm test passed 31 harness, 69 product, 12 Cucumber scenarios / 116 steps and 21 native tests. The tester also passed 16 queue probes and nine crash/recovery replays. It checked 56 source hashes, 13 skill Git objects, unchanged trial rows and 16 historical verdicts.",
+      "followUp": "Persist accepted mapped recipient data before discarding preparation, add bounded and native recovery regressions, and provide an immediate required verifier for reviewer execution handoffs in the next independent audit.",
+      "archiveSha256": "4120ef107f08d6012d7599e5d1fd47e0f863b266828b8774eaae276698bf9bfd"
     }
   ]
 }
