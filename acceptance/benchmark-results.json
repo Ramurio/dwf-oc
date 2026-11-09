@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "recordedAt": "2026-11-09T02:38:56.313303+00:00",
+  "recordedAt": "2026-11-09T02:52:28.608333+00:00",
   "model": {
     "provider": "openai",
     "modelId": "gpt-6.1-sol-ultrafast",
@@ -935,7 +935,7 @@
         "providerCostFilled": false
       },
       "usageComplete": true,
-      "note": "One clean workflow merged. Go 1.27.3 candidate suites passed 26 top-level tests; 9 hidden behavioral tests and 20 task-compatible original tests passed, each with and without -race. Raw original tests fail because two cases reject the newly supported strings.Compare signature. A common four-case expectation adjustment was qualified against the baseline and reference after the first evaluations. Raw failures remain recorded. Four native verdicts were revalidated exactly. The declared Go 1.13 minimum was not executed."
+      "note": "One clean workflow merged. Go 1.27.3 candidate suites passed 26 top-level tests; 9 hidden behavioral tests and 20 task-compatible original tests passed, each with and without -race. Raw original tests report 19 passes and one top-level failure in TestPanic. Two failing subtests reject the newly supported strings.Compare signature. A common four-case expectation adjustment was qualified against the baseline and reference after the first evaluations. Raw failures remain recorded. Four native verdicts were revalidated exactly. The declared Go 1.13 minimum was not executed."
     },
     {
       "attempt": "88de3fee-341b-4596-9521-2fcd18294087",
@@ -991,7 +991,7 @@
         "providerCostFilled": false
       },
       "usageComplete": true,
-      "note": "One clean workflow merged. Go 1.27.3 candidate suites passed 26 top-level tests; 9 hidden behavioral tests and 20 task-compatible original tests passed, each with and without -race. Raw original tests fail because two cases reject the newly supported strings.Compare signature. A common four-case expectation adjustment was qualified against the baseline and reference after the first evaluations. Raw failures remain recorded. Four native verdicts were revalidated exactly. The declared Go 1.13 minimum was not executed."
+      "note": "One clean workflow merged. Go 1.27.3 candidate suites passed 26 top-level tests; 9 hidden behavioral tests and 20 task-compatible original tests passed, each with and without -race. Raw original tests report 19 passes and one top-level failure in TestPanic. Two failing subtests reject the newly supported strings.Compare signature. Two additional failing subtests require the old nil-function diagnostic; nil functions still panic. A common four-case expectation adjustment was qualified against the baseline and reference after the first evaluations. Raw failures remain recorded. Four native verdicts were revalidated exactly. The declared Go 1.13 minimum was not executed."
     },
     {
       "attempt": "1f9a55c8-af5b-4282-90cc-34f316d36878",
@@ -1047,7 +1047,7 @@
         "providerCostFilled": false
       },
       "usageComplete": true,
-      "note": "One clean workflow merged. Go 1.27.3 candidate suites passed 27 top-level tests; 9 hidden behavioral tests and 20 task-compatible original tests passed, each with and without -race. Raw original tests fail because two cases reject the newly supported strings.Compare signature. A common four-case expectation adjustment was qualified against the baseline and reference after the first evaluations. Raw failures remain recorded. Four native verdicts were revalidated exactly. The declared Go 1.13 minimum was not executed."
+      "note": "One clean workflow merged. Go 1.27.3 candidate suites passed 27 top-level tests; 9 hidden behavioral tests and 20 task-compatible original tests passed, each with and without -race. Raw original tests report 19 passes and one top-level failure in TestPanic. Two failing subtests reject the newly supported strings.Compare signature. Two additional failing subtests require the old nil-function diagnostic; nil functions still panic. A common four-case expectation adjustment was qualified against the baseline and reference after the first evaluations. Raw failures remain recorded. Four native verdicts were revalidated exactly. The declared Go 1.13 minimum was not executed."
     }
   ],
   "rejectedQualification": [
