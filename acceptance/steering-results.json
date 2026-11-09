@@ -139,11 +139,33 @@
     }
   ],
   "regression": {
-    "sourceRevision": "e3b35526ac74fcd0af73d6c249ced876a5d3aa20",
+    "sourceRevision": "f47885455f7664473d5e4f443db3bc574b5b5b89",
     "harness": 31,
-    "product": 66,
+    "product": 67,
     "cucumberScenarios": 12,
     "cucumberSteps": 116,
-    "native": 21
-  }
+    "native": 21,
+    "initialFullRun": {
+      "result": "failed",
+      "nativePassed": 20,
+      "nativeFailed": 1,
+      "failure": "The crash test attempted to reset its workflow lease before SQLite released the killed controller transaction."
+    },
+    "followUp": "A bounded SQLite wait and finally-close are shared by the three test lease resets. The existing crash probe holds the transaction for one second before SIGKILL.",
+    "negativeControl": "The delayed crash probe fails with SQLITE_BUSY without the bounded wait.",
+    "targetedChecksPassed": 9
+  },
+  "documentationRevision": "4acf55dafd2fa031032cd70b6621c11e790a7955",
+  "independentAudits": [
+    {
+      "workflow": "9dde1abe-86db-4db0-a9b0-9f0bba56306d",
+      "reviewedRevision": "5003678765c7f91cf726ba2f979f3e499971d0e5",
+      "skillRevision": "17f9db49788fe968f0a3759bcffd1affd2df46eb",
+      "disposition": "changes",
+      "finding": "Prepared repeated groups with memory=false retain the fresh session of that prepared visit. The earlier instruction promised the previous session too broadly.",
+      "verification": "16 native verdicts and both trial summaries were independently reconciled. One verifier ran 43 focused checks. Another verifier could not run its required checks because its external directory was denied.",
+      "followUp": "Document the prepared-group case, retain its group route, and add a regression using the actual group preparation.",
+      "archiveSha256": "5141de69737e19c27e706f6bff5793eaecbd44a5cafce40d6f38e24497d9f784"
+    }
+  ]
 }
