@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { chmod, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -10,7 +11,8 @@ import { OpenCode } from '@opencode/client';
 import { Service } from '@opencode/client/service';
 import { createSandbox, cliJson, transcript, waitFor, writeJson, taggedProcesses } from './harness.mjs';
 import { createControlledHttpProvider, nativeProviderConfig } from './controlled-http-provider.mjs';
-import { getWorkflow } from '../run-store.mjs';
+import { claimWorkflow, createWorkflow, getWorkflow, updateWorkflow } from '../run-store.mjs';
+import { prepareGroup } from '../workflow-groups.mjs';
 import { captureStopSessions, outcomeFromMessages, readExecution, stopSessions } from '../opencode-runtime.mjs';
 import { inspectTester } from './tester.mjs';
 
@@ -585,4 +587,65 @@ test('steering a mapped participant preserves its own context after the group se
   assert.equal(result.visits[0].children[0].sessionId, result.visits[1].sessionId);
   assert(result.visits[1].prompt.includes('Clarify only alpha'));
   assert.equal(result.controls[0].status, 'applied');
+});
+
+test('accepted map targets survive discarded preparation and native controller recovery', { timeout: 60000 }, async t => {
+  const items = [{ id: 'alpha', detail: 'first' }, { id: 'beta', detail: 'second' }];
+  const definition = { task: 'Recover queued mapped clarifications', workspace: 'directory', entry: 'jobs',
+    nodes: { analyze: { role: 'orchestrator', tools: [], skills: [], memory: false },
+      summary: { role: 'orchestrator', tools: [], skills: [] } },
+    groups: { jobs: { member: 'analyze', items } },
+    transitions: { jobs: { done: 'summary', changes: null, failed: null },
+      analyze: { done: 'summary' }, summary: { done: null } } };
+  const sandbox = await fixture(t, definition, () => verdict('done'), true);
+  await sandbox.release();
+  const bootstrap = await sandbox.finish();
+  assert.equal(bootstrap.status, 'succeeded', bootstrap.error);
+  await writeJson(join(sandbox.control, 'release.json'), { token: sandbox.token, callIds: [] });
+
+  // Seed the persisted pre-admission boundary using the real prepared group and native configuration.
+  const state = { ...bootstrap, id: randomUUID(), status: 'running', sessions: {}, visits: [] };
+  delete state.result;
+  delete state.finalizing;
+  state.visits.push(prepareGroup(sandbox.state, state, 'jobs'));
+  await mkdir(join(sandbox.state, 'workflows', state.id));
+  createWorkflow(sandbox.state, state);
+  assert.equal(claimWorkflow(sandbox.state, state.id, 'prepare-test'), true);
+  const message = join(sandbox.root, 'clarification.txt');
+  for (const [target, text] of [['summary', 'Visit the external node first'],
+    ...items.map(item => [`jobs/${item.id}`, `Clarify ${item.id}`])]) {
+    await writeFile(message, text);
+    const queued = await sandbox.command(['steer', state.id, target, '--message-file', message]);
+    assert.equal(queued.command.status, 'pending');
+  }
+  updateWorkflow(sandbox.state, state, 'prepare-test', true);
+  await sandbox.command(['inspect', state.id]);
+  await waitFor(async () => (await sandbox.events()).some(event => event.type === 'received' &&
+    event.prompt.includes('Visit the external node first')), 10000, 'first queued native request');
+  const saved = getWorkflow(sandbox.state, state.id);
+  assert.deepEqual(saved.controls.slice(1).map(command => command.target.item), items);
+  assert.deepEqual(saved.visits.map(visit => visit.node), ['summary']);
+  const controller = taggedProcesses(sandbox.token).find(item =>
+    execFileSync('ps', ['-p', String(item.pid), '-o', 'command='], { encoding: 'utf8' }).includes(state.id));
+  assert(controller);
+  process.kill(controller.pid, 'SIGKILL');
+  expireWorkflowLease({ state: sandbox.state, runId: state.id });
+  const resumed = await sandbox.command(['inspect', state.id]);
+  assert(resumed.controls.every(command => !Object.hasOwn(command, 'target')));
+  await sandbox.release();
+  const result = await waitFor(() => {
+    const current = getWorkflow(sandbox.state, state.id);
+    return current.status !== 'running' && current;
+  }, 30000, 'recovered queued clarifications');
+  assert.equal(result.status, 'succeeded', result.error);
+  assert.deepEqual(result.visits.map(visit => visit.node), ['summary', 'analyze', 'analyze', 'summary']);
+  assert.deepEqual(result.visits.filter(visit => visit.node === 'analyze').map(visit => visit.item), items);
+  assert.deepEqual(result.controls.map(command => command.status), ['applied', 'applied', 'applied']);
+  const calls = (await sandbox.events()).filter(event => event.type === 'received' &&
+    result.visits.some(visit => visit.sessionId === event.providerSessionId));
+  assert.equal(calls.length, 4);
+  for (const item of items) {
+    const call = calls.find(event => event.prompt.includes(`Clarify ${item.id}`));
+    assert(call.prompt.includes(JSON.stringify(item)));
+  }
 });
