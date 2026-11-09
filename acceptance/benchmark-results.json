@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "recordedAt": "2026-11-09T00:25:06.583502+00:00",
+  "recordedAt": "2026-11-09T01:13:31.328620+00:00",
   "model": {
     "provider": "openai",
     "modelId": "gpt-6.1-sol-ultrafast",
@@ -80,6 +80,264 @@
       },
       "usageComplete": true,
       "note": "Second clean workflow for the same PR587 baseline merged on runtime 84a36dd. External Python 3.14.6 suites ran 670 candidate tests and 654 tests from the original files, each with four skips. All 13 independent checks passed. Participants used Python 3.9.6 and ran 669 tests with one skip plus 1800 randomized read schedules. All six original native verdicts were revalidated exactly. Reviewer incorrectly claimed a recoverable-source behavior existed in the baseline and prompted an additional change. Both baseline and reference lack that behavior on Python 3.9.6 and 3.14.6. This review-quality defect is tracked separately as dwf-oc-2dp.2. Runtime checks were limited to Python 3.9.6 and 3.14.6."
+    },
+    {
+      "attempt": "f5df49be-7d8e-4bc5-9dc6-6fc841db9982",
+      "project": "more-itertools",
+      "outcome": "review_bypassed",
+      "runtimeRevision": "da392105e3c797565bc8aa33ed200d81ac1e91c4",
+      "baselineRevision": "775e4974292431acbda362b208d6b9b78bf1b07c",
+      "baselineTree": "95d5a399fd28f8fb46d0f6ec2a1fe0e185e3a8fd",
+      "skillHash": "b3ae72c998ee752e8670cb73732e2e1661e82582b97a7f1f3be2fccfbed3e48a",
+      "promptHash": "56665e981ecb853972f9e18574fc96b31791f98d85a4e70e2d693e73ae6aefcd",
+      "boundaryCheckPassed": true,
+      "workflows": [
+        {
+          "id": "01167dac-0dc7-4a86-912d-6b3e9e42c487",
+          "status": "failed",
+          "commit": null
+        }
+      ],
+      "externalCheckExitCodes": {
+        "candidate-regression": 0,
+        "hidden-behavior": 0,
+        "original-test-files": 0
+      },
+      "participantUsage": {
+        "input": 65817,
+        "output": 7009,
+        "reasoning": 2943,
+        "cachedRead": 325248,
+        "cachedWrite": 0,
+        "sessions": 3,
+        "providerCostFilled": false
+      },
+      "testerUsage": {
+        "input": 47436,
+        "output": 2895,
+        "reasoning": 3312,
+        "cachedRead": 409728,
+        "cachedWrite": 0,
+        "sessions": 1,
+        "providerCostFilled": false
+      },
+      "usageComplete": true,
+      "note": "The tester steered directly to verifier and bypassed mandatory review. The merge guard rejected completion and main remained unchanged. The unmerged candidate snapshot separately passed 665 candidate tests, 654 original tests and all 13 independent checks. This failed workflow is excluded from accepted clean repeats."
+    },
+    {
+      "attempt": "75373c2b-0885-46d7-b25b-9c766a766346",
+      "project": "p-limit",
+      "outcome": "accepted",
+      "runtimeRevision": "da392105e3c797565bc8aa33ed200d81ac1e91c4",
+      "baselineRevision": "850768f5655dc46547802789e13af3cf35c3d7b0",
+      "baselineTree": "676759e85a0b85a5c9b0bbcaec5d67a0a5f9fb7c",
+      "skillHash": "b3ae72c998ee752e8670cb73732e2e1661e82582b97a7f1f3be2fccfbed3e48a",
+      "promptHash": "12a8b85550e7e388f93ebc23672c5d42fddcf79588d9d108c0c74b1538edac71",
+      "boundaryCheckPassed": true,
+      "workflows": [
+        {
+          "id": "2d194ea4-fa69-4474-8cc5-fb9c3d04e42f",
+          "status": "succeeded",
+          "commit": "335ac5a1e57e6974ce395798c4f1e37e571bf58b"
+        }
+      ],
+      "externalCheckExitCodes": {
+        "candidate-tests": 0,
+        "hidden-behavior": 0,
+        "original-regression": 0
+      },
+      "participantUsage": {
+        "input": 64229,
+        "output": 6652,
+        "reasoning": 1303,
+        "cachedRead": 212864,
+        "cachedWrite": 0,
+        "sessions": 4,
+        "providerCostFilled": false
+      },
+      "testerUsage": {
+        "input": 27607,
+        "output": 1499,
+        "reasoning": 519,
+        "cachedRead": 127488,
+        "cachedWrite": 0,
+        "sessions": 1,
+        "providerCostFilled": false
+      },
+      "usageComplete": true,
+      "note": "One clean workflow on da39210 merged. External checks passed 17 candidate tests, 10 original tests, lint, types and independent mutable-concurrency assertions. Four original native verdicts were revalidated exactly."
+    },
+    {
+      "attempt": "68b4b827-0aed-4765-b4c8-3320dbb0f39b",
+      "project": "more-itertools",
+      "outcome": "accepted",
+      "runtimeRevision": "da392105e3c797565bc8aa33ed200d81ac1e91c4",
+      "baselineRevision": "775e4974292431acbda362b208d6b9b78bf1b07c",
+      "baselineTree": "95d5a399fd28f8fb46d0f6ec2a1fe0e185e3a8fd",
+      "skillHash": "b3ae72c998ee752e8670cb73732e2e1661e82582b97a7f1f3be2fccfbed3e48a",
+      "promptHash": "56665e981ecb853972f9e18574fc96b31791f98d85a4e70e2d693e73ae6aefcd",
+      "boundaryCheckPassed": true,
+      "workflows": [
+        {
+          "id": "93ee8b5f-639b-4871-8302-dd7eb674977a",
+          "status": "succeeded",
+          "commit": "0d13ae5c577aab4c43be9481434a80b9688c16db"
+        }
+      ],
+      "externalCheckExitCodes": {
+        "candidate-regression": 0,
+        "hidden-behavior": 0,
+        "original-test-files": 0
+      },
+      "participantUsage": {
+        "input": 191297,
+        "output": 22436,
+        "reasoning": 12680,
+        "cachedRead": 1908224,
+        "cachedWrite": 0,
+        "sessions": 4,
+        "providerCostFilled": false
+      },
+      "testerUsage": {
+        "input": 61447,
+        "output": 2510,
+        "reasoning": 1677,
+        "cachedRead": 275328,
+        "cachedWrite": 0,
+        "sessions": 1,
+        "providerCostFilled": false
+      },
+      "usageComplete": true,
+      "note": "One clean memory workflow on da39210 merged after verification reproduced genuine post-error differences and review found source retention in a revision. External Python 3.14.6 checks ran 670 candidate tests and 654 original tests, each with four skips; all 13 independent checks passed. Nine native verdicts were revalidated exactly. Participants used Python 3.9.6 and ran 669 tests with one skip."
+    },
+    {
+      "attempt": "959e32c8-ed61-4a3b-9cc9-9573acc9258b",
+      "project": "more-itertools",
+      "outcome": "monitor_recovered",
+      "runtimeRevision": "2610b295ee91fdb0e86cb5b78c0d8d2f5b3c3713",
+      "baselineRevision": "775e4974292431acbda362b208d6b9b78bf1b07c",
+      "baselineTree": "95d5a399fd28f8fb46d0f6ec2a1fe0e185e3a8fd",
+      "skillHash": "b3ae72c998ee752e8670cb73732e2e1661e82582b97a7f1f3be2fccfbed3e48a",
+      "promptHash": "56665e981ecb853972f9e18574fc96b31791f98d85a4e70e2d693e73ae6aefcd",
+      "boundaryCheckPassed": true,
+      "workflows": [
+        {
+          "id": "be243888-bfff-41ad-87f7-c50660939974",
+          "status": "succeeded",
+          "commit": "eff821aeda6ec82ee179c4f6c18a351613ef6b0d"
+        }
+      ],
+      "externalCheckExitCodes": {
+        "candidate-regression": 0,
+        "hidden-behavior": 0,
+        "original-test-files": 0
+      },
+      "participantUsage": {
+        "input": 259332,
+        "output": 18921,
+        "reasoning": 16497,
+        "cachedRead": 2194304,
+        "cachedWrite": 0,
+        "sessions": 4,
+        "providerCostFilled": false
+      },
+      "testerUsage": {
+        "input": 36706,
+        "output": 2166,
+        "reasoning": 1354,
+        "cachedRead": 234880,
+        "cachedWrite": 0,
+        "sessions": 1,
+        "providerCostFilled": false
+      },
+      "usageComplete": false,
+      "note": "A transient SQLite lock terminated the benchmark observer and its services while the workflow was running. The same isolated run and tester session were recovered and the implementation merged; an explicit recovery follow-up obtained the final report. External checks passed 664 candidate tests and 654 original tests, each with four skips, plus all 13 independent checks. Ten native verdicts were revalidated exactly. Excluded from accepted clean repeats. Usage omits interrupted messages without completion and is incomplete."
+    },
+    {
+      "attempt": "202a47b7-88f8-40f2-bca8-4437e9540c14",
+      "project": "p-limit",
+      "outcome": "accepted",
+      "runtimeRevision": "2610b295ee91fdb0e86cb5b78c0d8d2f5b3c3713",
+      "baselineRevision": "850768f5655dc46547802789e13af3cf35c3d7b0",
+      "baselineTree": "676759e85a0b85a5c9b0bbcaec5d67a0a5f9fb7c",
+      "skillHash": "b3ae72c998ee752e8670cb73732e2e1661e82582b97a7f1f3be2fccfbed3e48a",
+      "promptHash": "12a8b85550e7e388f93ebc23672c5d42fddcf79588d9d108c0c74b1538edac71",
+      "boundaryCheckPassed": true,
+      "workflows": [
+        {
+          "id": "b17574a7-2b86-44ee-8794-687aac908fee",
+          "status": "succeeded",
+          "commit": "9098d4333773245a8deb86665d00680ca8b4b9c4"
+        }
+      ],
+      "externalCheckExitCodes": {
+        "candidate-tests": 0,
+        "hidden-behavior": 0,
+        "original-regression": 0
+      },
+      "participantUsage": {
+        "input": 64946,
+        "output": 8680,
+        "reasoning": 2811,
+        "cachedRead": 185984,
+        "cachedWrite": 0,
+        "sessions": 4,
+        "providerCostFilled": false
+      },
+      "testerUsage": {
+        "input": 23877,
+        "output": 1491,
+        "reasoning": 266,
+        "cachedRead": 109312,
+        "cachedWrite": 0,
+        "sessions": 1,
+        "providerCostFilled": false
+      },
+      "usageComplete": true,
+      "note": "One clean workflow on 2610b29 merged. External checks passed 16 candidate tests, 10 original tests, lint, types and independent mutable-concurrency assertions. Native verification also passed seven additional probes. Four native verdicts were revalidated exactly."
+    },
+    {
+      "attempt": "bbdb18c2-f056-484b-8520-2008da352b59",
+      "project": "more-itertools",
+      "outcome": "accepted",
+      "runtimeRevision": "9c36fe2d77916327ca956ec6d98ae61d9592a285",
+      "baselineRevision": "775e4974292431acbda362b208d6b9b78bf1b07c",
+      "baselineTree": "95d5a399fd28f8fb46d0f6ec2a1fe0e185e3a8fd",
+      "skillHash": "b3ae72c998ee752e8670cb73732e2e1661e82582b97a7f1f3be2fccfbed3e48a",
+      "promptHash": "56665e981ecb853972f9e18574fc96b31791f98d85a4e70e2d693e73ae6aefcd",
+      "boundaryCheckPassed": true,
+      "workflows": [
+        {
+          "id": "c5a1b3fe-6c9d-4abb-a436-acd5a475f0e8",
+          "status": "succeeded",
+          "commit": "ac5a4887d3930b786fa562221a5f50cbf27a4ed2"
+        }
+      ],
+      "externalCheckExitCodes": {
+        "candidate-regression": 0,
+        "hidden-behavior": 0,
+        "original-test-files": 0
+      },
+      "participantUsage": {
+        "input": 140311,
+        "output": 13258,
+        "reasoning": 10667,
+        "cachedRead": 1218688,
+        "cachedWrite": 0,
+        "sessions": 4,
+        "providerCostFilled": false
+      },
+      "testerUsage": {
+        "input": 43601,
+        "output": 2266,
+        "reasoning": 912,
+        "cachedRead": 272128,
+        "cachedWrite": 0,
+        "sessions": 1,
+        "providerCostFilled": false
+      },
+      "usageComplete": true,
+      "note": "A fresh clean memory workflow on 9c36fe2 with the corrected benchmark reader merged. External Python 3.14.6 checks ran 663 candidate tests and 654 original tests, each with four skips; all 13 independent checks passed. Eight original native verdicts were revalidated exactly. Participants used Python 3.9.6 and ran 662 tests with one skip."
     },
     {
       "attempt": "5d0d1308-930b-42ee-ba5f-f644cc7051f8",

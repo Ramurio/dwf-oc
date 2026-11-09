@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -75,6 +76,25 @@ test('benchmark observes its own durable workflow state after the tester finishe
   createWorkflow(stateDirectory, workflow);
   assert.deepEqual(benchmarkWorkflows(attempt), [workflow]);
   assert.equal(benchmarkAssessment({ status: 'succeeded' }, benchmarkWorkflows(attempt)).status, 'running');
+});
+
+test('benchmark waits for a concurrent state transaction before reading workflows', async t => {
+  const stateDirectory = await mkdtemp(join(tmpdir(), 'dwf-benchmark-lock-'));
+  t.after(() => rm(stateDirectory, { recursive: true, force: true }));
+  const workflow = { id: 'work', status: 'running', definition: { merge: true } };
+  createWorkflow(stateDirectory, workflow);
+  const holder = spawn(process.execPath, ['--input-type=module', '-e', `
+    import { DatabaseSync } from 'node:sqlite';
+    const db = new DatabaseSync(process.argv[1]);
+    db.exec('BEGIN EXCLUSIVE');
+    process.stdout.write('locked');
+    setTimeout(() => { db.exec('COMMIT'); db.close(); }, 150);
+  `, join(stateDirectory, 'dwf.sqlite')], { stdio: ['ignore', 'pipe', 'pipe'] });
+  t.after(() => holder.kill());
+  await once(holder.stdout, 'data');
+  assert.deepEqual(benchmarkWorkflows({ stateDirectory }), [workflow]);
+  const [code] = await once(holder, 'exit');
+  assert.equal(code, 0);
 });
 
 test('benchmark rereads a resumed tester until the combined assessment finishes', async t => {

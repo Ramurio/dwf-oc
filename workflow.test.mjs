@@ -296,6 +296,30 @@ test('ролевые промпты задают критерии заверше
   }
 });
 
+test('reviewer defers necessary checks only to an immediate required verifier', () => {
+  const definition = sampleWorkflow('Review compatibility');
+  const prompt = (workflow, source = 'review') => rolePrompt(workflow, 'review', undefined,
+    'tree', [], true, undefined, undefined, source);
+  assert(prompt(definition).includes('A required verifier (verify) runs immediately after approve'));
+  for (const target of [null, 'summarize', 'implement']) {
+    const workflow = structuredClone(definition);
+    workflow.nodes.null = { role: 'verifier' };
+    workflow.transitions.review.approve = target;
+    assert(prompt(workflow).includes('No immediate required verifier is guaranteed'));
+  }
+  const optional = structuredClone(definition);
+  optional.nodes.verify.required = false;
+  assert(prompt(optional).includes('No immediate required verifier is guaranteed'));
+  const grouped = structuredClone(definition);
+  grouped.groups = { reviews: { members: ['review'] } };
+  grouped.transitions.reviews = { done: 'verify', changes: 'implement', failed: null };
+  assert(prompt(grouped, 'reviews').includes('No immediate required verifier is guaranteed'));
+  const legacy = { task: 'Read only', nodes: { review: { role: 'reviewer' }, undefined: { role: 'verifier' } } };
+  assert(prompt(legacy).includes('No immediate required verifier is guaranteed'));
+  assert(!rolePrompt(definition, 'implement', undefined, 'tree').includes('Workflow verification context'));
+  assert(roleSystemPrompt('reviewer').includes('Otherwise return blocked with the missing check'));
+});
+
 test('каждая роль получает только собственные версии скиллов', () => {
   assert.deepEqual(roleSkills.worker.map(skill => skill.name), ['code-work']);
   assert.deepEqual(roleSkills.reviewer.map(skill => skill.name), ['code-review']);

@@ -240,6 +240,13 @@ const roleInstructions = {
     'Check for bugs, regressions and unmet requirements. For each finding, identify the location, triggering conditions and consequences. Support findings with evidence from the reviewed result.',
     'Return changes for defects that require correction, or approve when your review finds none.',
     'In summary, list actionable findings or explain what you reviewed and the basis for approval. State review limitations.',
+    'Before asserting a compatibility regression, establish how the baseline behaves on the same input. ' +
+      'For behavior controlled by a library, ground the relevant guarantee in available implementation, documentation, or an observed check. ' +
+      'Treat exception propagation and continuation after an exception as separate behaviors that each need evidence. ' +
+      'If the supplied evidence cannot establish the claimed baseline behavior, pass a specific verification question to the verifier. ' +
+      'A necessary verification question may accompany approve only when the supplied workflow context confirms that a required verifier runs immediately next and receives this review. ' +
+      'Otherwise return blocked with the missing check if it is necessary to decide correctness. ' +
+      'Require changes for an explicit unmet requirement or a defect substantiated by the reviewed code.',
   ].join('\n'),
   verifier: [
     'Independently verify the result against the original requirements. Run the necessary checks and reproduce user scenarios with the available tools. Use temporary data. Preserve project files.',
@@ -269,8 +276,13 @@ export const roleAgents = Object.fromEntries(Object.keys(outcomes).map(role => [
     system: roleSystemPrompt(role), permissions: rolePermissions(role),
   })).digest('hex').slice(0, 16)}`]));
 
-export function rolePrompt(definition, nodeId, previous, revision, visits = [], separateSystem = false, review, workspace) {
+export function rolePrompt(definition, nodeId, previous, revision, visits = [], separateSystem = false, review, workspace, transitionSource = nodeId) {
   const node = definition.nodes[nodeId];
+  const nextId = definition.transitions?.[transitionSource]?.approve;
+  const nextNode = nextId == null ? undefined : definition.nodes[nextId];
+  const verification = nextNode?.role === 'verifier' && nextNode.required !== false
+    ? `A required verifier (${nextId}) runs immediately after approve and receives this review.`
+    : 'No immediate required verifier is guaranteed after this review. If a missing execution check is necessary to decide correctness, return blocked with that check.';
   const history = node.role === 'orchestrator' ? visits.flatMap((visit, index) => visit.verdict ? [{
     visit: index + 1, node: visit.node, role: definition.nodes[visit.node]?.role ?? 'group',
     sessionId: visit.sessionId, revision: visit.revision, result: visit.verdict,
@@ -279,6 +291,7 @@ export function rolePrompt(definition, nodeId, previous, revision, visits = [], 
     separateSystem ? '' : commonInstructions,
     separateSystem ? '' : roleInstructions[node.role],
     node.instructions ?? '',
+    node.role === 'reviewer' ? `Workflow verification context: ${verification}` : '',
     workspace ? `Project workspace: ${workspace.path}` : '',
     workspace?.instructions?.length ? `Inherited project instructions captured at workflow start (outermost first):\n${JSON.stringify(workspace.instructions)}` : '',
     `Поручение пользователя:\n${definition.task}`,

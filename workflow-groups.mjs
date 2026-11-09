@@ -20,7 +20,7 @@ export function prepareGroup(root, state, id, previous) {
     const review = node.role === 'reviewer' && state.workspace.mode !== 'directory'
       ? writeReviewDiff(workspace, revision, join(root, 'workflows', state.id, 'reviews', `${inputId}.diff`)) : undefined;
     const prompt = rolePrompt(state.definition, item.node, previous, revision, state.visits,
-      Boolean(state.roleAgents), review, workspace) +
+      Boolean(state.roleAgents), review, workspace, id) +
       (item.item ? `\n\nЭлемент параллельной группы:\n${JSON.stringify(item.item)}` : '');
     return { ...item, sessionId, inputId, revision,
       startedAt: Date.now(), workspace, prompt, ...(review ? { review } : {}) };

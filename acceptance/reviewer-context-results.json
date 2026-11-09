@@ -1,0 +1,569 @@
+{
+  "schemaVersion": 1,
+  "series": "reviewer-context-v5",
+  "candidateDisposition": "independently_approved",
+  "independentAudit": {
+    "attempt": "976268ad-3e39-4b31-bbb5-9f41deca5fc2",
+    "workflow": "1378e26e-81cb-4279-b776-c6d1dc128dc0",
+    "revision": "a7751c85ad79e49e727d97f7580d9583d38e265b",
+    "outcome": "approve",
+    "verifiedNativeCalls": 130,
+    "replayedVerifierChecks": 37,
+    "additionalCliChecks": 7,
+    "verifiedNewOssCandidates": 6,
+    "ordinaryTrials": 20,
+    "acceptedCleanTrials": 12,
+    "regression": { "harness": 31, "product": 63, "cucumberScenarios": 12, "cucumberSteps": 116, "native": 21 },
+    "limitations": [
+      "Adding supplemental evidence during directory-mode verification changed the snapshot. The original blocked visit is retained, and both required roles approved the final snapshot.",
+      "The final audit pass could not launch a fresh full suite from the external copy. The verifier established byte equality of all 55 tracked files with its earlier successfully tested copy.",
+      "A historical one-off unmerged-candidate extraction command was not saved. Its exact recorded tree was independently reconstructed and tested, and later replay evidence is labelled separately."
+    ]
+  },
+  "recordedAt": "2026-11-09T01:12:56.875295+00:00",
+  "runtimeRevision": "2610b295ee91fdb0e86cb5b78c0d8d2f5b3c3713",
+  "baselineRevision": "20cd01d0121f9a674b7559b1b63e491fd83572b0",
+  "model": {
+    "providerID": "openai",
+    "id": "gpt-6.1-sol-ultrafast",
+    "variant": "high"
+  },
+  "repetitions": 3,
+  "primaryCaseCount": 11,
+  "newHoldouts": [
+    "enumerate-wrapper",
+    "map-copy"
+  ],
+  "excludedPrimaryCases": [],
+  "rawReviewerCalls": 66,
+  "rawVerifierCalls": 37,
+  "nativeReviewerMessagesVerified": 341,
+  "nativeVerifierMessagesVerified": 269,
+  "protocolHashes": {
+    "review": "2af573b4e6234af52be235d4df84d2770047e1105a97698b9e2a30ca88e71bdd",
+    "verification": "2949c905f945813ad093e1d17690cc6ae2ad91681b7bd08436e99588ae4b2f59",
+    "routing": "bd679f76fbee98fd3de74b9fe4af23c4a2fa5c70a2c55581044c74c7dfc8268e"
+  },
+  "providerCostsFilled": false,
+  "variants": [
+    {
+      "primaryCases": 33,
+      "primaryPassed": 31,
+      "falseChanges": 2,
+      "missedDefects": 0,
+      "holdoutCases": 6,
+      "holdoutPassed": 6,
+      "reviewerCalls": 33,
+      "verifierCalls": 13,
+      "usage": {
+        "input": 209649,
+        "output": 34407,
+        "reasoning": 6221,
+        "cachedRead": 469632,
+        "cachedWrite": 0
+      },
+      "id": "baseline",
+      "systemPromptHash": "293106f637c9a2a6f49d2ee01fe3a5bd3384d239d0de80a8478e52b3f37190e8",
+      "reviewerLabelMatches": 31,
+      "reviewerTrueDefectDetections": 18,
+      "trueDefectCases": 18,
+      "elapsedSecondsSum": 753,
+      "cases": [
+        {
+          "id": "slice-wrapper",
+          "holdout": false,
+          "expected": "approve",
+          "reviewerOutcomes": [
+            "approve",
+            "changes",
+            "changes"
+          ],
+          "finalOutcomes": [
+            "approve",
+            "changes",
+            "changes"
+          ]
+        },
+        {
+          "id": "chain-wrapper",
+          "holdout": false,
+          "expected": "changes",
+          "reviewerOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ],
+          "finalOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ]
+        },
+        {
+          "id": "new-resumption-requirement",
+          "holdout": false,
+          "expected": "changes",
+          "reviewerOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ],
+          "finalOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ]
+        },
+        {
+          "id": "json-object-pairs",
+          "holdout": false,
+          "expected": "approve",
+          "reviewerOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ],
+          "finalOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ]
+        },
+        {
+          "id": "enumerable-clone",
+          "holdout": false,
+          "expected": "approve",
+          "reviewerOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ],
+          "finalOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ]
+        },
+        {
+          "id": "mapping-callback",
+          "holdout": false,
+          "expected": "changes",
+          "reviewerOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ],
+          "finalOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ]
+        },
+        {
+          "id": "null-compaction",
+          "holdout": false,
+          "expected": "changes",
+          "reviewerOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ],
+          "finalOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ]
+        },
+        {
+          "id": "cursor-wrapper",
+          "holdout": false,
+          "expected": "changes",
+          "reviewerOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ],
+          "finalOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ]
+        },
+        {
+          "id": "positive-id-compaction",
+          "holdout": false,
+          "expected": "approve",
+          "reviewerOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ],
+          "finalOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ]
+        },
+        {
+          "id": "enumerate-wrapper",
+          "holdout": true,
+          "expected": "changes",
+          "reviewerOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ],
+          "finalOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ]
+        },
+        {
+          "id": "map-copy",
+          "holdout": true,
+          "expected": "approve",
+          "reviewerOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ],
+          "finalOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ]
+        }
+      ]
+    },
+    {
+      "primaryCases": 33,
+      "primaryPassed": 33,
+      "falseChanges": 0,
+      "missedDefects": 0,
+      "holdoutCases": 6,
+      "holdoutPassed": 6,
+      "reviewerCalls": 33,
+      "verifierCalls": 24,
+      "usage": {
+        "input": 336658,
+        "output": 64691,
+        "reasoning": 16026,
+        "cachedRead": 829312,
+        "cachedWrite": 0
+      },
+      "id": "context-proof",
+      "systemPromptHash": "28601000dab18bb9dc7ba7159cf3b5044142f0a880e8cc5933db9dd08d24f0c4",
+      "reviewerLabelMatches": 24,
+      "reviewerTrueDefectDetections": 9,
+      "trueDefectCases": 18,
+      "elapsedSecondsSum": 1917,
+      "cases": [
+        {
+          "id": "slice-wrapper",
+          "holdout": false,
+          "expected": "approve",
+          "reviewerOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ],
+          "finalOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ]
+        },
+        {
+          "id": "chain-wrapper",
+          "holdout": false,
+          "expected": "changes",
+          "reviewerOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ],
+          "finalOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ]
+        },
+        {
+          "id": "new-resumption-requirement",
+          "holdout": false,
+          "expected": "changes",
+          "reviewerOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ],
+          "finalOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ]
+        },
+        {
+          "id": "json-object-pairs",
+          "holdout": false,
+          "expected": "approve",
+          "reviewerOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ],
+          "finalOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ]
+        },
+        {
+          "id": "enumerable-clone",
+          "holdout": false,
+          "expected": "approve",
+          "reviewerOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ],
+          "finalOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ]
+        },
+        {
+          "id": "mapping-callback",
+          "holdout": false,
+          "expected": "changes",
+          "reviewerOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ],
+          "finalOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ]
+        },
+        {
+          "id": "null-compaction",
+          "holdout": false,
+          "expected": "changes",
+          "reviewerOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ],
+          "finalOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ]
+        },
+        {
+          "id": "cursor-wrapper",
+          "holdout": false,
+          "expected": "changes",
+          "reviewerOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ],
+          "finalOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ]
+        },
+        {
+          "id": "positive-id-compaction",
+          "holdout": false,
+          "expected": "approve",
+          "reviewerOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ],
+          "finalOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ]
+        },
+        {
+          "id": "enumerate-wrapper",
+          "holdout": true,
+          "expected": "changes",
+          "reviewerOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ],
+          "finalOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ]
+        },
+        {
+          "id": "map-copy",
+          "holdout": true,
+          "expected": "approve",
+          "reviewerOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ],
+          "finalOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ]
+        }
+      ]
+    }
+  ],
+  "routeSafety": {
+    "nativeReviewerCalls": 27,
+    "nativeMessagesVerified": 168,
+    "passed": 27,
+    "outcomes": {
+      "blocked": 10,
+      "changes": 8,
+      "approve": 9
+    },
+    "routes": [
+      "review-only",
+      "verified-before",
+      "grouped-review"
+    ],
+    "cases": [
+      {
+        "id": "chain-wrapper-review-only",
+        "expectedOutcomes": [
+          "changes",
+          "blocked"
+        ],
+        "actualOutcomes": [
+          "blocked",
+          "blocked",
+          "blocked"
+        ]
+      },
+      {
+        "id": "chain-wrapper-verified-before",
+        "expectedOutcomes": [
+          "changes",
+          "blocked"
+        ],
+        "actualOutcomes": [
+          "blocked",
+          "blocked",
+          "blocked"
+        ]
+      },
+      {
+        "id": "chain-wrapper-grouped-review",
+        "expectedOutcomes": [
+          "changes",
+          "blocked"
+        ],
+        "actualOutcomes": [
+          "blocked",
+          "blocked",
+          "blocked"
+        ]
+      },
+      {
+        "id": "cursor-wrapper-review-only",
+        "expectedOutcomes": [
+          "changes",
+          "blocked"
+        ],
+        "actualOutcomes": [
+          "changes",
+          "changes",
+          "changes"
+        ]
+      },
+      {
+        "id": "cursor-wrapper-verified-before",
+        "expectedOutcomes": [
+          "changes",
+          "blocked"
+        ],
+        "actualOutcomes": [
+          "blocked",
+          "changes",
+          "changes"
+        ]
+      },
+      {
+        "id": "cursor-wrapper-grouped-review",
+        "expectedOutcomes": [
+          "changes",
+          "blocked"
+        ],
+        "actualOutcomes": [
+          "changes",
+          "changes",
+          "changes"
+        ]
+      },
+      {
+        "id": "positive-id-compaction-review-only",
+        "expectedOutcomes": [
+          "approve"
+        ],
+        "actualOutcomes": [
+          "approve",
+          "approve",
+          "approve"
+        ]
+      },
+      {
+        "id": "positive-id-compaction-verified-before",
+        "expectedOutcomes": [
+          "approve"
+        ],
+        "actualOutcomes": [
+          "approve",
+          "approve",
+          "approve"
+        ]
+      },
+      {
+        "id": "positive-id-compaction-grouped-review",
+        "expectedOutcomes": [
+          "approve"
+        ],
+        "actualOutcomes": [
+          "approve",
+          "approve",
+          "approve"
+        ]
+      }
+    ]
+  },
+  "regression": {
+    "revision": "9c36fe2d77916327ca956ec6d98ae61d9592a285",
+    "harness": 31,
+    "product": 63,
+    "cucumberScenarios": 12,
+    "cucumberSteps": 116,
+    "native": 21,
+    "workflowDefinitionSha256": "06710e96f2dd4430a648d308cd9239cb04671c44c546f74e8f86708dcae55359"
+  },
+  "limitations": [
+    "A small targeted corpus with three repetitions per case and two new held-out cases. No general statistical guarantee is inferred.",
+    "Primary scoring stops at the decision after review and, for approve, a fresh verifier. Worker repair cycles are outside the measured cost.",
+    "Routing checks are native reviewer calls with controlled routing contexts, including one explicitly synthetic prior verifier summary. They are not 27 complete CLI workflows.",
+    "Blocked prevents approval when a necessary execution check has no guaranteed immediate required verifier. It does not establish that a defect exists.",
+    "Elapsed seconds are summed per call and are not wall-clock completion time. Reasoning/cache tokens are reported separately and monetary costs are unavailable.",
+    "V3 is exploratory after post-hoc adjudication. V4 was stopped because its full engine archive exposed previous answer summaries. Neither is included in this primary comparison."
+  ]
+}
