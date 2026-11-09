@@ -301,6 +301,40 @@ test('steering a prepared repeated group keeps its fresh memory-disabled session
   assert.match(f.admitted[0].request.text, /Clarify the second group visit/);
 });
 
+for (const [kind, group, targets] of [
+  ['fixed', { members: ['review', 'secondReview'] }, ['review', 'secondReview']],
+  ['map', { member: 'review', items: [{ id: 'alpha' }, { id: 'beta' }] }, ['jobs/alpha', 'jobs/beta']],
+]) {
+  test(`two queued clarifications for a prepared ${kind} group preserve delivery order and the final node route`, async t => {
+    const definition = { task: 'Clarify two prepared group members', workspace: 'directory', entry: 'jobs',
+      nodes: { review: { role: 'reviewer' }, secondReview: { role: 'reviewer', required: kind === 'fixed' },
+        verify: { role: 'verifier' } },
+      groups: { jobs: group },
+      transitions: { jobs: { done: 'verify', changes: null, failed: null },
+        review: { approve: null, changes: null }, secondReview: { approve: null, changes: null },
+        verify: { approve: null, changes: null } } };
+    const f = await fixture(t, { definition, memory: false });
+    assert.equal(claimWorkflow(f.root, f.id, 'prepare-test'), true);
+    const state = f.state();
+    const prepared = prepareGroup(f.root, state, 'jobs');
+    state.visits.push(prepared);
+    updateWorkflow(f.root, state, 'prepare-test', true);
+    f.command('steer', targets[0], 'First queued clarification');
+    f.command('steer', targets[1], 'Second queued clarification');
+    await f.run();
+    const result = f.state();
+    assert.equal(result.status, 'failed');
+    assert.match(result.error, /verify/);
+    assert.deepEqual(result.controls.map(command => command.status), ['applied', 'applied']);
+    assert.deepEqual(result.visits.map(visit => visit.node), ['jobs', prepared.children[1].node]);
+    assert.equal(f.admitted.length, 3);
+    assert.match(f.admitted[0].request.text, /First queued clarification/);
+    assert.doesNotMatch(f.admitted[1].request.text, /Second queued clarification/);
+    assert.match(f.admitted[2].request.text, /Second queued clarification/);
+    assert.equal(f.admitted[1].sessionId, f.admitted[2].sessionId);
+  });
+}
+
 test('group admission retry preserves the first steering and delivers a second separately', async t => {
   const definition = { task: 'Lost group acknowledgement', workspace: 'directory', entry: 'jobs',
     nodes: { review: { role: 'reviewer' }, verify: { role: 'verifier' } },
