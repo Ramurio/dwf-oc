@@ -1,5 +1,6 @@
 {
   "schemaVersion": 1,
+  "candidateDisposition": "rejected_after_independent_audit",
   "recordedAt": "2026-11-09T00:45:19.281117+00:00",
   "runtimeRevision": "b94a9d5f62303a25728ab6a8cf83dee47ffae79c",
   "model": {
