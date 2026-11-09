@@ -1,0 +1,352 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-11-09T00:45:19.281117+00:00",
+  "runtimeRevision": "b94a9d5f62303a25728ab6a8cf83dee47ffae79c",
+  "model": {
+    "providerID": "openai",
+    "id": "gpt-6.1-sol-ultrafast",
+    "variant": "high"
+  },
+  "repetitions": 3,
+  "rawReviewerCalls": 60,
+  "rawVerifierCalls": 27,
+  "nativeAssistantMessagesVerified": 545,
+  "primaryCaseCount": 9,
+  "excludedPrimaryCases": [
+    "observed-chunk-refactor"
+  ],
+  "protocolHashes": {
+    "review": "3383a6ae073b62dc5ac9ba8735d451271e7d365d3b6fed1bc41ca2d6c10429fa",
+    "verification": "5da749c11937657522dd84ab580224b16a0c1767e953f46f28307657ec9312e6"
+  },
+  "providerCostsFilled": false,
+  "variants": [
+    {
+      "id": "baseline",
+      "systemPromptHash": "293106f637c9a2a6f49d2ee01fe3a5bd3384d239d0de80a8478e52b3f37190e8",
+      "primaryCases": 27,
+      "primaryPassed": 25,
+      "falseChanges": 2,
+      "missedDefects": 0,
+      "holdoutCases": 6,
+      "holdoutPassed": 6,
+      "reviewerCalls": 27,
+      "verifierCalls": 10,
+      "usage": {
+        "input": 181844,
+        "output": 32484,
+        "reasoning": 6500,
+        "cachedRead": 415872,
+        "cachedWrite": 0
+      },
+      "cases": [
+        {
+          "id": "slice-wrapper",
+          "holdout": false,
+          "expected": "approve",
+          "reviewerOutcomes": [
+            "changes",
+            "changes",
+            "approve"
+          ],
+          "finalOutcomes": [
+            "changes",
+            "changes",
+            "approve"
+          ]
+        },
+        {
+          "id": "chain-wrapper",
+          "holdout": false,
+          "expected": "changes",
+          "reviewerOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ],
+          "finalOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ]
+        },
+        {
+          "id": "new-resumption-requirement",
+          "holdout": false,
+          "expected": "changes",
+          "reviewerOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ],
+          "finalOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ]
+        },
+        {
+          "id": "json-object-pairs",
+          "holdout": false,
+          "expected": "approve",
+          "reviewerOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ],
+          "finalOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ]
+        },
+        {
+          "id": "enumerable-clone",
+          "holdout": false,
+          "expected": "approve",
+          "reviewerOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ],
+          "finalOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ]
+        },
+        {
+          "id": "mapping-callback",
+          "holdout": false,
+          "expected": "changes",
+          "reviewerOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ],
+          "finalOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ]
+        },
+        {
+          "id": "null-compaction",
+          "holdout": false,
+          "expected": "changes",
+          "reviewerOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ],
+          "finalOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ]
+        },
+        {
+          "id": "cursor-wrapper",
+          "holdout": true,
+          "expected": "changes",
+          "reviewerOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ],
+          "finalOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ]
+        },
+        {
+          "id": "positive-id-compaction",
+          "holdout": true,
+          "expected": "approve",
+          "reviewerOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ],
+          "finalOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "baseline-proof",
+      "systemPromptHash": "dad00f79034a9a8ed3ed002b0242f5e307927ce832c905997cd85db51eadc7f4",
+      "primaryCases": 27,
+      "primaryPassed": 27,
+      "falseChanges": 0,
+      "missedDefects": 0,
+      "holdoutCases": 6,
+      "holdoutPassed": 6,
+      "reviewerCalls": 27,
+      "verifierCalls": 14,
+      "usage": {
+        "input": 232163,
+        "output": 43930,
+        "reasoning": 15097,
+        "cachedRead": 609280,
+        "cachedWrite": 0
+      },
+      "cases": [
+        {
+          "id": "slice-wrapper",
+          "holdout": false,
+          "expected": "approve",
+          "reviewerOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ],
+          "finalOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ]
+        },
+        {
+          "id": "chain-wrapper",
+          "holdout": false,
+          "expected": "changes",
+          "reviewerOutcomes": [
+            "approve",
+            "changes",
+            "approve"
+          ],
+          "finalOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ]
+        },
+        {
+          "id": "new-resumption-requirement",
+          "holdout": false,
+          "expected": "changes",
+          "reviewerOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ],
+          "finalOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ]
+        },
+        {
+          "id": "json-object-pairs",
+          "holdout": false,
+          "expected": "approve",
+          "reviewerOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ],
+          "finalOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ]
+        },
+        {
+          "id": "enumerable-clone",
+          "holdout": false,
+          "expected": "approve",
+          "reviewerOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ],
+          "finalOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ]
+        },
+        {
+          "id": "mapping-callback",
+          "holdout": false,
+          "expected": "changes",
+          "reviewerOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ],
+          "finalOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ]
+        },
+        {
+          "id": "null-compaction",
+          "holdout": false,
+          "expected": "changes",
+          "reviewerOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ],
+          "finalOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ]
+        },
+        {
+          "id": "cursor-wrapper",
+          "holdout": true,
+          "expected": "changes",
+          "reviewerOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ],
+          "finalOutcomes": [
+            "changes",
+            "changes",
+            "changes"
+          ]
+        },
+        {
+          "id": "positive-id-compaction",
+          "holdout": true,
+          "expected": "approve",
+          "reviewerOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ],
+          "finalOutcomes": [
+            "approve",
+            "approve",
+            "approve"
+          ]
+        }
+      ]
+    }
+  ],
+  "regression": {
+    "harness": 30,
+    "product": 62,
+    "cucumberScenarios": 12,
+    "cucumberSteps": 116,
+    "native": 21,
+    "workflowDefinitionSha256": "b5bea5d0554e911fd9bf7e6d0c09bea041dbd7a3bc492fafe2bc16b80951f8be"
+  },
+  "limitations": [
+    "One full ichunked projection was excluded from the primary metric after independent verification exposed actual additional recovery differences. Its original label was too broad. All original inputs, labels, responses and probes are retained privately.",
+    "Two earlier exploratory pilots are excluded. They exposed iterator-construction timing and StopIteration subclass/value differences in the fixtures.",
+    "Only the path through review and verification is scored. Worker repair cycles and total task cost are outside this comparison.",
+    "Both variants used the same isolated environment. External documentation requests could fail under the model-only network boundary.",
+    "The corpus is small. The new held-out cases have three repetitions per variant. No general statistical guarantee is inferred."
+  ]
+}

@@ -240,6 +240,12 @@ const roleInstructions = {
     'Check for bugs, regressions and unmet requirements. For each finding, identify the location, triggering conditions and consequences. Support findings with evidence from the reviewed result.',
     'Return changes for defects that require correction, or approve when your review finds none.',
     'In summary, list actionable findings or explain what you reviewed and the basis for approval. State review limitations.',
+    'Before asserting a compatibility regression, establish how the baseline behaves on the same input. ' +
+      'For behavior controlled by a library, ground the relevant guarantee in available implementation, documentation, or an observed check. ' +
+      'Treat exception propagation and continuation after an exception as separate behaviors that each need evidence. ' +
+      'If the supplied evidence cannot establish the claimed baseline behavior, pass a specific verification question to the verifier. ' +
+      'A verification question may accompany approve when no defect is established. ' +
+      'Require changes for an explicit unmet requirement or a defect substantiated by the reviewed code.',
   ].join('\n'),
   verifier: [
     'Independently verify the result against the original requirements. Run the necessary checks and reproduce user scenarios with the available tools. Use temporary data. Preserve project files.',
