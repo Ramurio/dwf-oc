@@ -89,6 +89,39 @@ test('accepted steering recovers a malformed answer in the same session', async 
   assert.equal(state.controls[0].status, 'applied');
 });
 
+for (const [target, visits] of [
+  ['work', ['work', 'work', 'review', 'verify', 'finish']],
+  ['review', ['work', 'review', 'verify', 'finish']],
+  ['verify', ['work', 'verify', 'finish']],
+]) {
+  test(`steering to ${target} continues its route and retains mandatory approval checks`, async t => {
+    const definition = { task: 'Clarify the compatibility check', workspace: 'directory', entry: 'work',
+      nodes: { work: { role: 'worker' }, review: { role: 'reviewer' },
+        verify: { role: 'verifier' }, finish: { role: 'orchestrator' } },
+      transitions: { work: { done: 'review' }, review: { approve: 'verify', changes: 'work' },
+        verify: { approve: 'finish', changes: 'work' }, finish: { done: null } } };
+    const f = await fixture(t, { definition });
+    let queued = false;
+    io.read = async () => {
+      const state = f.state();
+      if (!queued) {
+        queued = true;
+        f.command('steer', target, 'Check the additional compatibility scenario');
+      }
+      const role = definition.nodes[state.visits.at(-1).node].role;
+      const outcome = ['reviewer', 'verifier'].includes(role) ? 'approve' : 'done';
+      return { outcome: { status: 'succeeded', result: JSON.stringify({ outcome, summary: 'Checked' }) } };
+    };
+    await f.run();
+    const state = f.state();
+    assert.deepEqual(state.visits.map(visit => visit.node), visits);
+    assert.equal(state.controls[0].status, 'applied');
+    assert.equal(state.status, target === 'verify' ? 'failed' : 'succeeded');
+    if (target === 'verify') assert.match(state.error, /review/);
+    if (target === 'work') assert.equal(state.visits[0].sessionId, state.visits[1].sessionId);
+  });
+}
+
 for (const kind of ['stop', 'steer']) {
   test(`${kind} queued while preparing a transition runs before the next admission`, async t => {
     const f = await fixture(t);
