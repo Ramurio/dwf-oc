@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "series": "steering-guidance",
-  "disposition": "pending_independent_audit",
-  "recordedAt": "2026-11-09T02:08:06.796499+00:00",
+  "disposition": "independently_approved",
+  "recordedAt": "2026-11-09T02:30:34.222799+00:00",
   "skillRevision": "17f9db49788fe968f0a3759bcffd1affd2df46eb",
   "model": {
     "providerID": "openai",
@@ -218,6 +218,35 @@
       "verification": "Fresh full npm test passed 31 harness, 69 product, 12 Cucumber scenarios / 116 steps and 21 native tests. The tester also passed 16 queue probes and nine crash/recovery replays. It checked 56 source hashes, 13 skill Git objects, unchanged trial rows and 16 historical verdicts.",
       "followUp": "Persist accepted mapped recipient data before discarding preparation, add bounded and native recovery regressions, and provide an immediate required verifier for reviewer execution handoffs in the next independent audit.",
       "archiveSha256": "4120ef107f08d6012d7599e5d1fd47e0f863b266828b8774eaae276698bf9bfd"
+    },
+    {
+      "reviewedRevision": "abb0c423c61d2a510049deb3dab86ce54aed3981",
+      "skillRevision": "b7ab4ce6517544e4890b44cd9ff56b204cf63c8c",
+      "archiveSha256": "27fb1dbb3e1d9d83756975b8a4ffde47af00b6c7a1b907b91e1d27a52d03e4e5",
+      "workflow": "3e45e7e4-4a0c-4984-a7ea-3cc41821d5e8",
+      "disposition": "blocked",
+      "workflowStatus": "failed",
+      "finding": "The evidence verifier finished its code and provenance checks but could not inspect the current workflow state outside its workspace. It attempted to verify its own future terminal status.",
+      "verification": "Three participants approved. The verifier completed 101 evidence checks and 22 controller tests before returning blocked for the external workflow-state check.",
+      "followUp": "The lead clarified that the external tester observes actual terminal status after participants finish. The tester retained this failed workflow and created a second workflow with four fresh participant sessions on the same source revision."
+    },
+    {
+      "reviewedRevision": "abb0c423c61d2a510049deb3dab86ce54aed3981",
+      "skillRevision": "b7ab4ce6517544e4890b44cd9ff56b204cf63c8c",
+      "archiveSha256": "27fb1dbb3e1d9d83756975b8a4ffde47af00b6c7a1b907b91e1d27a52d03e4e5",
+      "workflow": "ab6fba0e-ed98-4b0d-aee4-d2f55f68a43f",
+      "disposition": "approve",
+      "workflowStatus": "succeeded",
+      "snapshot": "623d938ecd10e2bae3ca65f03a2996493c61247a",
+      "verification": "Four fresh participants approved the same snapshot. Both verifiers and the external tester independently completed the full suite with 31 harness, 72 product, 12 Cucumber scenarios / 116 steps and 22 native tests. The external tester then confirmed actual succeeded, merge:false and unchanged source files.",
+      "provenance": "56 source hashes, 13 skill Git objects and both path chains were checked. Controlled trial rows and the ordinary benchmark summary stayed unchanged.",
+      "additionalChecks": "Independent bounded queue checks, negative controls, repeated crash tests and native checks of an established session with the current map item passed.",
+      "limitations": [
+        "The pre-admission boundary is seeded with real prepareGroup. A naturally timed public-start race was not measured.",
+        "One verifier initially interrupted a full run with a one-second shell timeout and used an invalid cross-run session fixture. Both attempts are retained and excluded from passing results. Corrected complete runs and same-run native session checks passed.",
+        "The lead supplied a scope clarification between the two workflows. The first failed verdict remains unchanged, and the second workflow uses new participants.",
+        "The historical OSS corpus and unchanged usage counters were not rerun in this audit."
+      ]
     }
   ]
 }
