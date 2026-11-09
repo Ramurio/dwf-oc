@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "recordedAt": "2026-11-09T02:52:28.608333+00:00",
+  "recordedAt": "2026-11-09T12:04:14.890974+00:00",
   "model": {
     "provider": "openai",
     "modelId": "gpt-6.1-sol-ultrafast",
@@ -1048,6 +1048,159 @@
       },
       "usageComplete": true,
       "note": "One clean workflow merged. Go 1.27.3 candidate suites passed 27 top-level tests. 9 hidden behavioral tests and 20 task-compatible original tests passed, each with and without -race. Raw original tests report 19 passes and one top-level failure in TestPanic. Two failing subtests reject the newly supported strings.Compare signature. Two additional failing subtests require the old nil-function diagnostic. Nil functions still panic. A common four-case expectation adjustment was qualified against the baseline and reference after the first evaluations. Raw failures remain recorded. Four native verdicts were revalidated exactly. The declared Go 1.13 minimum was not executed."
+    },
+    {
+      "attempt": "2df6d82d-405b-471e-bb93-3262d111c170",
+      "project": "inih",
+      "outcome": "reference_disqualified",
+      "runtimeRevision": "6052cdf3eda784a08573256337c6d8077b6ffa3c",
+      "baselineRevision": "7914ad7f4f4320ae42bb0f9588a3a8be4fb9679e",
+      "baselineTree": "0635bfd96f7d6ebb1c879cb5fc023ed2c796ca30",
+      "skillHash": "f1845a0f7d081bf2c956d55fa8868d844bd752b9e936f1687216a14ad837c777",
+      "promptHash": "3f754a7768b832cf3dc2b54e10ff927189bbf486aeb305f3c9558ea96311f940",
+      "boundaryCheckPassed": true,
+      "workflows": [
+        {
+          "id": "3ab0d39b-6903-443b-8a2b-e2f9d8f5359d",
+          "status": "succeeded",
+          "commit": "2edc081d367921ff4bf7dfbc8cc54769221dbcef"
+        }
+      ],
+      "externalCheckExitCodes": {
+        "candidate": 0,
+        "hidden": 0,
+        "task-compatible-original-tests": 0
+      },
+      "externalCheckCounts": {
+        "candidateProfiles": 30,
+        "hiddenProfiles": 18,
+        "hiddenAssertions": 864,
+        "taskCompatibleOriginalProfiles": 30,
+        "rawOriginalMatches": 20
+      },
+      "participantUsage": {
+        "input": 142885,
+        "output": 21826,
+        "reasoning": 10738,
+        "cachedRead": 1447552,
+        "cachedWrite": 0,
+        "sessions": 4,
+        "providerCostFilled": false
+      },
+      "testerUsage": {
+        "input": 31069,
+        "output": 1820,
+        "reasoning": 435,
+        "cachedRead": 136576,
+        "cachedWrite": 0,
+        "sessions": 1,
+        "providerCostFilled": false
+      },
+      "usageComplete": true,
+      "nativeVerdictCount": 6,
+      "note": "The native tester and its single workflow completed and integrated into the isolated test project. Final reviewer and verifier approvals match the integrated tree; all recorded verdicts were revalidated. Finalization reran the frozen external corpus, including ordinary and ASan/UBSan builds. Five golden expectations were qualified before admission. A separate independent audit rejected the reference for the full task after additional byte-input checks exposed loss of a following line and an invalid memory access. This diagnostic trial is excluded from accepted clean repeats despite passing the original external corpus. Meson and leak detection were outside these external checks."
+    },
+    {
+      "attempt": "3584b694-1c31-4a22-b3a2-531e810638ce",
+      "project": "inih",
+      "outcome": "reference_disqualified",
+      "runtimeRevision": "6052cdf3eda784a08573256337c6d8077b6ffa3c",
+      "baselineRevision": "7914ad7f4f4320ae42bb0f9588a3a8be4fb9679e",
+      "baselineTree": "0635bfd96f7d6ebb1c879cb5fc023ed2c796ca30",
+      "skillHash": "f1845a0f7d081bf2c956d55fa8868d844bd752b9e936f1687216a14ad837c777",
+      "promptHash": "3f754a7768b832cf3dc2b54e10ff927189bbf486aeb305f3c9558ea96311f940",
+      "boundaryCheckPassed": true,
+      "workflows": [
+        {
+          "id": "6d1a1c6d-5b67-44d1-8ce4-ebbfa8049409",
+          "status": "succeeded",
+          "commit": "d8bfb9dada1de313e80c6c23004b4775af8e8f72"
+        }
+      ],
+      "externalCheckExitCodes": {
+        "candidate": 0,
+        "hidden": 0,
+        "task-compatible-original-tests": 0
+      },
+      "externalCheckCounts": {
+        "candidateProfiles": 30,
+        "hiddenProfiles": 18,
+        "hiddenAssertions": 864,
+        "taskCompatibleOriginalProfiles": 30,
+        "rawOriginalMatches": 20
+      },
+      "participantUsage": {
+        "input": 131663,
+        "output": 16906,
+        "reasoning": 7329,
+        "cachedRead": 1211904,
+        "cachedWrite": 0,
+        "sessions": 4,
+        "providerCostFilled": false
+      },
+      "testerUsage": {
+        "input": 40317,
+        "output": 1980,
+        "reasoning": 744,
+        "cachedRead": 186368,
+        "cachedWrite": 0,
+        "sessions": 1,
+        "providerCostFilled": false
+      },
+      "usageComplete": true,
+      "nativeVerdictCount": 6,
+      "note": "The native tester and its single workflow completed and integrated into the isolated test project. Final reviewer and verifier approvals match the integrated tree; all recorded verdicts were revalidated. Finalization reran the frozen external corpus, including ordinary and ASan/UBSan builds. Five golden expectations were qualified before admission. A separate independent audit rejected the reference for the full task after additional byte-input checks exposed loss of a following line and an invalid memory access. This diagnostic trial is excluded from accepted clean repeats despite passing the original external corpus. Meson and leak detection were outside these external checks."
+    },
+    {
+      "attempt": "6990d9aa-39a8-4bc4-ae9f-f76e8c8b69c5",
+      "project": "inih",
+      "outcome": "reference_disqualified",
+      "runtimeRevision": "6052cdf3eda784a08573256337c6d8077b6ffa3c",
+      "baselineRevision": "7914ad7f4f4320ae42bb0f9588a3a8be4fb9679e",
+      "baselineTree": "0635bfd96f7d6ebb1c879cb5fc023ed2c796ca30",
+      "skillHash": "f1845a0f7d081bf2c956d55fa8868d844bd752b9e936f1687216a14ad837c777",
+      "promptHash": "3f754a7768b832cf3dc2b54e10ff927189bbf486aeb305f3c9558ea96311f940",
+      "boundaryCheckPassed": true,
+      "workflows": [
+        {
+          "id": "78bcd23d-d3f6-46c7-937c-b2adbddebfc2",
+          "status": "succeeded",
+          "commit": "4e4a2fa725b9e23d21ff84fa9032e1360718263f"
+        }
+      ],
+      "externalCheckExitCodes": {
+        "candidate": 0,
+        "hidden": 0,
+        "task-compatible-original-tests": 0
+      },
+      "externalCheckCounts": {
+        "candidateProfiles": 30,
+        "hiddenProfiles": 18,
+        "hiddenAssertions": 864,
+        "taskCompatibleOriginalProfiles": 30,
+        "rawOriginalMatches": 20
+      },
+      "participantUsage": {
+        "input": 124621,
+        "output": 18924,
+        "reasoning": 7379,
+        "cachedRead": 886400,
+        "cachedWrite": 0,
+        "sessions": 4,
+        "providerCostFilled": false
+      },
+      "testerUsage": {
+        "input": 41685,
+        "output": 2177,
+        "reasoning": 766,
+        "cachedRead": 201088,
+        "cachedWrite": 0,
+        "sessions": 1,
+        "providerCostFilled": false
+      },
+      "usageComplete": true,
+      "nativeVerdictCount": 4,
+      "note": "The native tester and its single workflow completed and integrated into the isolated test project. Final reviewer and verifier approvals match the integrated tree; all recorded verdicts were revalidated. Finalization reran the frozen external corpus, including ordinary and ASan/UBSan builds. Five golden expectations were qualified before admission. A separate independent audit rejected the reference for the full task after additional byte-input checks exposed loss of a following line and an invalid memory access. This diagnostic trial is excluded from accepted clean repeats despite passing the original external corpus. Meson and leak detection were outside these external checks."
     }
   ],
   "rejectedQualification": [
@@ -1059,6 +1212,40 @@
       "project": "more-itertools",
       "case": "ichunked-feature-pr292",
       "reason": "The reference passed the initial functional qualification but failed added checks for bounded memory retention. Its otherwise successful trial is retained as diagnostic evidence and excluded from accepted repeats. The subsequent PR587 memory-fix case has a separate baseline and reference."
+    },
+    {
+      "project": "inih",
+      "case": "long-lines-pr188",
+      "baseline": "7914ad7f4f4320ae42bb0f9588a3a8be4fb9679e",
+      "reference": "23acf2dd5af5287b0f170908c607560ab3995dae",
+      "reason": "The reference passed the frozen text-only qualification but a later independent audit found loss of the following physical line and invalid memory access for additional byte inputs. The three model trials remain diagnostic and are excluded from accepted clean repeats.",
+      "initialQualification": {
+        "originalBeforeRaw": 30,
+        "originalBeforeTaskCompatible": 20,
+        "originalReferenceRaw": 20,
+        "originalReferenceTaskCompatible": 30,
+        "originalRunsPerVersion": 30,
+        "hiddenBeforePass": 396,
+        "hiddenReferencePass": 864,
+        "hiddenChecksPerVersion": 864,
+        "hiddenBuildProfiles": 9,
+        "inputCases": 16,
+        "publicInputAPIs": 3,
+        "sanitizers": [
+          "address",
+          "undefined"
+        ]
+      },
+      "independentAudit": {
+        "workflow": "acf20513-0296-4645-a25f-23308838f4a6",
+        "status": "succeeded",
+        "referenceEligible": false,
+        "probeRuns": 24,
+        "textReferenceAssertions": 576,
+        "additionalControlAssertions": 126,
+        "goldenComparisons": 20,
+        "originalCorpusPreserved": true
+      }
     }
   ],
   "qualificationAdjustments": [
@@ -1170,6 +1357,40 @@
         }
       },
       "scope": "Only external original-test expectations were adjusted. Participant implementations and the nine hidden checks were unchanged."
+    },
+    {
+      "project": "inih",
+      "baseline": "7914ad7f4f4320ae42bb0f9588a3a8be4fb9679e",
+      "postHoc": false,
+      "changes": [
+        {
+          "path": "tests/baseline_multi_max_line.txt",
+          "beforeSha256": "66ea775b860ef61e94e2135071988235c58708048da0c80e42f0cd37973ab410",
+          "fixtureSha256": "0538c5b60cd2627408a5103e81eb29d82a300fce940f798fee0257150d743914"
+        },
+        {
+          "path": "tests/baseline_string.txt",
+          "beforeSha256": "f0aaab744bae3887d344fa1b9c46c89c89c23a93fd3dd2a3d32fbaf12f102748",
+          "fixtureSha256": "9bfb0de2d7e323a6502640f31a72a7473ada83c791b188187c429ee714d9fd40"
+        },
+        {
+          "path": "tests/baseline_heap_max_line.txt",
+          "beforeSha256": "66ea775b860ef61e94e2135071988235c58708048da0c80e42f0cd37973ab410",
+          "fixtureSha256": "0538c5b60cd2627408a5103e81eb29d82a300fce940f798fee0257150d743914"
+        },
+        {
+          "path": "tests/baseline_heap_realloc_max_line.txt",
+          "beforeSha256": "66ea775b860ef61e94e2135071988235c58708048da0c80e42f0cd37973ab410",
+          "fixtureSha256": "0538c5b60cd2627408a5103e81eb29d82a300fce940f798fee0257150d743914"
+        },
+        {
+          "path": "tests/baseline_heap_string.txt",
+          "beforeSha256": "f0aaab744bae3887d344fa1b9c46c89c89c23a93fd3dd2a3d32fbaf12f102748",
+          "fixtureSha256": "9bfb0de2d7e323a6502640f31a72a7473ada83c791b188187c429ee714d9fd40"
+        }
+      ],
+      "reason": "Five golden outputs encode discarded line fragments and chunk-based error positions. Reference outputs match the explicitly requested physical-line behavior. Test sources and input files are identical.",
+      "scope": "Five external golden expectations were qualified before the three attempts. The frozen text corpus was retained separately from the later byte-input investigation."
     }
   ]
 }
