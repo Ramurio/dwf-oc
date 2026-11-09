@@ -383,7 +383,8 @@ Then('workflow завершает оба цикла доработки в исх
     ({ node, sessionId, revision, result })), final.history.slice(0, -1),
   'Фактический модельный запрос orchestrator должен содержать каждый завершённый этап');
   const received = (await events(this)).filter(event => event.type === 'received');
-  assert.equal(received.length, 15 + Object.keys(outcomes).reduce((count, role) => count + roleSkills[role].length, 0));
+  const roles = new Set(Object.values((await readJson(this.workflowFile)).nodes).map(node => node.role));
+  assert.equal(received.length, 15 + [...roles].reduce((count, role) => count + roleSkills[role].length, 0));
   received.forEach(assertControlledHigh);
   await assertSkillCatalog(this);
   const before = await events(this);

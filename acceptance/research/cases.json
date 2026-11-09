@@ -1,0 +1,35 @@
+{
+  "quantization": {
+    "split": "development",
+    "cutoff": "2025-12-31",
+    "question": "Сравни GPTQ, AWQ и QServe для GPU-инференса больших языковых моделей. Что именно квантуется, как устроено сохранение качества, и при каких нагрузках и настройках можно ожидать уменьшения памяти или ускорения? Отдели измерения ядра от сквозного сервинга, сопоставимые числа от несопоставимых. Сформулируй выводы для малой очереди и для пакетной нагрузки.",
+    "sources": [
+      {"id":"gptq","format":"pdf","url":"https://arxiv.org/pdf/2210.17323v2","reference":"https://arxiv.org/abs/2210.17323v2","license":"CC BY 4.0"},
+      {"id":"awq","format":"html","url":"https://arxiv.org/html/2306.00978v5","reference":"https://arxiv.org/abs/2306.00978v5","license":"arXiv nonexclusive-distrib 1.0"},
+      {"id":"qserve","format":"html","url":"https://arxiv.org/html/2405.04532v3","reference":"https://arxiv.org/abs/2405.04532v3","license":"arXiv nonexclusive-distrib 1.0"},
+      {"id":"marlin","format":"pdf","url":"https://arxiv.org/pdf/2408.11743v1","reference":"https://arxiv.org/abs/2408.11743v1","license":"CC BY 4.0"}
+    ]
+  },
+  "git-history": {
+    "split": "development",
+    "cutoff": "2025-12-31",
+    "question": "Объясни для Git 2.48.0, как числа поколения в commit-graph и Bloom-фильтры изменённых путей ускоряют разные запросы истории. Сравни проверку достижимости и git log -- <path>. Разбери границы применимости для merge, ложного срабатывания, отсутствующего фильтра и смешанных версий записей. Предложи проверяемый план сравнения скорости без изменения выдачи команд.",
+    "sources": [
+      {"id":"graph-design","format":"text","url":"https://raw.githubusercontent.com/git/git/fbe8d3079d4a96aeb4e4529cc93cc0043b759a05/Documentation/technical/commit-graph.txt","reference":"https://github.com/git/git/blob/fbe8d3079d4a96aeb4e4529cc93cc0043b759a05/Documentation/technical/commit-graph.txt","license":"GPL-2.0-only"},
+      {"id":"graph-format","format":"text","url":"https://raw.githubusercontent.com/git/git/fbe8d3079d4a96aeb4e4529cc93cc0043b759a05/Documentation/gitformat-commit-graph.txt","reference":"https://github.com/git/git/blob/fbe8d3079d4a96aeb4e4529cc93cc0043b759a05/Documentation/gitformat-commit-graph.txt","license":"GPL-2.0-only"},
+      {"id":"graph-cli","format":"text","url":"https://raw.githubusercontent.com/git/git/fbe8d3079d4a96aeb4e4529cc93cc0043b759a05/Documentation/git-commit-graph.txt","reference":"https://github.com/git/git/blob/fbe8d3079d4a96aeb4e4529cc93cc0043b759a05/Documentation/git-commit-graph.txt","license":"GPL-2.0-only"},
+      {"id":"bloom-tests","format":"text","url":"https://raw.githubusercontent.com/git/git/fbe8d3079d4a96aeb4e4529cc93cc0043b759a05/t/t4216-log-bloom.sh","reference":"https://github.com/git/git/blob/fbe8d3079d4a96aeb4e4529cc93cc0043b759a05/t/t4216-log-bloom.sh","license":"GPL-2.0-only"}
+    ]
+  },
+  "postgres-backup": {
+    "split": "holdout",
+    "cutoff": "2025-12-31",
+    "question": "Объясни на примере PostgreSQL 17, как работает цепочка из полной и двух инкрементальных физических резервных копий. Что требуется при создании и восстановлении, чем WAL summaries отличаются от WAL для PITR, что произойдёт при пропуске одного элемента цепочки? Предложи план проверки восстановления и объясни, какие выводы о скорости и надёжности можно сделать из документации.",
+    "sources": [
+      {"id":"backup","format":"text","url":"https://raw.githubusercontent.com/postgres/postgres/d7ec59a63d745ba74fba0e280bbf85dc6d1caa3e/doc/src/sgml/backup.sgml","reference":"https://www.postgresql.org/docs/17/continuous-archiving.html","license":"PostgreSQL License"},
+      {"id":"basebackup","format":"text","url":"https://raw.githubusercontent.com/postgres/postgres/d7ec59a63d745ba74fba0e280bbf85dc6d1caa3e/doc/src/sgml/ref/pg_basebackup.sgml","reference":"https://www.postgresql.org/docs/17/app-pgbasebackup.html","license":"PostgreSQL License"},
+      {"id":"combinebackup","format":"text","url":"https://raw.githubusercontent.com/postgres/postgres/d7ec59a63d745ba74fba0e280bbf85dc6d1caa3e/doc/src/sgml/ref/pg_combinebackup.sgml","reference":"https://www.postgresql.org/docs/17/app-pgcombinebackup.html","license":"PostgreSQL License"},
+      {"id":"verifybackup","format":"text","url":"https://raw.githubusercontent.com/postgres/postgres/d7ec59a63d745ba74fba0e280bbf85dc6d1caa3e/doc/src/sgml/ref/pg_verifybackup.sgml","reference":"https://www.postgresql.org/docs/17/app-pgverifybackup.html","license":"PostgreSQL License"}
+    ]
+  }
+}

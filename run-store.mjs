@@ -165,6 +165,9 @@ export function queueWorkflowCommand(root, id, kind, node, text) {
     const stopped = state.controls?.find(command => command.kind === 'stop');
     if (kind === 'stop' && stopped) return stopped;
     if (state.status !== 'running' || state.finalizing || stopped) throw publicError('Workflow уже завершает работу и не принимает команды.');
+    if (kind === 'steer' && state.definition.nodes[state.definition.entry]?.role === 'scientist') {
+      throw publicError('Research-mid выполняет исходное поручение целиком. Используйте stop и новый запуск для изменения задачи.');
+    }
     const knownParticipant = Object.hasOwn(state.definition.nodes, node) ||
       state.visits.flatMap(visit => visit.children ?? [visit]).some(visit => visit.participant === node);
     if (kind === 'steer' && (!knownParticipant ||

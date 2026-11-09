@@ -50,10 +50,13 @@ async function serviceConfig(directory, participants = {}) {
     await writeOnce(join(target, 'SKILL.md'), skill.content);
   }
   // Retain immutable skill versions so sessions created by earlier releases can finish.
+  const skillNames = new Set([...bundledSkills.map(skill => skill.name), 'tdd', 'diagnosing-bugs', 'codebase-design']);
   const skillIds = new Set();
   for (const source of skillDirectories) {
     const ids = await readdir(source).catch(error => { if (error.code === 'ENOENT') return []; throw error; });
-    for (const id of ids) if (/^dwf-(code-work|tdd|diagnosing-bugs|codebase-design|code-review|code-verify|workflow-summary|task-planning)-[a-f0-9]{16}$/.test(id)) skillIds.add(id);
+    for (const id of ids) {
+      if (skillNames.has(id.match(/^dwf-(.+)-[a-f0-9]{16}$/)?.[1])) skillIds.add(id);
+    }
   }
   const skillPolicies = [{ action: 'skill.use', resource: '*', effect: 'deny' },
     ...[...skillIds].sort().map(id => ({ action: 'skill.use', resource: id, effect: 'allow' }))];

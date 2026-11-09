@@ -15,9 +15,34 @@ import { claimWorkflow, createWorkflow, getWorkflow, updateWorkflow } from '../r
 import { prepareGroup } from '../workflow-groups.mjs';
 import { captureStopSessions, outcomeFromMessages, readExecution, stopSessions } from '../opencode-runtime.mjs';
 import { inspectTester } from './tester.mjs';
+import { validateWorkflow, participantSettings } from '../workflow-definition.mjs';
 
 const cli = [process.execPath, fileURLToPath(new URL('../dwf.mjs', import.meta.url))];
 const verdict = (outcome = 'approve') => JSON.stringify({ outcome, summary: `Observed ${outcome}` });
+
+async function researchDefinition() {
+  return JSON.parse(await readFile(new URL('../workflows/research-mid.json', import.meta.url), 'utf8'));
+}
+
+test('research-mid validates its structure and defaults to standard Sol in every role', async () => {
+  const definition = await researchDefinition();
+  assert.deepEqual(validateWorkflow(definition), definition);
+  for (const node of Object.keys(definition.nodes)) {
+    const settings = participantSettings(definition, node);
+    assert.deepEqual(settings.model, { provider: 'openai', modelId: 'gpt-6.1-sol' });
+    assert.equal(settings.reasoning, 'high');
+  }
+  for (const change of [
+    value => { value.nodes.scientist.memory = false; },
+    value => { value.nodes.committee.memory = true; },
+    value => { value.transitions.researchers.done = 'committee'; },
+    value => { value.groups.scouts.itemsFrom = 'committee'; },
+  ]) {
+    const value = structuredClone(definition);
+    change(value);
+    assert.throws(() => validateWorkflow(value), /Workflow:/);
+  }
+});
 
 function expireWorkflowLease(sandbox) {
   const db = new DatabaseSync(join(sandbox.state, 'dwf.sqlite'));
@@ -73,6 +98,70 @@ async function fixture(t, definition, reply, directory = false, overrides = {}) 
       return state.status !== 'running' && state;
     }, 30000, 'workflow completion'),
   };
+}
+
+for (const approve of [true, false]) {
+  test(`research-mid returns the exact report on ${approve ? 'approval' : 'exhaustion of its shared round limit'}`,
+    { timeout: 60000 }, async t => {
+      const definition = await researchDefinition();
+      definition.task = 'Compare the documented conditions of the methods.';
+      definition.nodes.scientist.instructions = 'scientist-only-note';
+      definition.nodes.committee.instructions = 'committee-only-note';
+      for (const node of Object.values(definition.nodes)) {
+        node.model = { provider: 'dwf-acceptance', modelId: 'planner' };
+      }
+      const items = ids => ids.map(id => ({ id, instructions: `Investigate ${id}` }));
+      const sandbox = await fixture(t, definition, ({ prompt }) => {
+        if (prompt.includes('Элемент параллельной группы:')) {
+          const item = JSON.parse(prompt.split('Элемент параллельной группы:\n').at(-1));
+          return JSON.stringify({ outcome: 'done', summary: `Evidence for ${item.id}` });
+        }
+        if (prompt.startsWith('Original research request\n')) return verdict(approve ? 'approve' : 'changes');
+        const rounds = Number(prompt.match(/Completed research rounds: (\d+)/)[1]);
+        if (prompt.includes('Allowed outcomes this turn: scout')) {
+          return JSON.stringify({ outcome: 'scout', summary: 'Two source maps', items: items(['foundations', 'recent']) });
+        }
+        const batch = prompt.includes('Evidence for branch-a');
+        if (batch && (rounds === 1 || rounds === 3)) {
+          return JSON.stringify({ outcome: 'report', summary: `Exact report for round ${rounds}.` });
+        }
+        return JSON.stringify({ outcome: 'research', summary: 'Four questions',
+          items: items(['branch-a', 'branch-b', 'branch-c', 'branch-d']) });
+      }, true);
+      await sandbox.release();
+      const result = await sandbox.finish();
+      assert.equal(result.status, 'succeeded', result.error);
+      assert.deepEqual(result.visits.map(visit => visit.node), approve ?
+        ['scientist', 'scouts', 'scientist', 'researchers', 'scientist', 'committee'] :
+        ['scientist', 'scouts', 'scientist', 'researchers', 'scientist', 'committee',
+          'scientist', 'researchers', 'scientist', 'researchers', 'scientist', 'committee']);
+      const scientist = result.visits.filter(visit => visit.node === 'scientist');
+      const reviews = result.visits.filter(visit => visit.node === 'committee');
+      const groups = result.visits.filter(visit => visit.children);
+      assert.equal(new Set(scientist.map(visit => visit.sessionId)).size, 1);
+      assert.equal(new Set(reviews.map(visit => visit.sessionId)).size, reviews.length);
+      assert.deepEqual(groups.map(visit => visit.children.length), approve ? [2, 4] : [2, 4, 4, 4]);
+      for (const group of groups) {
+        const prompt = result.visits[result.visits.indexOf(group) + 1].prompt;
+        for (const child of group.children) {
+          assert(prompt.includes(child.verdict.summary));
+          assert(!child.prompt.includes('"items":'));
+        }
+      }
+      const calls = (await sandbox.events()).filter(event => event.type === 'received');
+      assert(calls.filter(event => scientist.some(visit => visit.sessionId === event.providerSessionId))
+        .every(event => !JSON.stringify(event).includes('committee-only-note') &&
+          !event.systemTexts.join('').includes('Review the submitted research report') &&
+          !event.tools.some(tool => /read|shell|webfetch/.test(tool.function?.name))));
+      for (const review of reviews) {
+        const report = result.visits[result.visits.indexOf(review) - 1].verdict.summary;
+        assert.equal(review.prompt, `Original research request\n${definition.task}\n\nSubmitted report\n${report}`);
+      }
+      const lastReport = scientist.at(-1).verdict.summary;
+      assert.deepEqual(result.result, approve ? { outcome: 'approve', summary: lastReport } :
+        { outcome: 'changes', summary: lastReport +
+          '\n\n## Замечания комитета\n\nСтатус исследования — требуется доработка.\n\nObserved changes' });
+    });
 }
 
 test('public CLI freezes per-node model, reasoning, tools, skills and memory', { timeout: 60000 }, async t => {

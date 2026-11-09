@@ -18,9 +18,12 @@ export async function requestEvidence(request, model, sessionID, callId) {
   const messages = body.input ?? body.messages ?? [];
   const prompt = typeof messages === 'string' ? messages : messages
     .filter(message => message.role === 'user').map(message => contentText(message.content)).join('\n');
+  const tools = Array.isArray(messages) ? messages.flatMap(message =>
+    message.type === 'function_call' ? [{ id: message.call_id, name: message.name }] :
+      (message.tool_calls ?? []).map(call => ({ id: call.id, name: call.function?.name }))) : [];
   return { type: 'received', callId, providerSessionId: sessionID, prompt, promptHash: hash(prompt),
     messagesHash: hash(JSON.stringify(messages)), model: { provider: model.providerID, modelId: body.model },
-    reasoning: body.reasoning?.effort ?? body.reasoning_effort, serviceTier: body.service_tier,
+    reasoning: body.reasoning?.effort ?? body.reasoning_effort, serviceTier: body.service_tier, tools,
     limits: Object.fromEntries(['max_tokens', 'max_completion_tokens', 'max_output_tokens']
       .filter(key => typeof body[key] === 'number').map(key => [key, body[key]])) };
 }
@@ -51,6 +54,8 @@ function responseEvents(record, call) {
         finished = true;
         record({ type: 'completed', callId: call.callId, model: call.model, stopReason: reason, text,
           serviceTier: event.response?.service_tier, streamMs: lastTextAt - firstTextAt,
+          inputTokens: event.response?.usage?.input_tokens,
+          cachedInputTokens: event.response?.usage?.input_tokens_details?.cached_tokens,
           outputTokens: event.response?.usage?.output_tokens,
           reasoningTokens: event.response?.usage?.output_tokens_details?.reasoning_tokens });
       }

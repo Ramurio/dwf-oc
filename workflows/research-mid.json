@@ -1,0 +1,23 @@
+{
+  "task": "Укажите тему исследования при запуске пресета.",
+  "workspace": "directory",
+  "entry": "scientist",
+  "nodes": {
+    "scientist": {"role": "scientist"},
+    "scout": {"role": "scout"},
+    "researcher": {"role": "researcher", "memory": false},
+    "committee": {"role": "committee"}
+  },
+  "groups": {
+    "scouts": {"member": "scout", "itemsFrom": "scientist"},
+    "researchers": {"member": "researcher", "itemsFrom": "scientist"}
+  },
+  "transitions": {
+    "scientist": {"scout": "scouts", "research": "researchers", "report": "committee"},
+    "scout": {"done": null},
+    "researcher": {"done": null},
+    "scouts": {"done": "scientist", "changes": null, "failed": null},
+    "researchers": {"done": "scientist", "changes": null, "failed": null},
+    "committee": {"approve": null, "changes": "scientist"}
+  }
+}

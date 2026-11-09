@@ -136,9 +136,10 @@ export async function admitTester(client, attempt) {
 export async function checkTester(client, attempt) {
   const location = { directory: attempt.workspace };
   const available = await client.model.list({ location });
-  if (!available.data.some(item => item.providerID === model.providerID && item.id === model.id &&
-    item.enabled && item.variants.some(variant => variant.id === model.variant))) {
-    throw new Error('Тестеру недоступна GPT-6.1 Sol Ultrafast с reasoning high.');
+  const selected = attempt.model ?? model;
+  if (!available.data.some(item => item.providerID === selected.providerID && item.id === selected.id &&
+    item.enabled && item.variants.some(variant => variant.id === selected.variant))) {
+    throw new Error(`Тестеру недоступна ${selected.providerID}/${selected.id} с reasoning ${selected.variant}.`);
   }
   const deadline = Date.now() + 15000;
   for (;;) {

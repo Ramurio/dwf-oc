@@ -17,7 +17,7 @@ const projectDirectory = fileURLToPath(new URL('../', import.meta.url));
 const model = { providerID: 'openai', id: 'gpt-6.1-sol-ultrafast', variant: 'high' };
 const runtimeFiles = ['dwf.mjs', 'workflow-definition.mjs', 'workflow-runtime.mjs', 'workflow-git.mjs',
   'run-store.mjs', 'opencode-runtime.mjs', 'role-skills.mjs', 'skills', 'package.json', 'package-lock.json',
-  'acceptance/tester.mjs', 'workflow-groups.mjs'];
+  'acceptance/tester.mjs', 'workflow-groups.mjs', 'research-workflow.mjs', 'acceptance/model-observer'];
 
 function git(directory, args) {
   return execFileSync('git', args, { cwd: directory, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -66,18 +66,29 @@ export async function prepareBenchmark(settings) {
   }
   const attempt = { id, directory, workspace, root: directory, runtime,
     stateDirectory: join(directory, 'dwf-state'), base: { commit: git(workspace, ['rev-parse', 'HEAD']) },
-    model, sessionId: 'ses_' + randomUUID(), inputId: 'msg_' + randomUUID(),
+    model: settings.model ?? model, sessionId: 'ses_' + randomUUID(), inputId: 'msg_' + randomUUID(),
     prompt: settings.prompt, createdAt: Date.now() };
   await writeFile(join(directory, 'prompt.txt'), settings.prompt, { mode: 0o600 });
   await save(join(directory, 'attempt.json'), attempt);
   await mkdir(join(root, 'provenance'), { recursive: true, mode: 0o700 });
-  await save(join(root, 'provenance', `${id}.json`), { id, source, revision, runtimeRevision, model,
+  await save(join(root, 'provenance', `${id}.json`), { id, source, revision, runtimeRevision, model: attempt.model,
     sourceTree: git(source, ['rev-parse', `${revision}^{tree}`]),
     baselineTree: git(workspace, ['rev-parse', 'HEAD^{tree}']),
     skillHash: createHash('sha256').update(await readFile(join(directory, 'skill/SKILL.md')))
       .update(await readFile(join(directory, 'skill/references/cli.md'))).digest('hex'),
     promptHash: createHash('sha256').update(settings.prompt).digest('hex') });
   return attempt;
+}
+
+async function observeModel(attempt, env) {
+  env.DWF_ACCEPTANCE_CONTROL_DIR = join(attempt.directory, 'evidence');
+  env.DWF_ACCEPTANCE_TOKEN = randomUUID();
+  await mkdir(env.DWF_ACCEPTANCE_CONTROL_DIR, { mode: 0o700 });
+  for (const profile of [attempt.root, attempt.stateDirectory]) {
+    const plugins = join(profile, 'opencode/config/plugins');
+    await mkdir(plugins, { recursive: true, mode: 0o700 });
+    await symlink(join(attempt.runtime, 'acceptance/model-observer'), join(plugins, 'dwf-model-observer'));
+  }
 }
 
 async function freePort() {
@@ -178,6 +189,7 @@ export async function runBenchmark(settings) {
   const registrations = [join(attempt.stateDirectory, 'opencode/state/opencode/service.json'),
     join(attempt.root, 'opencode/state/opencode/service.json')];
   try {
+    if (settings.observeModel) await observeModel(attempt, env);
     await writeSandboxProfile(profile, { writable: [attempt.directory],
       readable: [join(projectDirectory, 'node_modules'), ...settings.readable ?? []], ports: [...ports, proxy.port] });
     await checkBoundary(attempt, profile, env, [sentinel, ...settings.hidden ?? []], unrelated.address().port);
@@ -208,9 +220,17 @@ export async function runBenchmark(settings) {
     const [client, testerClient] = clients;
     const credentials = settings.credentialStateDirectory ?? join(homedir(), '.dwf');
     await tester.authorizeTester(client, credentials);
-    await runtime.checkModel(client, attempt.workspace, { provider: model.providerID, modelId: model.id }, model.variant);
+    await runtime.checkModel(client, attempt.workspace,
+      { provider: attempt.model.providerID, modelId: attempt.model.id }, attempt.model.variant);
     await tester.authorizeTester(testerClient, credentials);
     await tester.checkTester(testerClient, attempt);
+    if (settings.preset) {
+      const presetFile = join(attempt.directory, 'preset.json');
+      await save(presetFile, settings.preset.definition);
+      execFileSync('/usr/bin/sandbox-exec', ['-f', profile, process.execPath, join(attempt.runtime, 'dwf.mjs'),
+        'preset', 'save', settings.preset.name, '--file', presetFile],
+      { cwd: attempt.workspace, env, stdio: ['ignore', 'pipe', 'pipe'], timeout: 20000 });
+    }
     await tester.admitTester(testerClient, attempt);
     console.log(JSON.stringify({ attempt: attempt.directory, sessionId: attempt.sessionId, isolation: 'passed' }));
     const result = await monitorBenchmark(attempt, {

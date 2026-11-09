@@ -258,9 +258,11 @@ test('системные обязанности отделены от поруч
   definition.nodes.implement.instructions = 'Особое условие задачи';
   for (const role of Object.keys(outcomes)) {
     const system = roleSystemPrompt(role);
-    assert(system.includes('Read applicable AGENTS.md'));
+    if (['worker', 'reviewer', 'verifier', 'orchestrator'].includes(role)) {
+      assert(system.includes('Read applicable AGENTS.md'));
+      assert(system.includes('In summary'));
+    }
     assert(system.includes('Your final response must be JSON'));
-    assert(system.includes('In summary'));
     assert(system.includes('return blocked'));
     assert.doesNotMatch(system, /\p{Script=Cyrillic}/u);
     assert(!system.includes(definition.task));

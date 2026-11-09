@@ -8,6 +8,10 @@ export const roleSkills = Object.fromEntries(Object.entries({
   verifier: ['code-verify'],
   orchestrator: ['workflow-summary'],
   planner: ['task-planning'],
+  scientist: ['research-synthesis'],
+  scout: ['research-scout'],
+  researcher: ['research-evidence'],
+  committee: ['research-review'],
 }).map(([role, names]) => [role, names.map(name => {
   const file = fileURLToPath(new URL(`./skills/${role}/${name}/SKILL.md`, import.meta.url));
   const content = readFileSync(file, 'utf8');

@@ -2,10 +2,13 @@ import { createHash } from 'node:crypto';
 import { relative } from 'node:path';
 import { publicError } from './run-store.mjs';
 import { roleSkills, bundledSkills } from './role-skills.mjs';
+import { researchGraph, researchInstructions, researchModel, researchRoles,
+  scientistPhase, validateResearchGraph } from './research-workflow.mjs';
 
 export const outcomes = {
   worker: ['done'], reviewer: ['approve', 'changes'],
   verifier: ['approve', 'changes'], orchestrator: ['done'],
+  ...Object.fromEntries(Object.entries(researchRoles).map(([role, config]) => [role, config.outcomes])),
 };
 export const groupOutcomes = ['done', 'changes', 'failed'];
 
@@ -101,6 +104,7 @@ export function validateWorkflow(value) {
   if (value.merge && !['reviewer', 'verifier'].every(role => Object.values(value.nodes).some(node => node.role === role && node.required !== false))) {
     reject('merge требует reviewer и verifier.');
   }
+  validateResearchGraph(value, participantSettings, reject);
   return structuredClone(value);
 }
 
@@ -173,6 +177,7 @@ export const roleTools = {
   reviewer: ['read', 'glob', 'grep', 'webfetch', 'websearch'],
   verifier: ['read', 'glob', 'grep', 'webfetch', 'websearch', 'shell'],
   orchestrator: ['read', 'glob', 'grep'], planner: [],
+  ...Object.fromEntries(Object.entries(researchRoles).map(([role, config]) => [role, config.tools])),
 };
 
 export function rolePermissions(role, config = {}) {
@@ -187,7 +192,8 @@ export function rolePermissions(role, config = {}) {
 
 export function participantSettings(definition, id) {
   const node = definition.nodes[id];
-  return { memory: true, ...definition.roles?.[node.role], ...node };
+  const research = Object.hasOwn(researchRoles, node.role) ? { model: researchModel, reasoning: 'high' } : {};
+  return { memory: node.role !== 'committee', ...research, ...definition.roles?.[node.role], ...node };
 }
 
 export function participantAgent(role, config) {
@@ -268,6 +274,9 @@ function resultInstructions(role) {
 }
 
 export function roleSystemPrompt(role) {
+  if (Object.hasOwn(researchRoles, role)) {
+    return [researchInstructions, researchRoles[role].system, resultInstructions(role)].join('\n\n');
+  }
   return [commonInstructions, roleInstructions[role], resultInstructions(role)].join('\n\n');
 }
 
@@ -278,6 +287,14 @@ export const roleAgents = Object.fromEntries(Object.keys(outcomes).map(role => [
 
 export function rolePrompt(definition, nodeId, previous, revision, visits = [], separateSystem = false, review, workspace, transitionSource = nodeId) {
   const node = definition.nodes[nodeId];
+  if (node.role === 'committee') {
+    return [
+      separateSystem ? '' : roleSystemPrompt(node.role),
+      `Original research request\n${definition.task}`,
+      `Submitted report\n${previous?.summary ?? ''}`,
+    ].filter(Boolean).join('\n\n');
+  }
+  const research = Object.hasOwn(researchRoles, node.role);
   const nextId = definition.transitions?.[transitionSource]?.approve;
   const nextNode = nextId == null ? undefined : definition.nodes[nextId];
   const verification = nextNode?.role === 'verifier' && nextNode.required !== false
@@ -288,9 +305,10 @@ export function rolePrompt(definition, nodeId, previous, revision, visits = [], 
     sessionId: visit.sessionId, revision: visit.revision, result: visit.verdict,
   }] : []) : undefined;
   return [
-    separateSystem ? '' : commonInstructions,
-    separateSystem ? '' : roleInstructions[node.role],
+    separateSystem ? '' : research ? researchInstructions : commonInstructions,
+    separateSystem ? '' : research ? researchRoles[node.role].system : roleInstructions[node.role],
     node.instructions ?? '',
+    node.role === 'scientist' ? scientistPhase(researchGraph(definition), visits) : '',
     node.role === 'reviewer' ? `Workflow verification context: ${verification}` : '',
     workspace ? `Project workspace: ${workspace.path}` : '',
     workspace?.instructions?.length ? `Inherited project instructions captured at workflow start (outermost first):\n${JSON.stringify(workspace.instructions)}` : '',

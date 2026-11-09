@@ -6,7 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout as pause } from 'node:timers/promises';
 import { admit, checkRoleAgents, connect, readExecution, stopSessions, captureStopSessions, interruptSessions } from './opencode-runtime.mjs';
 import { claimWorkflow, getWorkflow, updateWorkflow, workflowHasOwner, publicError, withWorkflowAction } from './run-store.mjs';
-import { parseVerdict, rolePermissions, rolePrompt, roleAgents, checkApprovals, participantVisits } from './workflow-definition.mjs';
+import { parseVerdict, rolePermissions, rolePrompt, roleAgents, checkApprovals,
+  participantVisits, validateItems } from './workflow-definition.mjs';
+import { researchGraph, researchResult, validateScientistVerdict } from './research-workflow.mjs';
 import { mergeWorkspace, snapshot, writeReviewDiff, verificationWorkspace } from './workflow-git.mjs';
 import { prepareGroup, groupVerdict, integrateGroup } from './workflow-groups.mjs';
 
@@ -105,7 +107,12 @@ function finishParticipant(state, visit, outcome) {
     throw publicError('Рабочее дерево изменилось во время проверки. Требуется новая проверка.');
   }
   if (outcome.status !== 'succeeded') throw publicError(outcome.error);
-  visit.verdict = parseVerdict(outcome.result, role);
+  const verdict = parseVerdict(outcome.result, role);
+  if (role === 'scientist') {
+    validateScientistVerdict(researchGraph(state.definition), state.visits.slice(0, -1),
+      verdict, validateItems, message => { throw publicError(message); });
+  }
+  visit.verdict = role === 'committee' ? { outcome: verdict.outcome, summary: verdict.summary } : verdict;
   if (role === 'worker') visit.revision = revision;
 }
 
@@ -116,6 +123,7 @@ export async function runWorkflow(root, id) {
     return;
   }
   const state = getWorkflow(root, id);
+  const research = researchGraph(state.definition);
   const save = complete => updateWorkflow(root, state, owner, complete);
   if (state.status !== 'running') { save(true); acknowledge(); return; }
   let client;
@@ -157,7 +165,9 @@ export async function runWorkflow(root, id) {
           ...participantVisits(state.visits).findLast(item => item.participant === steering.node),
           ...steering.target,
         };
-        const next = steered?.node ?? steering?.node ?? (visit ? state.definition.transitions[visit.node][visit.verdict.outcome] : state.definition.entry);
+        const report = research && researchResult(research, state.visits);
+        const next = report ? null : steered?.node ?? steering?.node ??
+          (visit ? state.definition.transitions[visit.node][visit.verdict.outcome] : state.definition.entry);
         if (next === null) {
           if (visit.children && visit.verdict.outcome !== 'done') {
             await withWorkflowAction(root, state, owner, () => {
@@ -182,7 +192,7 @@ export async function runWorkflow(root, id) {
             checkApprovals(state, revision);
             if (state.definition.merge) {
               state.result = { summary: visit.verdict.summary, commit: mergeWorkspace(state.workspace, revision) };
-            } else state.result = visit.verdict;
+            } else state.result = report ?? visit.verdict;
             state.status = 'succeeded';
           });
           continue;
