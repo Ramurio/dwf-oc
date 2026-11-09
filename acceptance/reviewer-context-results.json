@@ -1,7 +1,25 @@
 {
   "schemaVersion": 1,
   "series": "reviewer-context-v5",
-  "candidateDisposition": "pending_independent_audit",
+  "candidateDisposition": "independently_approved",
+  "independentAudit": {
+    "attempt": "976268ad-3e39-4b31-bbb5-9f41deca5fc2",
+    "workflow": "1378e26e-81cb-4279-b776-c6d1dc128dc0",
+    "revision": "a7751c85ad79e49e727d97f7580d9583d38e265b",
+    "outcome": "approve",
+    "verifiedNativeCalls": 130,
+    "replayedVerifierChecks": 37,
+    "additionalCliChecks": 7,
+    "verifiedNewOssCandidates": 6,
+    "ordinaryTrials": 20,
+    "acceptedCleanTrials": 12,
+    "regression": { "harness": 31, "product": 63, "cucumberScenarios": 12, "cucumberSteps": 116, "native": 21 },
+    "limitations": [
+      "Adding supplemental evidence during directory-mode verification changed the snapshot. The original blocked visit is retained, and both required roles approved the final snapshot.",
+      "The final audit pass could not launch a fresh full suite from the external copy. The verifier established byte equality of all 55 tracked files with its earlier successfully tested copy.",
+      "A historical one-off unmerged-candidate extraction command was not saved. Its exact recorded tree was independently reconstructed and tested, and later replay evidence is labelled separately."
+    ]
+  },
   "recordedAt": "2026-11-09T01:12:56.875295+00:00",
   "runtimeRevision": "2610b295ee91fdb0e86cb5b78c0d8d2f5b3c3713",
   "baselineRevision": "20cd01d0121f9a674b7559b1b63e491fd83572b0",
