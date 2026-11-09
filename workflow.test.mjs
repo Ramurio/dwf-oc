@@ -83,6 +83,16 @@ test('literal code fences inside verdict strings preserve the complete JSON', ()
   }
 });
 
+test('closed code blocks cannot consume backticks from a following plain verdict', () => {
+  const result = { outcome: 'approve', summary: 'Checked ```js\nconst x = { ok: true };\n```' };
+  const json = JSON.stringify(result);
+  for (const prefix of ['```\n\n```\n', '```json\nAn example.\n```\n', '```\nAn unfinished "quote.\n```\n']) {
+    assert.deepEqual(parseVerdict(prefix + json, 'reviewer'), result);
+    assert.deepEqual(parseVerdict(prefix + `\`\`\`json\n${json}\n\`\`\``, 'reviewer'), result);
+    assert.throws(() => parseVerdict(prefix + json + '\n```', 'reviewer'));
+  }
+});
+
 test('каждый обязательный проверяющий должен одобрить текущую версию', () => {
   const definition = sampleWorkflow('Task');
   definition.nodes.secondReview = { role: 'reviewer' };

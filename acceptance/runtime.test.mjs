@@ -351,6 +351,18 @@ test('public CLI retains literal code fences inside a fenced verdict', { timeout
   assert.deepEqual(state.visits[0].verdict, result);
 });
 
+test('public CLI preserves a plain verdict after a closed code block', { timeout: 60000 }, async t => {
+  const definition = { task: 'Return a plain verdict after a code example', workspace: 'directory', entry: 'verify',
+    nodes: { verify: { role: 'verifier', tools: [], skills: [] } },
+    transitions: { verify: { approve: null, changes: null } } };
+  const result = { outcome: 'approve', summary: 'Checked literal ``` text' };
+  const sandbox = await fixture(t, definition, () => '```\nAn example.\n```\n' + JSON.stringify(result));
+  await sandbox.release();
+  const state = await sandbox.finish();
+  assert.equal(state.status, 'succeeded', state.error);
+  assert.deepEqual(state.visits[0].verdict, result);
+});
+
 test('stop catches a resistant shell created after the initial process snapshot', { timeout: 60000 }, async t => {
   const definition = { task: 'Stop a late shell', workspace: 'directory', entry: 'verify',
     nodes: { verify: { role: 'verifier', tools: [], skills: [] } },
