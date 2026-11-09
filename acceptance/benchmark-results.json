@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "recordedAt": "2026-11-09T01:13:31.328620+00:00",
+  "recordedAt": "2026-11-09T02:52:28.608333+00:00",
   "model": {
     "provider": "openai",
     "modelId": "gpt-6.1-sol-ultrafast",
@@ -880,6 +880,174 @@
       },
       "usageComplete": true,
       "note": "One clean workflow for the PR587 memory fix merged. External Python 3.14.6 suites ran 668 candidate tests and 654 tests from the original files, each with four skips. All 13 independent checks passed. Participants used Python 3.9.6 and ran 667 tests with one skip. All four original native verdicts were revalidated exactly by the corrected positional-boundary parser. Runtime checks were limited to Python 3.9.6 and 3.14.6."
+    },
+    {
+      "attempt": "aa79ea67-a12c-48fb-a10d-4f07efc24fec",
+      "project": "go-cmp",
+      "outcome": "accepted",
+      "runtimeRevision": "83e9e5dd0ed302dcef8e29ba343c310135629b7a",
+      "baselineRevision": "c3ad8435e7bef96af35732bc0789e5a2278c6d5f",
+      "baselineTree": "a56d226234088bb5c9cf3105bb8cfa12adf6c21b",
+      "skillHash": "f1845a0f7d081bf2c956d55fa8868d844bd752b9e936f1687216a14ad837c777",
+      "promptHash": "4580eec8d347b29adb2afd601267b1887cd12c2e5247d2ec6a0c527e1a3a765a",
+      "boundaryCheckPassed": true,
+      "workflows": [
+        {
+          "id": "fb074915-5f7b-4c47-9c9f-5a1305883b6c",
+          "status": "succeeded",
+          "commit": "353e73145be333f3a9dc6d4ee5c9f704ec9fe635"
+        }
+      ],
+      "externalCheckExitCodes": {
+        "candidate": 0,
+        "candidate-race": 0,
+        "hidden": 0,
+        "hidden-race": 0,
+        "original-tests": 1,
+        "original-race": 1,
+        "task-compatible-original-tests": 0,
+        "task-compatible-original-race": 0
+      },
+      "acceptanceChecks": [
+        "candidate",
+        "candidate-race",
+        "hidden",
+        "hidden-race",
+        "task-compatible-original-tests",
+        "task-compatible-original-race"
+      ],
+      "participantUsage": {
+        "input": 87181,
+        "output": 11281,
+        "reasoning": 2602,
+        "cachedRead": 300288,
+        "cachedWrite": 0,
+        "sessions": 4,
+        "providerCostFilled": false
+      },
+      "testerUsage": {
+        "input": 28457,
+        "output": 1556,
+        "reasoning": 538,
+        "cachedRead": 142848,
+        "cachedWrite": 0,
+        "sessions": 1,
+        "providerCostFilled": false
+      },
+      "usageComplete": true,
+      "note": "One clean workflow merged. Go 1.27.3 candidate suites passed 26 top-level tests. 9 hidden behavioral tests and 20 task-compatible original tests passed, each with and without -race. Raw original tests report 19 passes and one top-level failure in TestPanic. Two failing subtests reject the newly supported strings.Compare signature. A common four-case expectation adjustment was qualified against the baseline and reference after the first evaluations. Raw failures remain recorded. Four native verdicts were revalidated exactly. The declared Go 1.13 minimum was not executed."
+    },
+    {
+      "attempt": "88de3fee-341b-4596-9521-2fcd18294087",
+      "project": "go-cmp",
+      "outcome": "accepted",
+      "runtimeRevision": "83e9e5dd0ed302dcef8e29ba343c310135629b7a",
+      "baselineRevision": "c3ad8435e7bef96af35732bc0789e5a2278c6d5f",
+      "baselineTree": "a56d226234088bb5c9cf3105bb8cfa12adf6c21b",
+      "skillHash": "f1845a0f7d081bf2c956d55fa8868d844bd752b9e936f1687216a14ad837c777",
+      "promptHash": "4580eec8d347b29adb2afd601267b1887cd12c2e5247d2ec6a0c527e1a3a765a",
+      "boundaryCheckPassed": true,
+      "workflows": [
+        {
+          "id": "42764a28-e5b2-4282-8ee9-73b9e3146855",
+          "status": "succeeded",
+          "commit": "0178aa9e619671681e4ebe592b32ffbfa6dec8c2"
+        }
+      ],
+      "externalCheckExitCodes": {
+        "candidate": 0,
+        "candidate-race": 0,
+        "hidden": 0,
+        "hidden-race": 0,
+        "original-tests": 1,
+        "original-race": 1,
+        "task-compatible-original-tests": 0,
+        "task-compatible-original-race": 0
+      },
+      "acceptanceChecks": [
+        "candidate",
+        "candidate-race",
+        "hidden",
+        "hidden-race",
+        "task-compatible-original-tests",
+        "task-compatible-original-race"
+      ],
+      "participantUsage": {
+        "input": 89906,
+        "output": 11905,
+        "reasoning": 1952,
+        "cachedRead": 395520,
+        "cachedWrite": 0,
+        "sessions": 4,
+        "providerCostFilled": false
+      },
+      "testerUsage": {
+        "input": 30588,
+        "output": 1569,
+        "reasoning": 716,
+        "cachedRead": 129920,
+        "cachedWrite": 0,
+        "sessions": 1,
+        "providerCostFilled": false
+      },
+      "usageComplete": true,
+      "note": "One clean workflow merged. Go 1.27.3 candidate suites passed 26 top-level tests. 9 hidden behavioral tests and 20 task-compatible original tests passed, each with and without -race. Raw original tests report 19 passes and one top-level failure in TestPanic. Two failing subtests reject the newly supported strings.Compare signature. Two additional failing subtests require the old nil-function diagnostic. Nil functions still panic. A common four-case expectation adjustment was qualified against the baseline and reference after the first evaluations. Raw failures remain recorded. Four native verdicts were revalidated exactly. The declared Go 1.13 minimum was not executed."
+    },
+    {
+      "attempt": "1f9a55c8-af5b-4282-90cc-34f316d36878",
+      "project": "go-cmp",
+      "outcome": "accepted",
+      "runtimeRevision": "83e9e5dd0ed302dcef8e29ba343c310135629b7a",
+      "baselineRevision": "c3ad8435e7bef96af35732bc0789e5a2278c6d5f",
+      "baselineTree": "a56d226234088bb5c9cf3105bb8cfa12adf6c21b",
+      "skillHash": "f1845a0f7d081bf2c956d55fa8868d844bd752b9e936f1687216a14ad837c777",
+      "promptHash": "4580eec8d347b29adb2afd601267b1887cd12c2e5247d2ec6a0c527e1a3a765a",
+      "boundaryCheckPassed": true,
+      "workflows": [
+        {
+          "id": "cf399fc7-4736-4e6b-a768-3b7db83de20f",
+          "status": "succeeded",
+          "commit": "8e3d61c474385b620d2d52768170f2d357fac413"
+        }
+      ],
+      "externalCheckExitCodes": {
+        "candidate": 0,
+        "candidate-race": 0,
+        "hidden": 0,
+        "hidden-race": 0,
+        "original-tests": 1,
+        "original-race": 1,
+        "task-compatible-original-tests": 0,
+        "task-compatible-original-race": 0
+      },
+      "acceptanceChecks": [
+        "candidate",
+        "candidate-race",
+        "hidden",
+        "hidden-race",
+        "task-compatible-original-tests",
+        "task-compatible-original-race"
+      ],
+      "participantUsage": {
+        "input": 84693,
+        "output": 11378,
+        "reasoning": 2526,
+        "cachedRead": 308864,
+        "cachedWrite": 0,
+        "sessions": 4,
+        "providerCostFilled": false
+      },
+      "testerUsage": {
+        "input": 34823,
+        "output": 1646,
+        "reasoning": 853,
+        "cachedRead": 175104,
+        "cachedWrite": 0,
+        "sessions": 1,
+        "providerCostFilled": false
+      },
+      "usageComplete": true,
+      "note": "One clean workflow merged. Go 1.27.3 candidate suites passed 27 top-level tests. 9 hidden behavioral tests and 20 task-compatible original tests passed, each with and without -race. Raw original tests report 19 passes and one top-level failure in TestPanic. Two failing subtests reject the newly supported strings.Compare signature. Two additional failing subtests require the old nil-function diagnostic. Nil functions still panic. A common four-case expectation adjustment was qualified against the baseline and reference after the first evaluations. Raw failures remain recorded. Four native verdicts were revalidated exactly. The declared Go 1.13 minimum was not executed."
     }
   ],
   "rejectedQualification": [
@@ -891,6 +1059,117 @@
       "project": "more-itertools",
       "case": "ichunked-feature-pr292",
       "reason": "The reference passed the initial functional qualification but failed added checks for bounded memory retention. Its otherwise successful trial is retained as diagnostic evidence and excluded from accepted repeats. The subsequent PR587 memory-fix case has a separate baseline and reference."
+    }
+  ],
+  "qualificationAdjustments": [
+    {
+      "project": "go-cmp",
+      "baseline": "c3ad8435e7bef96af35732bc0789e5a2278c6d5f",
+      "path": "cmp/cmpopts/util_test.go",
+      "originalSha256": "e356192ab7ab35ed5d8f2dee4c2f6a5387a9dca082411a5a8732c5cba09dde7e",
+      "fixtureSha256": "71682720700c1226df422418020af7b5db83bf7df2af587ce65931c81b8d881b",
+      "patchSha256": "a7f871d407fe2bb2eb78829d4bb53cffe74dde89904020d6aa94ab69a5670cbe",
+      "postHoc": true,
+      "changes": {
+        "compareConstructorCasesNowSucceed": 2,
+        "nilConstructorCasesRetainPanicWithDiagnosticPrefix": 2
+      },
+      "reason": "Raw baseline tests treat strings.Compare as an invalid signature, contradicting the requested new behavior. Nil constructors must continue to panic. Other original tests remain unchanged.",
+      "qualification": {
+        "before-raw": {
+          "exit": 0,
+          "topLevelTests": {
+            "pass": 20,
+            "fail": 0,
+            "skip": 0
+          },
+          "failedTests": []
+        },
+        "before-raw-race": {
+          "exit": 0,
+          "topLevelTests": {
+            "pass": 20,
+            "fail": 0,
+            "skip": 0
+          },
+          "failedTests": []
+        },
+        "before-task-compatible": {
+          "exit": 1,
+          "topLevelTests": {
+            "pass": 19,
+            "fail": 1,
+            "skip": 0
+          },
+          "failedTests": [
+            "TestPanic/SortSlices",
+            "TestPanic/SortMaps",
+            "TestPanic"
+          ]
+        },
+        "before-task-compatible-race": {
+          "exit": 1,
+          "topLevelTests": {
+            "pass": 19,
+            "fail": 1,
+            "skip": 0
+          },
+          "failedTests": [
+            "TestPanic/SortSlices",
+            "TestPanic/SortMaps",
+            "TestPanic"
+          ]
+        },
+        "reference-raw": {
+          "exit": 1,
+          "topLevelTests": {
+            "pass": 19,
+            "fail": 1,
+            "skip": 0
+          },
+          "failedTests": [
+            "TestPanic/SortSlices",
+            "TestPanic/SortSlices#01",
+            "TestPanic/SortMaps",
+            "TestPanic/SortMaps#01",
+            "TestPanic"
+          ]
+        },
+        "reference-raw-race": {
+          "exit": 1,
+          "topLevelTests": {
+            "pass": 19,
+            "fail": 1,
+            "skip": 0
+          },
+          "failedTests": [
+            "TestPanic/SortSlices",
+            "TestPanic/SortSlices#01",
+            "TestPanic/SortMaps",
+            "TestPanic/SortMaps#01",
+            "TestPanic"
+          ]
+        },
+        "reference-task-compatible": {
+          "exit": 0,
+          "topLevelTests": {
+            "pass": 20,
+            "fail": 0,
+            "skip": 0
+          },
+          "failedTests": []
+        },
+        "reference-task-compatible-race": {
+          "exit": 0,
+          "topLevelTests": {
+            "pass": 20,
+            "fail": 0,
+            "skip": 0
+          },
+          "failedTests": []
+        }
+      },
+      "scope": "Only external original-test expectations were adjusted. Participant implementations and the nine hidden checks were unchanged."
     }
   ]
 }
