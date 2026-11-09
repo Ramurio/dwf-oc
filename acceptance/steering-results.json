@@ -1,0 +1,149 @@
+{
+  "schemaVersion": 1,
+  "series": "steering-guidance",
+  "disposition": "pending_independent_audit",
+  "recordedAt": "2026-11-09T01:28:17.967850+00:00",
+  "skillRevision": "17f9db49788fe968f0a3759bcffd1affd2df46eb",
+  "model": {
+    "providerID": "openai",
+    "id": "gpt-6.1-sol-ultrafast",
+    "variant": "high"
+  },
+  "protocol": "Fresh baseline copies and native tester sessions. Each user task requires an additional clarification after DWF starts. The tester chooses its recipient through the public CLI and follows the same workflow through integration.",
+  "comparability": "These two controlled steering scenarios add a process instruction to the original tasks. They are separate from the 20 ordinary trials and 12 accepted clean repeats.",
+  "providerCostsFilled": false,
+  "trials": [
+    {
+      "attempt": "01b47645-0553-4167-ac3b-673c162cf5d1",
+      "project": "more-itertools",
+      "outcome": "accepted_controlled_steering",
+      "runtimeRevision": "a7751c85ad79e49e727d97f7580d9583d38e265b",
+      "baselineRevision": "775e4974292431acbda362b208d6b9b78bf1b07c",
+      "baselineTree": "95d5a399fd28f8fb46d0f6ec2a1fe0e185e3a8fd",
+      "skillHash": "6864d24828fdb88b2a48b1e51d1f20c32dfbd49afa35f7a69e4f011a7bab9594",
+      "promptHash": "4e5f36f4fec9f3599525ba762a1410994d17ea5a1b8cee9ce539530569a34d53",
+      "boundaryCheckPassed": true,
+      "workflow": "5db3e08f-a4e5-49e7-8ec4-aa3d75174c74",
+      "integrationCommit": "cde5aa208cc2c690a8f2ede33ecc2d65afd4091a",
+      "integrationVerified": true,
+      "steeredParticipant": "implement",
+      "steeringApplied": true,
+      "steeringPreservedSession": true,
+      "visitedNodes": [
+        "implement",
+        "implement",
+        "review",
+        "verify",
+        "implement",
+        "review",
+        "verify",
+        "implement",
+        "review",
+        "verify",
+        "summary"
+      ],
+      "finalRevision": "cf9764376de40601e5be3119e33067116662f1f6",
+      "finalApprovalRoles": [
+        "reviewer",
+        "verifier"
+      ],
+      "nativeVerdictCount": 11,
+      "candidateTests": 668,
+      "originalTests": 654,
+      "externalCheckExitCodes": {
+        "candidate-regression": 0,
+        "hidden-behavior": 0,
+        "original-test-files": 0
+      },
+      "usage": {
+        "participants": {
+          "input": 193826,
+          "output": 20438,
+          "reasoning": 15811,
+          "cachedRead": 2447744,
+          "cachedWrite": 0,
+          "sessions": 4,
+          "assistantMessages": 81,
+          "incompleteMessages": 0
+        },
+        "tester": {
+          "input": 45459,
+          "output": 2177,
+          "reasoning": 846,
+          "cachedRead": 176640,
+          "cachedWrite": 0,
+          "sessions": 1,
+          "assistantMessages": 14,
+          "incompleteMessages": 0
+        }
+      }
+    },
+    {
+      "attempt": "d4d1f825-f366-4041-9ce3-59d37c6908b4",
+      "project": "p-limit",
+      "outcome": "accepted_controlled_steering",
+      "runtimeRevision": "a7751c85ad79e49e727d97f7580d9583d38e265b",
+      "baselineRevision": "850768f5655dc46547802789e13af3cf35c3d7b0",
+      "baselineTree": "676759e85a0b85a5c9b0bbcaec5d67a0a5f9fb7c",
+      "skillHash": "6864d24828fdb88b2a48b1e51d1f20c32dfbd49afa35f7a69e4f011a7bab9594",
+      "promptHash": "67fe5e7780e9e365df8afcf14584e2c4cfaf377d202b8a214aaed64d9690fc14",
+      "boundaryCheckPassed": true,
+      "workflow": "5ca112a4-9541-4636-a7c7-c91a6cc05b9d",
+      "integrationCommit": "cb073d9c0d41cbe675eb599f289cdc096e8d59c6",
+      "integrationVerified": true,
+      "steeredParticipant": "implement",
+      "steeringApplied": true,
+      "steeringPreservedSession": true,
+      "visitedNodes": [
+        "implement",
+        "implement",
+        "review",
+        "verify",
+        "summary"
+      ],
+      "finalRevision": "63d4e0b9c4ed735235f8a673f047cff1064c39ed",
+      "finalApprovalRoles": [
+        "reviewer",
+        "verifier"
+      ],
+      "nativeVerdictCount": 5,
+      "candidateTests": 18,
+      "originalTests": 10,
+      "externalCheckExitCodes": {
+        "candidate-tests": 0,
+        "hidden-behavior": 0,
+        "original-regression": 0
+      },
+      "usage": {
+        "participants": {
+          "input": 87306,
+          "output": 10099,
+          "reasoning": 2914,
+          "cachedRead": 424320,
+          "cachedWrite": 0,
+          "sessions": 4,
+          "assistantMessages": 46,
+          "incompleteMessages": 0
+        },
+        "tester": {
+          "input": 45109,
+          "output": 1646,
+          "reasoning": 326,
+          "cachedRead": 132224,
+          "cachedWrite": 0,
+          "sessions": 1,
+          "assistantMessages": 12,
+          "incompleteMessages": 0
+        }
+      }
+    }
+  ],
+  "regression": {
+    "sourceRevision": "e3b35526ac74fcd0af73d6c249ced876a5d3aa20",
+    "harness": 31,
+    "product": 66,
+    "cucumberScenarios": 12,
+    "cucumberSteps": 116,
+    "native": 21
+  }
+}
