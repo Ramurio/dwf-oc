@@ -139,9 +139,9 @@
     }
   ],
   "regression": {
-    "sourceRevision": "f47885455f7664473d5e4f443db3bc574b5b5b89",
+    "sourceRevision": "da7f004144c9412ed149c3c4d398d29427af97c2",
     "harness": 31,
-    "product": 67,
+    "product": 69,
     "cucumberScenarios": 12,
     "cucumberSteps": 116,
     "native": 21,
@@ -153,9 +153,18 @@
     },
     "followUp": "A bounded SQLite wait and finally-close are shared by the three test lease resets. The existing crash probe holds the transaction for one second before SIGKILL.",
     "negativeControl": "The delayed crash probe fails with SQLITE_BUSY without the bounded wait.",
-    "targetedChecksPassed": 9
+    "targetedChecksPassed": 9,
+    "priorCompleteRegression": {
+      "sourceRevision": "f47885455f7664473d5e4f443db3bc574b5b5b89",
+      "harness": 31,
+      "product": 67,
+      "cucumberScenarios": 12,
+      "cucumberSteps": 116,
+      "native": 21
+    },
+    "inheritedInstructions": "The full suite passed with TMPDIR below a parent AGENTS.md. The original strict-equality fixture failed the negative control; its corrected suffix assertion passed all 31 harness tests."
   },
-  "documentationRevision": "4acf55dafd2fa031032cd70b6621c11e790a7955",
+  "documentationRevision": "b7ab4ce6517544e4890b44cd9ff56b204cf63c8c",
   "independentAudits": [
     {
       "workflow": "9dde1abe-86db-4db0-a9b0-9f0bba56306d",
@@ -166,6 +175,20 @@
       "verification": "16 native verdicts and both trial summaries were independently reconciled. One verifier ran 43 focused checks. Another verifier could not run its required checks because its external directory was denied.",
       "followUp": "Document the prepared-group case, retain its group route, and add a regression using the actual group preparation.",
       "archiveSha256": "5141de69737e19c27e706f6bff5793eaecbd44a5cafce40d6f38e24497d9f784"
+    },
+    {
+      "workflow": "c58c2102-4939-4875-aa66-2a3fccf128ca",
+      "reviewedRevision": "73305bfeb153065cb5b4acb1f9cc24e418b30206",
+      "skillRevision": "4acf55dafd2fa031032cd70b6621c11e790a7955",
+      "disposition": "changes",
+      "findings": [
+        "Only the first queued clarification is folded into a prepared group. Later commands use standalone visits and can bypass the group transition.",
+        "The tester fixture incorrectly expected no parent AGENTS.md above TMPDIR.",
+        "Skill bytes were hash-checked, but their binding to external Git commit IDs could not be independently checked from the supplied data."
+      ],
+      "verification": "The auditors reconciled 16 native verdicts, archive trees, usage and final approvals. Fresh checks passed 67 product, 12 Cucumber scenarios and 21 native tests. Full npm test failed at one of 31 harness tests under inherited instructions.",
+      "probeLimitation": "An auditor mock accessed a group as a node and hung. After a technical observation from the lead, the auditor corrected its mock and completed bounded replays. The product failure claim was not retained.",
+      "archiveSha256": "9a71e41ddba5bda08a7d12bd8e33a94e3c189dfa01c4ac7d179b7ee45fd68f18"
     }
   ]
 }
