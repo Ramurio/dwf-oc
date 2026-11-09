@@ -110,6 +110,7 @@ export function benchmarkWorkflows(attempt) {
   if (!existsSync(file)) return [];
   const db = new DatabaseSync(file, { readOnly: true });
   try {
+    db.exec('PRAGMA busy_timeout = 10000');
     if (!db.prepare("SELECT name FROM sqlite_master WHERE name = 'workflows'").get()) return [];
     return db.prepare('SELECT state FROM workflows ORDER BY id').all().map(row => JSON.parse(row.state));
   } finally { db.close(); }
