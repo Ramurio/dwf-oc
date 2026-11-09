@@ -29,6 +29,7 @@ test('справка успешно описывает доступный про
     assert.match(stdout, /dwf inspect <run-id>/);
     assert.match(stdout, /"planner":\{"task":/);
     assert.match(stdout, /dwf start --preset <имя>/);
+    assert.match(stdout, /dwf preset save <имя> --from-run <run-id>/);
   }
 });
 

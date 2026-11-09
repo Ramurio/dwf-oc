@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { OpenCode } from '@opencode/client';
 import { Service } from '@opencode/client/service';
-import { createSandbox, cliJson, transcript, waitFor, writeJson, taggedProcesses } from './harness.mjs';
+import { createSandbox, cliJson, transcript, waitFor, writeJson, taggedProcesses, launch } from './harness.mjs';
 import { createControlledHttpProvider, nativeProviderConfig } from './controlled-http-provider.mjs';
 import { claimWorkflow, createWorkflow, getWorkflow, updateWorkflow } from '../run-store.mjs';
 import { prepareGroup } from '../workflow-groups.mjs';
@@ -123,6 +123,51 @@ test('public CLI completes a read-only graph without creating a Git repository',
   assert.equal(result.workspace.path, await realpath(sandbox.workspace));
   assert.equal((await readdir(sandbox.workspace)).includes('.git'), false);
   assert.equal(await readFile(join(sandbox.workspace, 'untouched.txt'), 'utf8'), 'Файлы проекта планнер не изменяет.\n');
+});
+
+test('a completed run becomes a named preset with fresh sessions in another project', { timeout: 60000 }, async t => {
+  const definition = { task: 'Original preset task', workspace: 'directory', entry: 'reviews',
+    roles: { reviewer: { tools: [], skills: [] }, verifier: { tools: [], skills: [] },
+      orchestrator: { tools: [], skills: [] } },
+    nodes: { first: { role: 'reviewer' }, second: { role: 'reviewer', memory: false,
+      model: { provider: 'dwf-acceptance', modelId: 'alternate' }, reasoning: 'low' },
+      verify: { role: 'verifier' }, summary: { role: 'orchestrator' } },
+    groups: { reviews: { members: ['first', 'second'] } },
+    transitions: { reviews: { done: 'verify', changes: null, failed: null },
+      first: { approve: 'verify', changes: null }, second: { approve: 'verify', changes: null },
+      verify: { approve: 'summary', changes: null }, summary: { done: null } } };
+  const sandbox = await fixture(t, definition, ({ prompt }) =>
+    verdict(prompt.includes('Завершённые этапы workflow') ? 'done' : 'approve'), true);
+  await sandbox.release();
+  const original = await sandbox.finish();
+  assert.equal(original.status, 'succeeded', original.error);
+  const name = 'Двойное ревью';
+  assert.deepEqual(await sandbox.command(['preset', 'save', name, '--from-run', sandbox.runId]), { preset: name });
+  await rm(join(sandbox.root, 'workflow.json'));
+  const project = join(sandbox.root, 'another-project');
+  await mkdir(project);
+  const task = 'A different task for the saved setup';
+  const taskFile = join(sandbox.root, 'new-task.txt');
+  await writeFile(taskFile, task);
+  sandbox.env.DWF_PLANNER_MODEL = JSON.stringify({ provider: 'missing', modelId: 'missing' });
+  sandbox.env.DWF_PLANNER_REASONING = 'missing';
+  const replay = await cliJson(launch(cli, ['start', '--preset', name, '--task-file', taskFile], {
+    cwd: project, env: sandbox.env,
+  }), 20000);
+  const result = await waitFor(() => {
+    const state = getWorkflow(sandbox.state, replay.runId);
+    return state.status !== 'running' && state;
+  }, 30000, 'saved preset completion');
+  assert.equal(result.status, 'succeeded', result.error);
+  assert.equal(result.workspace.path, await realpath(project));
+  assert.equal(result.definition.task, task);
+  assert.deepEqual(result.definition.groups, definition.groups);
+  assert.deepEqual(result.participants, original.participants);
+  const previousSessions = new Set(Object.values(original.sessions));
+  assert(Object.values(result.sessions).every(id => !previousSessions.has(id)));
+  assert(result.visits.flatMap(visit => visit.children ?? [visit])
+    .every(visit => !visit.prompt.includes(definition.task)));
+  assert.equal((await sandbox.events()).filter(item => item.type === 'received').length, 8);
 });
 
 test('public CLI rejects stale approval from an earlier mandatory reviewer', { timeout: 60000 }, async t => {

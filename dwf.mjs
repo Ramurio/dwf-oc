@@ -10,6 +10,7 @@ import { admit, checkModel, checkRoleAgents, connect, readOutcome, sessionReques
 import { validateWorkflow, outcomes, groupOutcomes, roleTools, roleAgents, rolePermissions, participantSettings, participantAgent } from './workflow-definition.mjs';
 import { ensureWorkflowRunner, publicWorkflow, watchEvent } from './workflow-runtime.mjs';
 import { prepareWorkspace } from './workflow-git.mjs';
+import { bundledSkills } from './role-skills.mjs';
 
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const json = value => process.stdout.write(JSON.stringify(value) + '\n');
@@ -155,17 +156,39 @@ async function startPreset(name, taskFile) {
   await start(null, { ...definition, task });
 }
 
+function presetFromRun(root, runId) {
+  const state = getWorkflow(root, runId);
+  if (!state) throw publicError('Workflow не найден.');
+  const definition = structuredClone(state.definition);
+  for (const [id, node] of Object.entries(definition.nodes)) {
+    const settings = participantSettings(definition, id);
+    const participant = state.participants?.[id];
+    const model = participant?.model ?? state.model;
+    const permissions = participant?.agent.permissions ?? state.rolePermissions?.[node.role] ??
+      rolePermissions(node.role, settings);
+    node.model = { provider: model.providerID, modelId: model.id };
+    node.reasoning = model.variant ?? null;
+    node.memory = participant?.memory ?? settings.memory;
+    node.tools = permissions.filter(rule => rule.effect === 'allow' && rule.action !== 'skill')
+      .map(rule => rule.action);
+    node.skills = permissions.filter(rule => rule.effect === 'allow' && rule.action === 'skill')
+      .map(rule => bundledSkills.find(skill => rule.resource.startsWith(`dwf-${skill.name}-`))?.name);
+  }
+  return definition;
+}
+
 async function presetCommand(args) {
   if (args.length === 1 && args[0] === 'list') {
     json({ presets: presets(stateRoot()).map(item => item.name) });
     return;
   }
-  if (args.length !== 4 || args[0] !== 'save' || args[2] !== '--file' ||
-    !/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(args[1])) {
-    throw publicError('Использование: dwf preset list | dwf preset save <имя> --file <workflow.json>.');
+  if (args.length !== 4 || args[0] !== 'save' || !['--file', '--from-run'].includes(args[2]) ||
+    !args[1].trim() || args[1] !== args[1].trim() || /\p{Cc}/u.test(args[1])) {
+    throw publicError('Использование: dwf preset list | dwf preset save <имя> --file <workflow.json> | --from-run <run-id>.');
   }
-  const definition = validateWorkflow(parse(await readFile(args[3], 'utf8'), 'Неверный JSON workflow.'));
   const root = stateRoot();
+  const definition = validateWorkflow(args[2] === '--from-run' ? presetFromRun(root, args[3]) :
+    parse(await readFile(args[3], 'utf8'), 'Неверный JSON workflow.'));
   await mkdir(root, { recursive: true, mode: 0o700 });
   savePreset(root, args[1], definition);
   json({ preset: args[1] });
@@ -178,7 +201,8 @@ const usage = {
     'Без --watch возвращает один JSON. С --watch выводит JSON-события snapshot/update до завершения.',
     'Закрытие наблюдения оставляет workflow работающим.'],
   schema: ['dwf schema', 'Показывает формат workflow, роли и результаты переходов.'],
-  preset: ['dwf preset list', 'dwf preset save <имя> --file workflow.json'],
+  preset: ['dwf preset list', 'dwf preset save <имя> --file workflow.json',
+    'dwf preset save <имя> --from-run <run-id>'],
   steer: ['dwf steer <run-id> <участник> --message-file <файл>', 'Передаёт уточнение участнику на границе ответа.'],
   stop: ['dwf stop <run-id>', 'Останавливает workflow и возвращает подтверждённое терминальное состояние.'],
 };
@@ -196,6 +220,7 @@ try {
       '  dwf schema',
       '  dwf preset list',
       '  dwf preset save <имя> --file workflow.json',
+      '  dwf preset save <имя> --from-run <run-id>',
       '',
       'Прежний формат одного планнера также поддерживается.',
       '  {"planner":{"task":"Поручение с контекстом"}}',

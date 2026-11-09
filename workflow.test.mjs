@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as pause } from 'node:timers/promises';
-import { validateWorkflow, parseVerdict, rolePermissions, rolePrompt, roleSystemPrompt, roleAgents, outcomes, participantSettings, participantAgent, checkApprovals } from './workflow-definition.mjs';
+import { validateWorkflow, parseVerdict, rolePermissions, rolePrompt, roleSystemPrompt, roleAgents, roleTools, outcomes, participantSettings, participantAgent, checkApprovals } from './workflow-definition.mjs';
 import { createWorkflow, getWorkflow, claimWorkflow, updateWorkflow, workflowHasOwner, savePreset, presets, queueWorkflowCommand, withWorkflowAction } from './run-store.mjs';
 import { git, prepareWorkspace, tree, mergeWorkspace, writeReviewDiff, snapshot, verificationWorkspace } from './workflow-git.mjs';
 import { DatabaseSync } from 'node:sqlite';
@@ -386,6 +386,71 @@ test('публичный CLI показывает схему и сохраняе
   assert.deepEqual(cli(['preset', 'save', 'mine', '--file', file]), { preset: 'mine' });
   assert.deepEqual(cli(['preset', 'list']).presets, ['mine']);
   assert.deepEqual(presets(join(root, 'state'))[0].definition, definition);
+});
+
+test('пресет из запуска сохраняет группы и фактические настройки без истории сессий', async t => {
+  const root = await fixture(t);
+  const stateRoot = join(root, 'state');
+  await mkdir(stateRoot);
+  const definition = sampleWorkflow('Предыдущее поручение');
+  definition.entry = 'parallel';
+  definition.roles = { worker: { tools: ['read'], skills: [], memory: false } };
+  definition.nodes.implement.instructions = 'Обязанности первого исполнителя';
+  definition.nodes.second = { role: 'worker', memory: true };
+  definition.groups = { parallel: { members: ['implement', 'second'] } };
+  definition.transitions.parallel = { done: 'review', changes: 'review', failed: null };
+  definition.transitions.second = { done: 'review' };
+  const participants = Object.fromEntries(Object.entries(definition.nodes).map(([id, node]) => {
+    const settings = participantSettings(definition, id);
+    return [id, { ...participantAgent(node.role, settings), memory: settings.memory,
+      model: { providerID: 'saved-provider', id: `saved-${id}`,
+        ...(id === 'second' ? {} : { variant: 'high' }) } }];
+  }));
+  const state = { id: randomUUID(), status: 'succeeded', definition, participants,
+    model: { providerID: 'old-default', id: 'old-model', variant: 'low' },
+    workspace: { path: '/previous/project' }, sessions: { implement: 'old-session' },
+    visits: [{ node: 'implement', sessionId: 'old-session', verdict: { outcome: 'done', summary: 'Old result' } }] };
+  createWorkflow(stateRoot, state);
+  const cli = args => JSON.parse(execFileSync(process.execPath, ['dwf.mjs', ...args], {
+    env: { ...process.env, DWF_STATE_DIR: stateRoot }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+  }));
+  const name = 'Разработка с двумя исполнителями';
+  assert.deepEqual(cli(['preset', 'save', name, '--from-run', state.id]), { preset: name });
+  assert.deepEqual(cli(['preset', 'list']).presets, [name]);
+  const expected = structuredClone(definition);
+  for (const [id, node] of Object.entries(expected.nodes)) {
+    const settings = participantSettings(definition, id);
+    Object.assign(node, { model: { provider: 'saved-provider', modelId: `saved-${id}` },
+      reasoning: id === 'second' ? null : 'high', memory: settings.memory,
+      tools: settings.tools ?? roleTools[node.role],
+      skills: settings.skills ?? roleSkills[node.role].map(skill => skill.name) });
+  }
+  assert.deepEqual(presets(stateRoot)[0].definition, expected);
+  assert.deepEqual(getWorkflow(stateRoot, state.id), state);
+  for (const invalid of ['', '  ', ' name', 'name\nline']) {
+    assert.throws(() => cli(['preset', 'save', invalid, '--from-run', state.id]));
+  }
+  assert.throws(() => cli(['preset', 'save', name, '--from-run', randomUUID()]), /Workflow не найден/);
+  assert.deepEqual(presets(stateRoot)[0].definition, expected);
+});
+
+test('пресет старого запуска сохраняет общую модель и прежние разрешения', async t => {
+  const root = await fixture(t);
+  const definition = sampleWorkflow('Старое поручение');
+  const state = { id: randomUUID(), status: 'succeeded', definition,
+    model: { providerID: 'legacy', id: 'original', variant: 'high' },
+    rolePermissions: Object.fromEntries(Object.keys(outcomes).map(role => [role, rolePermissions(role)])) };
+  state.rolePermissions.worker = rolePermissions('worker', { tools: ['read'], skills: [] });
+  createWorkflow(root, state);
+  execFileSync(process.execPath, ['dwf.mjs', 'preset', 'save', 'Старый запуск', '--from-run', state.id], {
+    env: { ...process.env, DWF_STATE_DIR: root }, encoding: 'utf8',
+  });
+  const saved = presets(root)[0].definition;
+  assert.deepEqual(saved.nodes.implement.model, { provider: 'legacy', modelId: 'original' });
+  assert.equal(saved.nodes.implement.reasoning, 'high');
+  assert.equal(saved.nodes.implement.memory, true);
+  assert.deepEqual(saved.nodes.implement.tools, ['read']);
+  assert.deepEqual(saved.nodes.implement.skills, []);
 });
 
 test('итог завершённых workflow подтверждает merge и отделяет историческую сводку', () => {
