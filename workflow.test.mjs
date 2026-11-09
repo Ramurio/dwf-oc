@@ -73,6 +73,33 @@ test('fenced results obey the same final and unambiguous boundary as plain JSON'
   ]) assert.throws(() => parseVerdict(text, 'reviewer'));
 });
 
+test('literal code fences inside verdict strings preserve the complete JSON', () => {
+  for (const summary of ['literal ``` text', '```js\nconst x = { ok: true };\n```', 'ending with ```']) {
+    const result = { outcome: 'approve', summary };
+    const json = JSON.stringify(result);
+    for (const text of [json, `\`\`\`json\n${json}\n\`\`\``, `Checked.\n\`\`\`\n${json}\`\`\``]) {
+      assert.deepEqual(parseVerdict(text, 'reviewer'), result);
+    }
+  }
+});
+
+test('closed code blocks cannot consume backticks from a following plain verdict', () => {
+  const result = { outcome: 'approve', summary: 'Checked ```js\nconst x = { ok: true };\n```' };
+  const json = JSON.stringify(result);
+  for (const prefix of ['```\n\n```\n', '```json\nAn example.\n```\n', '```\nAn unfinished "quote.\n```\n']) {
+    assert.deepEqual(parseVerdict(prefix + json, 'reviewer'), result);
+    assert.deepEqual(parseVerdict(prefix + `\`\`\`json\n${json}\n\`\`\``, 'reviewer'), result);
+    assert.throws(() => parseVerdict(prefix + json + '\n```', 'reviewer'));
+  }
+});
+
+test('a repeated verdict inside an incomplete trailing object is rejected', () => {
+  const json = '{"outcome":"approve","summary":"Checked"}';
+  for (const prefix of ['{', 'Trailing prose {', '{"duplicate":']) {
+    assert.throws(() => parseVerdict(json + '\n' + prefix + json, 'reviewer'));
+  }
+});
+
 test('каждый обязательный проверяющий должен одобрить текущую версию', () => {
   const definition = sampleWorkflow('Task');
   definition.nodes.secondReview = { role: 'reviewer' };

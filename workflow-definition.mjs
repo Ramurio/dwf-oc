@@ -139,7 +139,7 @@ function verdictObjects(text) {
     else if (character === '}') {
       depth--;
       if (!depth) {
-        try { objects.push({ value: JSON.parse(text.slice(start, index + 1)), end: index + 1 }); }
+        try { objects.push({ value: JSON.parse(text.slice(start, index + 1)), start, end: index + 1 }); }
         catch { /* Ordinary prose may contain balanced braces. */ }
       }
     }
@@ -148,12 +148,19 @@ function verdictObjects(text) {
 }
 
 export function parseVerdict(text, role) {
-  const unfenced = text.replace(/```(?:json)?\s*\n([\s\S]*?)```/g, '\n$1\n');
-  const objects = verdictObjects(unfenced);
-  if (objects.length !== 1 || unfenced.slice(objects[0].end).trim()) {
+  const objects = verdictObjects(text);
+  if (objects.length !== 1) {
     throw publicError('Участник вернул неверный JSON результата.');
   }
-  const result = objects[0].value;
+  const { value: result, start, end } = objects[0];
+  // Keep literal backticks in JSON strings opaque to Markdown fence handling.
+  const json = text.slice(start, end).replaceAll('`', '\\u0060');
+  const framed = text.slice(0, start) + json + text.slice(end);
+  const unfenced = framed.replace(/```(?:json)?\s*\n([\s\S]*?)```/g, '\n$1\n');
+  const normalizedObjects = verdictObjects(unfenced);
+  if (normalizedObjects.length !== 1 || unfenced.slice(normalizedObjects[0].end).trim()) {
+    throw publicError('Участник вернул неверный JSON результата.');
+  }
   if (!object(result) || ![...outcomes[role], 'blocked'].includes(result.outcome) ||
     typeof result.summary !== 'string' || !result.summary.trim()) {
     throw publicError('Результат участника требует допустимый outcome и непустой summary.');
