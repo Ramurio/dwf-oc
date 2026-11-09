@@ -27,7 +27,9 @@ test('fresh tester attempts clone one baseline without changing the source', asy
   assert.notEqual(first.sessionId, second.sessionId);
   assert.notEqual(first.workspace, second.workspace);
   assert.equal(await readFile(join(first.workspace, 'code.txt'), 'utf8'), 'baseline\n');
-  assert.equal(await readFile(join(first.directory, 'AGENTS.md'), 'utf8'), 'Inherited project instructions.\n');
+  const inherited = await readFile(join(first.directory, 'AGENTS.md'), 'utf8');
+  // TMPDIR may have additional project instructions above this fixture.
+  assert(inherited.endsWith('Inherited project instructions.\n'));
   await writeFile(join(first.workspace, 'code.txt'), 'changed\n');
   assert.equal(await readFile(join(project, 'code.txt'), 'utf8'), 'baseline\n');
   assert.equal(await readFile(join(second.workspace, 'code.txt'), 'utf8'), 'baseline\n');
