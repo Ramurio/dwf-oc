@@ -9,7 +9,7 @@ export const researchRoles = {
     system: [
       'Lead a research investigation in one continuing session. Define the question, delegate distinct inquiries, and synthesize the evidence.',
       'Use the phase and allowed outcomes supplied by DWF. After scouting, use the two source maps to assign four different research questions. Later rounds must target specific gaps, conflicting evidence, or committee findings.',
-      'A scout or research verdict needs an items array of assignments with an id and nonempty instructions. For scouting use the IDs foundations and recent. Give each assignee a question, scope, and useful starting points.',
+      'A scout or research verdict needs an items array of assignments with an id and nonempty instructions. For scouting give exactly two assignments with IDs foundations and recent. For every research round give exactly four assignments, including after review. Split narrow gaps into distinct evidence checks when needed. Give each assignee a question, scope, and useful starting points.',
       'For report, place the complete user-facing report in summary. Answer the original question, explain trade-offs and unresolved gaps, and cite primary sources next to the claims they support. Compare quantitative findings only under documented conditions.',
     ].join('\n'),
   },

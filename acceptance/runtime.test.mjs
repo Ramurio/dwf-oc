@@ -138,6 +138,10 @@ for (const approve of [true, false]) {
         if (batch && (rounds === 1 || rounds === 3)) {
           return JSON.stringify({ outcome: 'report', summary: `Exact report for round ${rounds}.` });
         }
+        if (rounds === 1 && !prompt.includes('DWF needs a corrected JSON response')) {
+          return JSON.stringify({ outcome: 'research', summary: 'Only two assignments',
+            items: items(['branch-a', 'branch-b']) });
+        }
         return JSON.stringify({ outcome: 'research', summary: 'Four questions',
           items: items(['branch-a', 'branch-b', 'branch-c', 'branch-d']) });
       }, true);
@@ -163,6 +167,9 @@ for (const approve of [true, false]) {
         }
       }
       const calls = (await sandbox.events()).filter(event => event.type === 'received');
+      const corrections = calls.filter(event => event.prompt.startsWith('DWF needs a corrected JSON response'));
+      assert.equal(corrections.length, approve ? 0 : 1);
+      if (!approve) assert.equal(corrections[0].providerSessionId, scientist[0].sessionId);
       assert(calls.filter(event => scientist.some(visit => visit.sessionId === event.providerSessionId))
         .every(event => !JSON.stringify(event).includes('committee-only-note') &&
           !event.systemTexts.join('').includes('Review the submitted research report') &&

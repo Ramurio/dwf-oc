@@ -8,7 +8,7 @@ import { admit, checkRoleAgents, connect, readExecution, stopSessions, captureSt
 import { claimWorkflow, getWorkflow, updateWorkflow, workflowHasOwner, publicError, withWorkflowAction } from './run-store.mjs';
 import { parseVerdict, rolePermissions, rolePrompt, roleAgents, checkApprovals,
   participantVisits, validateItems } from './workflow-definition.mjs';
-import { researchGraph, researchResult, validateScientistVerdict } from './research-workflow.mjs';
+import { researchGraph, researchResult, scientistPhase, validateScientistVerdict } from './research-workflow.mjs';
 import { mergeWorkspace, snapshot, writeReviewDiff, verificationWorkspace } from './workflow-git.mjs';
 import { prepareGroup, groupVerdict, integrateGroup } from './workflow-groups.mjs';
 
@@ -89,10 +89,11 @@ function acknowledge() {
 function request(state, visit) {
   const node = state.definition.nodes[visit.node];
   const participant = state.participants?.[visit.node];
+  const input = visit.correction ?? visit;
   const permissions = participant?.agent.permissions ?? state.rolePermissions?.[node.role] ?? rolePermissions(node.role).filter(rule =>
     rule.action !== 'skill' || state.roleAgents?.[node.role] === roleAgents[node.role]);
-  return { id: state.id, sessionId: visit.sessionId, inputId: visit.inputId,
-    request: { text: visit.prompt, session: { title: `DWF ${node.role} ${visit.node}`,
+  return { id: state.id, sessionId: visit.sessionId, inputId: input.inputId,
+    request: { text: input.prompt, session: { title: `DWF ${node.role} ${visit.node}`,
       agent: participant?.id ?? state.roleAgents?.[node.role] ?? 'build', model: participant?.model ?? state.model,
       location: { directory: visit.workspace?.path ?? state.workspace.path },
       metadata: { dwfRunId: state.id },
@@ -107,10 +108,21 @@ function finishParticipant(state, visit, outcome) {
     throw publicError('Рабочее дерево изменилось во время проверки. Требуется новая проверка.');
   }
   if (outcome.status !== 'succeeded') throw publicError(outcome.error);
-  const verdict = parseVerdict(outcome.result, role);
-  if (role === 'scientist') {
-    validateScientistVerdict(researchGraph(state.definition), state.visits.slice(0, -1),
-      verdict, validateItems, message => { throw publicError(message); });
+  let verdict;
+  try {
+    verdict = parseVerdict(outcome.result, role);
+    if (role === 'scientist') {
+      validateScientistVerdict(researchGraph(state.definition), state.visits.slice(0, -1),
+        verdict, validateItems, message => { throw publicError(message); });
+    }
+  } catch (error) {
+    if (role !== 'scientist' || visit.correction || !error.publicMessage) throw error;
+    const phase = scientistPhase(researchGraph(state.definition), state.visits.slice(0, -1));
+    visit.correction = { inputId: 'msg_' + randomUUID(),
+      prompt: `DWF needs a corrected JSON response for this stage. ${error.publicMessage}\n${phase}\nA scout verdict has exactly two assignments with IDs foundations and recent. A research verdict has exactly four assignments with unique IDs and instructions.` };
+    visit.admitted = false;
+    delete visit.progress;
+    return;
   }
   visit.verdict = role === 'committee' ? { outcome: verdict.outcome, summary: verdict.summary } : verdict;
   if (role === 'worker') visit.revision = revision;
@@ -361,7 +373,7 @@ export async function runWorkflow(root, id) {
         visit.verdict = { outcome: 'blocked', summary: error.publicMessage };
       }
       if (visit.steering) state.controls.find(command => command.id === visit.steering).status = 'applied';
-      if (visit.verdict.outcome === 'blocked' && !state.controls?.some(command => command.status === 'pending')) throw publicError(visit.verdict.summary);
+      if (visit.verdict?.outcome === 'blocked' && !state.controls?.some(command => command.status === 'pending')) throw publicError(visit.verdict.summary);
       save(false);
     } catch (error) {
       if (error.code === 'DWF_OWNER_LOST') break;

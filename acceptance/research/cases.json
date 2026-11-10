@@ -22,7 +22,7 @@
     ]
   },
   "postgres-backup": {
-    "split": "holdout",
+    "split": "regression",
     "cutoff": "2025-12-31",
     "question": "Объясни на примере PostgreSQL 17, как работает цепочка из полной и двух инкрементальных физических резервных копий. Что требуется при создании и восстановлении, чем WAL summaries отличаются от WAL для PITR, что произойдёт при пропуске одного элемента цепочки? Предложи план проверки восстановления и объясни, какие выводы о скорости и надёжности можно сделать из документации.",
     "sources": [
@@ -33,7 +33,7 @@
     ]
   },
   "asyncio-failures": {
-    "split": "holdout",
+    "split": "regression",
     "cutoff": "2025-12-31",
     "question": "Сравни TaskGroup и asyncio.gather в CPython 3.12.0 для параллельных задач. Что происходит с остальными задачами, когда одна падает, когда отменяется одна дочерняя задача и когда отменяется внешний вызов? Объясни роль return_exceptions и ExceptionGroup и предложи небольшой воспроизводимый тест, отделяющий поведение API от отмены при остановке event loop.",
     "sources": [
@@ -41,6 +41,25 @@
       {"id":"taskgroups","format":"text","url":"https://raw.githubusercontent.com/python/cpython/0fb18b02c8ad56299d6a2910be0bab8ad601ef24/Lib/asyncio/taskgroups.py","reference":"https://github.com/python/cpython/blob/0fb18b02c8ad56299d6a2910be0bab8ad601ef24/Lib/asyncio/taskgroups.py","license":"PSF-2.0"},
       {"id":"tasks","format":"text","url":"https://raw.githubusercontent.com/python/cpython/0fb18b02c8ad56299d6a2910be0bab8ad601ef24/Lib/asyncio/tasks.py","reference":"https://github.com/python/cpython/blob/0fb18b02c8ad56299d6a2910be0bab8ad601ef24/Lib/asyncio/tasks.py","license":"PSF-2.0"},
       {"id":"taskgroup-tests","format":"text","url":"https://raw.githubusercontent.com/python/cpython/0fb18b02c8ad56299d6a2910be0bab8ad601ef24/Lib/test/test_asyncio/test_taskgroups.py","reference":"https://github.com/python/cpython/blob/0fb18b02c8ad56299d6a2910be0bab8ad601ef24/Lib/test/test_asyncio/test_taskgroups.py","license":"PSF-2.0"}
+    ]
+  },
+  "go-loop-variables": {
+    "split": "holdout",
+    "cutoff": "2025-12-31",
+    "question": "Объясни изменение переменных цикла в Go 1.22. Сравни захват переменной замыканием для for _, v := range, for _, v = range и for i := 0; ...; i++. Как на это влияет версия go в go.mod при одном и том же toolchain Go 1.22? Приведи короткий воспроизводимый пример с вызовом замыканий после завершения цикла, а также пример кода, чьё старое поведение меняется при переходе.",
+    "sources": [
+      {"id":"go-spec","format":"html","url":"https://raw.githubusercontent.com/golang/go/a10e42f219abb9c5bc4e7d86d9464700a42c7d57/doc/go_spec.html","reference":"https://github.com/golang/go/blob/a10e42f219abb9c5bc4e7d86d9464700a42c7d57/doc/go_spec.html","license":"Go project BSD-3-Clause"},
+      {"id":"go-release","format":"html","url":"https://go.dev/doc/go1.22","reference":"https://go.dev/doc/go1.22#language","license":"CC BY 4.0, code under BSD"},
+      {"id":"go-loopvar","format":"html","url":"https://go.dev/blog/loopvar-preview","reference":"https://go.dev/blog/loopvar-preview","license":"CC BY 4.0, code under BSD"}
+    ]
+  },
+  "http-cache-validation": {
+    "split": "holdout",
+    "cutoff": "2025-12-31",
+    "question": "Объясни жизненный цикл одного ответа на GET в общем HTTP-кэше по RFC 9111 и RFC 5861. Пусть есть ETag, max-age=60 и stale-while-revalidate=30. Что может произойти при возрасте 20, 65 и 100 секунд? Как меняют ситуацию no-cache, no-store и s-maxage? Покажи, что кэш делает при условной проверке с ответом 304 и с новым 200, и как проверить наблюдаемое поведение на тестовом сервере.",
+    "sources": [
+      {"id":"rfc9111","format":"text","url":"https://www.rfc-editor.org/rfc/rfc9111.txt","reference":"https://www.rfc-editor.org/rfc/rfc9111.html","license":"IETF Trust Legal Provisions, BCP 78"},
+      {"id":"rfc5861","format":"text","url":"https://www.rfc-editor.org/rfc/rfc5861.txt","reference":"https://www.rfc-editor.org/rfc/rfc5861.html","license":"IETF Trust Legal Provisions, BCP 78"}
     ]
   }
 }
