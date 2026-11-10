@@ -49,8 +49,8 @@
     "question": "Объясни изменение переменных цикла в Go 1.22. Сравни захват переменной замыканием для for _, v := range, for _, v = range и for i := 0; ...; i++. Как на это влияет версия go в go.mod при одном и том же toolchain Go 1.22? Приведи короткий воспроизводимый пример с вызовом замыканий после завершения цикла, а также пример кода, чьё старое поведение меняется при переходе.",
     "sources": [
       {"id":"go-spec","format":"html","url":"https://raw.githubusercontent.com/golang/go/a10e42f219abb9c5bc4e7d86d9464700a42c7d57/doc/go_spec.html","reference":"https://github.com/golang/go/blob/a10e42f219abb9c5bc4e7d86d9464700a42c7d57/doc/go_spec.html","license":"Go project BSD-3-Clause"},
-      {"id":"go-release","format":"html","url":"https://go.dev/doc/go1.22","reference":"https://go.dev/doc/go1.22#language","license":"CC BY 4.0, code under BSD"},
-      {"id":"go-loopvar","format":"html","url":"https://go.dev/blog/loopvar-preview","reference":"https://go.dev/blog/loopvar-preview","license":"CC BY 4.0, code under BSD"}
+      {"id":"go-release","format":"text","url":"https://raw.githubusercontent.com/golang/website/686c830bcb6dbc45421dce08a724e74b8f71769d/_content/doc/go1.22.md","reference":"https://go.dev/doc/go1.22#language","license":"CC BY 4.0, code under BSD"},
+      {"id":"go-loopvar","format":"text","url":"https://raw.githubusercontent.com/golang/website/b52edba3f82120d0f819beafbfda191a0a747241/_content/blog/loopvar-preview.md","reference":"https://go.dev/blog/loopvar-preview","license":"CC BY 4.0, code under BSD"}
     ]
   },
   "http-cache-validation": {
