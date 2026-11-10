@@ -31,5 +31,16 @@
       {"id":"combinebackup","format":"text","url":"https://raw.githubusercontent.com/postgres/postgres/d7ec59a63d745ba74fba0e280bbf85dc6d1caa3e/doc/src/sgml/ref/pg_combinebackup.sgml","reference":"https://www.postgresql.org/docs/17/app-pgcombinebackup.html","license":"PostgreSQL License"},
       {"id":"verifybackup","format":"text","url":"https://raw.githubusercontent.com/postgres/postgres/d7ec59a63d745ba74fba0e280bbf85dc6d1caa3e/doc/src/sgml/ref/pg_verifybackup.sgml","reference":"https://www.postgresql.org/docs/17/app-pgverifybackup.html","license":"PostgreSQL License"}
     ]
+  },
+  "asyncio-failures": {
+    "split": "holdout",
+    "cutoff": "2025-12-31",
+    "question": "Сравни TaskGroup и asyncio.gather в CPython 3.12.0 для параллельных задач. Что происходит с остальными задачами, когда одна падает, когда отменяется одна дочерняя задача и когда отменяется внешний вызов? Объясни роль return_exceptions и ExceptionGroup и предложи небольшой воспроизводимый тест, отделяющий поведение API от отмены при остановке event loop.",
+    "sources": [
+      {"id":"asyncio-docs","format":"text","url":"https://raw.githubusercontent.com/python/cpython/0fb18b02c8ad56299d6a2910be0bab8ad601ef24/Doc/library/asyncio-task.rst","reference":"https://github.com/python/cpython/blob/0fb18b02c8ad56299d6a2910be0bab8ad601ef24/Doc/library/asyncio-task.rst","license":"PSF-2.0, examples also 0BSD"},
+      {"id":"taskgroups","format":"text","url":"https://raw.githubusercontent.com/python/cpython/0fb18b02c8ad56299d6a2910be0bab8ad601ef24/Lib/asyncio/taskgroups.py","reference":"https://github.com/python/cpython/blob/0fb18b02c8ad56299d6a2910be0bab8ad601ef24/Lib/asyncio/taskgroups.py","license":"PSF-2.0"},
+      {"id":"tasks","format":"text","url":"https://raw.githubusercontent.com/python/cpython/0fb18b02c8ad56299d6a2910be0bab8ad601ef24/Lib/asyncio/tasks.py","reference":"https://github.com/python/cpython/blob/0fb18b02c8ad56299d6a2910be0bab8ad601ef24/Lib/asyncio/tasks.py","license":"PSF-2.0"},
+      {"id":"taskgroup-tests","format":"text","url":"https://raw.githubusercontent.com/python/cpython/0fb18b02c8ad56299d6a2910be0bab8ad601ef24/Lib/test/test_asyncio/test_taskgroups.py","reference":"https://github.com/python/cpython/blob/0fb18b02c8ad56299d6a2910be0bab8ad601ef24/Lib/test/test_asyncio/test_taskgroups.py","license":"PSF-2.0"}
+    ]
   }
 }

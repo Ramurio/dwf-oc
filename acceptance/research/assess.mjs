@@ -11,7 +11,7 @@ import { participantAgent, parseVerdict, rolePrompt, roleSystemPrompt } from '..
 import { researchGraph, researchModel } from '../../research-workflow.mjs';
 import { benchmarkWorkflows } from '../benchmark.mjs';
 import { authorizeTester } from '../tester.mjs';
-import { caseTask, jsonFile, modelEvidence, runResearchTrial, saveJson } from './trial.mjs';
+import { cases, caseTask, jsonFile, modelEvidence, runResearchTrial, saveJson } from './trial.mjs';
 
 const hash = text => createHash('sha256').update(text).digest('hex');
 
@@ -111,6 +111,7 @@ export async function proposeChange(root, trials) {
   const feedback = [];
   for (const directory of trials) {
     const trial = await jsonFile(join(directory, 'research.json'));
+    assert.equal(cases[trial.caseId].split, 'development');
     const { verdict } = await jsonFile(join(directory, 'independent-assessment.json'));
     const attempt = await jsonFile(join(directory, 'attempt.json'));
     const [workflow] = benchmarkWorkflows(attempt);
@@ -142,8 +143,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   else if (mode === 'run-score') {
     const trial = await runResearchTrial(settings);
     result = await scoreTrial(root, trial.attempt, settings.rubric);
-  }
-  else if (mode === 'committee') result = await calibrateCommittee(root, await jsonFile(settings.fixtures));
+  } else if (mode === 'committee') result = await calibrateCommittee(root, await jsonFile(settings.fixtures));
   else if (mode === 'propose') result = await proposeChange(root, settings.trials);
   else throw new Error('Expected score, run-score, committee or propose.');
   if (settings.output) await saveJson(settings.output, result);

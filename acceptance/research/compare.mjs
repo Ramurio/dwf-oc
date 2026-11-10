@@ -26,7 +26,13 @@ async function measurement(directory) {
 
 export async function compare(settings) {
   const pairs = [];
+  const seen = new Set();
   for (const pair of settings.pairs) {
+    for (const directory of [pair.baseline, pair.candidate]) {
+      const path = resolve(directory);
+      assert(!seen.has(path), 'Each comparison needs distinct attempts');
+      seen.add(path);
+    }
     const baseline = await measurement(pair.baseline);
     const candidate = await measurement(pair.candidate);
     for (const key of ['caseId', 'sourceTree', 'promptHash', 'judgeProtocol', 'rubric']) {
