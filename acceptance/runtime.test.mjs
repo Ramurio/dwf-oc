@@ -144,6 +144,7 @@ for (const approve of [true, false]) {
       await sandbox.release();
       const result = await sandbox.finish();
       assert.equal(result.status, 'succeeded', result.error);
+      assert.deepEqual(result.model, result.participants.scientist.model);
       assert.deepEqual(result.visits.map(visit => visit.node), approve ?
         ['scientist', 'scouts', 'scientist', 'researchers', 'scientist', 'committee'] :
         ['scientist', 'scouts', 'scientist', 'researchers', 'scientist', 'committee',

@@ -11,6 +11,7 @@ import { validateWorkflow, outcomes, groupOutcomes, roleTools, roleAgents, roleP
 import { ensureWorkflowRunner, publicWorkflow, watchEvent } from './workflow-runtime.mjs';
 import { prepareWorkspace } from './workflow-git.mjs';
 import { bundledSkills } from './role-skills.mjs';
+import { researchGraph } from './research-workflow.mjs';
 
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const json = value => process.stdout.write(JSON.stringify(value) + '\n');
@@ -71,7 +72,8 @@ async function start(workflowFile, supplied) {
     }
     await checkRoleAgents(client, workspace, Object.fromEntries(Object.entries(participants).map(([name, item]) => [name, item.id])));
     const working = prepareWorkspace(root, workspace, id, workflow.workspace);
-    createWorkflow(root, { id, definition: workflow, model, workspace: working, roleAgents,
+    const workflowModel = researchGraph(workflow) ? participants[workflow.entry].model : model;
+    createWorkflow(root, { id, definition: workflow, model: workflowModel, workspace: working, roleAgents,
       participants,
       rolePermissions: Object.fromEntries(Object.keys(roleAgents).map(role => [role, rolePermissions(role)])),
       status: 'running', sessions: {}, visits: [] });
