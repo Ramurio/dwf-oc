@@ -1,0 +1,1124 @@
+{
+  "model": {
+    "provider": "openai",
+    "modelId": "gpt-6.1-sol",
+    "reasoning": "high",
+    "requestedServiceTier": "default"
+  },
+  "selected": {
+    "variant": "base-with-protocol-correction",
+    "testedReleaseRevision": "080e18294df09c703cf8769284e20bc5ae318e61"
+  },
+  "corpusFingerprints": {
+    "asyncio-failures": {
+      "asyncio-docs": {
+        "original": "0c1c68c396513e56f06b6709c02efe5095048e591f0e9e241041cbf8b8303b1e",
+        "text": "721e2139a3f2cc17673b678b7dedafaa4e9982c62296178cf2bac90fc7288895"
+      },
+      "taskgroups": {
+        "original": "5aa2be0b3653e5d1c67ab27d3e11160dc69658b659cc216b6d0deea133e0f0c3",
+        "text": "743417efb92ed3672d45c6949bb051a8aaba89e13b506c7909b5b2fa06da2479"
+      },
+      "tasks": {
+        "original": "91bde3a07e4761a6e8bec2d290608c33ee3cf984632f575e94a6e94767b53080",
+        "text": "b09eaea3e6f9c77bbfd622f705951c29e883788dac25cb4138942f07411c4ecf"
+      },
+      "taskgroup-tests": {
+        "original": "ec39b81621289e6ef48d4624593510ce9c402e93f46319b2378fbdc2ece808a3",
+        "text": "8d4382a88ac0d66796826b10c4ac896ba6ec7adc4386c06f3bb8086efdee64c2"
+      }
+    },
+    "git-history": {
+      "graph-design": {
+        "original": "7f09f24a7606be6d568942b0e07070bb285872b2a4cb8fcf03d4b25585abe0b7",
+        "text": "affe24d1716dcc0643bc94d525b1e6023e6216ad34d7a0d15f61504319161bd5"
+      },
+      "graph-format": {
+        "original": "7b089ad1cc15fa324e607ed01643aae72f45c6247caff08a45aa32e2cef441b5",
+        "text": "1e2b6dca0f6590ae260b4da9f045891095ee4fb13a18075a2a1e10c52e735d5e"
+      },
+      "graph-cli": {
+        "original": "8c2e6b0d96302263b4c3bbf33681aaa86664d7c42b250de7126ff47ceb5127e5",
+        "text": "785e855c53f2c15516deadaf1afe6db9bffc9b26524056588c51c296fd1653c8"
+      },
+      "bloom-tests": {
+        "original": "393ca8a5a514fe5d358b069c3b96e8840352abcaeeb6b15f3687996197acd846",
+        "text": "79cbdd5a4348094eaeeb0afe7e691f48d7e61aad265dde919dfb99613611a01d"
+      }
+    },
+    "go-loop-variables": {
+      "go-spec": {
+        "original": "783fdf67dd27ff9f9a9309c337f902b4c01d5b5bb9014b1db2c190dd785fe438",
+        "text": "417004929b8fd14303afd17b805d9b94d4a61be36fde2742f07e1d7008032a7e"
+      },
+      "go-release": {
+        "original": "e968bd94b820bf7b85d97cfac0f06d5dc33ae4861c9979c73c631aa68aabcf42",
+        "text": "d78ad1e0a99292f1566b971e4f6187b3c26a368e32d4ddd547684eee5232b392"
+      },
+      "go-loopvar": {
+        "original": "0284fb520ad71159d2560b759e8a0a952648ee0dfba9a0e7c0a29cafd1fcd687",
+        "text": "a8f43f513043a890f4d3263288f633aeb4762ffd4b75f0ea55cd2ca01caca51d"
+      }
+    },
+    "http-cache-validation": {
+      "rfc9111": {
+        "original": "aeb52adb3279d5f23dae34f68af11bd5cef0a0aff7ffcd014c9ca93c5302cf3e",
+        "text": "7db82adb1c83881edc4801ac90b0d0b2df426aa0b789350b0f6548add50699ea"
+      },
+      "rfc5861": {
+        "original": "1193f1c8710af162e1b9fb4250d79bc6dd26497df4caeeaaa8bcb2fefdd2529e",
+        "text": "529d1752bff1ce26daf4cc104f259c3203c72fcd53ca2f82ecfd59f04b97e66d"
+      }
+    },
+    "postgres-backup": {
+      "backup": {
+        "original": "21381e47eafc27dea12cb8500e4ffa5aa26156002517a3b2f3dc265ef1395458",
+        "text": "b0715b2448d0f9603d05bd7232e8f58231c0a1cc8a921f9175e77e20ead6481f"
+      },
+      "basebackup": {
+        "original": "81b517493f27f87848baa957a57cfb9aec14f05d5d2939dd0a1313e80514dc48",
+        "text": "fec1eb9bb256e527ed7c85092d836649ef43fe0cbcd20bed434d94a9c45e2205"
+      },
+      "combinebackup": {
+        "original": "eab8a172a970333e31559996c5d6ff678703f73473b3f8ac5f886d7507eb05e9",
+        "text": "33ccfad7c318f79bcd1bff40918d73c9300cc3a9e4fe2ed3205abd1dfb0905d0"
+      },
+      "verifybackup": {
+        "original": "43e4c177dbb2a92b83ef2bbdb9ccdb172e090adf160e26eefc3b52a47d456e24",
+        "text": "e867e50026061d898250f4302681d1eb225057180284427fba759f33b876c076"
+      }
+    },
+    "quantization": {
+      "gptq": {
+        "original": "35e339171cd48bbf8dda246bd018b11aa33a5cda0c4a1587cdae574208f56396",
+        "text": "29de5543dae5aaa7b46e979515b6a000571ab685b69088b42c444ba0e32f04b2"
+      },
+      "awq": {
+        "original": "83ba3378dd6c2c3f8fe23e79ca7a7c2ca53f5fad8d9b9a775af1a7e687d262d6",
+        "text": "a87dea2692148dc14c935b5adb6e7b0fd70e78860ad4054910dc30c2cd276583"
+      },
+      "qserve": {
+        "original": "8e7409469ea3f4fd4d57230811d0a525efeca189c9a20e9a63fe0803be4bf319",
+        "text": "1933dff9fdfab606f312d3df57aa19d8f2c5705cf5547b33c9925c3e121d9aaa"
+      },
+      "marlin": {
+        "original": "bd010465d8f41447674e8f844d6b6e333fc474e81b84e7ea734639c97334fdeb",
+        "text": "68e4f6a1f7d0a739069b2604688cdb127b94c632d850c60dd2c27bcb45447eb6"
+      }
+    }
+  },
+  "comparisons": [
+    {
+      "variant": "candidate-1",
+      "hypothesis": "Точные задания от учёного уменьшают повторное чтение и сохраняют качество доказательств.",
+      "change": "В системном промпте учёного указывать проверяемые вопросы и начальные разделы источников.",
+      "decision": "baseline",
+      "guarded": false,
+      "qualityWin": false,
+      "efficiencyWin": false
+    },
+    {
+      "variant": "candidate-2",
+      "hypothesis": "Поиск нужных фрагментов перед чтением длинных первоисточников уменьшает расход токенов участников без потери точности и полноты.",
+      "change": "Одна общая инструкция скаута, исследователя и комитета для чтения релевантных фрагментов с условиями и проверкой противоречий. Промпт учёного исходный.",
+      "decision": "baseline",
+      "guarded": false,
+      "qualityWin": false,
+      "efficiencyWin": false
+    }
+  ],
+  "trials": [
+    {
+      "case": "quantization",
+      "launch": "assembled",
+      "scientistCorrections": 0,
+      "variant": "base",
+      "repeat": false,
+      "runtimeRevision": "922d5abf0c971b269149a9ca871dbe8fd2014250",
+      "publicSkillHash": "04ef29cd19a7484ccf7ecc1b43b73c8f9d07103bf6ed00749e5caf92841d02fc",
+      "sourceTree": "70dd9d20c61f2bb4bb439314393a45f44672d9ca",
+      "questionHash": "c0fca2639fad231c399285c3ba37c33634a9591e450c34ca448b8f3dedb7326d",
+      "judgeProtocolHash": "8e91372ae87b24a7cfb7b8d97b3ce1cd0f691d958dc9e80828f58513ab10255f",
+      "rubricHash": "2859c9c4c356966cb1b4c2e3a5da82ef8695e86d1feb7e9f8f6a46ae60baeaa7",
+      "reportHash": "9649e224d2a00513317bcfaa2ebc291a7ba41361d8fd52f0a124595dc713c41d",
+      "committee": "approve",
+      "researchRounds": 1,
+      "committeeChecks": 1,
+      "elapsedSeconds": 474.3,
+      "judgeSeconds": 95.3,
+      "sessions": 8,
+      "flow": {
+        "requests": 56,
+        "input": 1563565,
+        "cached": 1076480,
+        "output": 26554,
+        "reasoning": 3590
+      },
+      "tester": {
+        "requests": 12,
+        "input": 542437,
+        "cached": 407936,
+        "output": 6221,
+        "reasoning": 787
+      },
+      "judge": {
+        "requests": 6,
+        "input": 190435,
+        "cached": 134656,
+        "output": 3828,
+        "reasoning": 587
+      },
+      "toolCalls": {
+        "skill": 2,
+        "read": 87,
+        "shell": 5,
+        "patch": 1,
+        "grep": 16,
+        "glob": 1
+      },
+      "dimensions": {
+        "accuracy": 2,
+        "citationSupport": 2,
+        "coverage": 1,
+        "analysis": 2,
+        "uncertainty": 2,
+        "sourceQuality": 2,
+        "usefulness": 2
+      },
+      "checklist": {
+        "passed": 5,
+        "total": 6
+      },
+      "materialErrors": 0
+    },
+    {
+      "case": "quantization",
+      "launch": "assembled",
+      "scientistCorrections": 0,
+      "variant": "base",
+      "repeat": true,
+      "runtimeRevision": "922d5abf0c971b269149a9ca871dbe8fd2014250",
+      "publicSkillHash": "04ef29cd19a7484ccf7ecc1b43b73c8f9d07103bf6ed00749e5caf92841d02fc",
+      "sourceTree": "70dd9d20c61f2bb4bb439314393a45f44672d9ca",
+      "questionHash": "c0fca2639fad231c399285c3ba37c33634a9591e450c34ca448b8f3dedb7326d",
+      "judgeProtocolHash": "8e91372ae87b24a7cfb7b8d97b3ce1cd0f691d958dc9e80828f58513ab10255f",
+      "rubricHash": "2859c9c4c356966cb1b4c2e3a5da82ef8695e86d1feb7e9f8f6a46ae60baeaa7",
+      "reportHash": "fc304f881114371cb6ecf590e2542c92101258f4436b483cf2761b5ed75648ca",
+      "committee": "approve",
+      "researchRounds": 1,
+      "committeeChecks": 1,
+      "elapsedSeconds": 486.7,
+      "judgeSeconds": 102.9,
+      "sessions": 8,
+      "flow": {
+        "requests": 53,
+        "input": 1549291,
+        "cached": 1000704,
+        "output": 27961,
+        "reasoning": 5351
+      },
+      "tester": {
+        "requests": 11,
+        "input": 165187,
+        "cached": 139776,
+        "output": 6778,
+        "reasoning": 1412
+      },
+      "judge": {
+        "requests": 5,
+        "input": 268890,
+        "cached": 166016,
+        "output": 4351,
+        "reasoning": 671
+      },
+      "toolCalls": {
+        "skill": 2,
+        "read": 72,
+        "shell": 6,
+        "patch": 1,
+        "grep": 16,
+        "glob": 3
+      },
+      "dimensions": {
+        "accuracy": 2,
+        "citationSupport": 2,
+        "coverage": 2,
+        "analysis": 2,
+        "uncertainty": 2,
+        "sourceQuality": 2,
+        "usefulness": 2
+      },
+      "checklist": {
+        "passed": 6,
+        "total": 6
+      },
+      "materialErrors": 0
+    },
+    {
+      "case": "git-history",
+      "launch": "assembled",
+      "scientistCorrections": 0,
+      "variant": "base",
+      "repeat": false,
+      "runtimeRevision": "922d5abf0c971b269149a9ca871dbe8fd2014250",
+      "publicSkillHash": "04ef29cd19a7484ccf7ecc1b43b73c8f9d07103bf6ed00749e5caf92841d02fc",
+      "sourceTree": "855fec439045a914877631c100128c75fa863530",
+      "questionHash": "c61c7896dda49607dc72602d9d4d9a8e5d169fad762fb3a10ebae351d375f49c",
+      "judgeProtocolHash": "8e91372ae87b24a7cfb7b8d97b3ce1cd0f691d958dc9e80828f58513ab10255f",
+      "rubricHash": "aa106cba2699610bafa0ff522df7dc778624d54cb6b86e6abf90aff304db7493",
+      "reportHash": "229e9337b5d55502dc000944862ba8e27aaec423e7805e03ec2883fe805e9054",
+      "committee": "approve",
+      "researchRounds": 1,
+      "committeeChecks": 1,
+      "elapsedSeconds": 416.5,
+      "judgeSeconds": 72.0,
+      "sessions": 8,
+      "flow": {
+        "requests": 35,
+        "input": 292309,
+        "cached": 112640,
+        "output": 23268,
+        "reasoning": 4064
+      },
+      "tester": {
+        "requests": 13,
+        "input": 275821,
+        "cached": 229248,
+        "output": 6038,
+        "reasoning": 683
+      },
+      "judge": {
+        "requests": 3,
+        "input": 30068,
+        "cached": 7424,
+        "output": 3257,
+        "reasoning": 516
+      },
+      "toolCalls": {
+        "skill": 2,
+        "read": 50,
+        "shell": 5,
+        "glob": 2,
+        "patch": 1,
+        "grep": 3
+      },
+      "dimensions": {
+        "accuracy": 2,
+        "citationSupport": 2,
+        "coverage": 2,
+        "analysis": 2,
+        "uncertainty": 2,
+        "sourceQuality": 2,
+        "usefulness": 2
+      },
+      "checklist": {
+        "passed": 6,
+        "total": 6
+      },
+      "materialErrors": 0
+    },
+    {
+      "case": "quantization",
+      "launch": "assembled",
+      "scientistCorrections": 0,
+      "variant": "candidate-1",
+      "repeat": false,
+      "runtimeRevision": "47280108bd231b13b074c4bed56e1607bbe99e41",
+      "publicSkillHash": "04ef29cd19a7484ccf7ecc1b43b73c8f9d07103bf6ed00749e5caf92841d02fc",
+      "sourceTree": "70dd9d20c61f2bb4bb439314393a45f44672d9ca",
+      "questionHash": "c0fca2639fad231c399285c3ba37c33634a9591e450c34ca448b8f3dedb7326d",
+      "judgeProtocolHash": "8e91372ae87b24a7cfb7b8d97b3ce1cd0f691d958dc9e80828f58513ab10255f",
+      "rubricHash": "2859c9c4c356966cb1b4c2e3a5da82ef8695e86d1feb7e9f8f6a46ae60baeaa7",
+      "reportHash": "8095573db2ebbb38352db403ed5477f1b0b708a6029bc7f3bff3857ab44ad1a3",
+      "committee": "approve",
+      "researchRounds": 1,
+      "committeeChecks": 1,
+      "elapsedSeconds": 631.8,
+      "judgeSeconds": 97.6,
+      "sessions": 8,
+      "flow": {
+        "requests": 52,
+        "input": 1468682,
+        "cached": 974976,
+        "output": 27623,
+        "reasoning": 4643
+      },
+      "tester": {
+        "requests": 12,
+        "input": 186932,
+        "cached": 163456,
+        "output": 7218,
+        "reasoning": 617
+      },
+      "judge": {
+        "requests": 6,
+        "input": 192456,
+        "cached": 139904,
+        "output": 3880,
+        "reasoning": 493
+      },
+      "toolCalls": {
+        "skill": 2,
+        "read": 88,
+        "shell": 7,
+        "patch": 2,
+        "grep": 17
+      },
+      "dimensions": {
+        "accuracy": 2,
+        "citationSupport": 2,
+        "coverage": 2,
+        "analysis": 2,
+        "uncertainty": 2,
+        "sourceQuality": 2,
+        "usefulness": 1
+      },
+      "checklist": {
+        "passed": 5,
+        "total": 6
+      },
+      "materialErrors": 0
+    },
+    {
+      "case": "quantization",
+      "launch": "assembled",
+      "scientistCorrections": 0,
+      "variant": "candidate-1",
+      "repeat": true,
+      "runtimeRevision": "47280108bd231b13b074c4bed56e1607bbe99e41",
+      "publicSkillHash": "04ef29cd19a7484ccf7ecc1b43b73c8f9d07103bf6ed00749e5caf92841d02fc",
+      "sourceTree": "70dd9d20c61f2bb4bb439314393a45f44672d9ca",
+      "questionHash": "c0fca2639fad231c399285c3ba37c33634a9591e450c34ca448b8f3dedb7326d",
+      "judgeProtocolHash": "8e91372ae87b24a7cfb7b8d97b3ce1cd0f691d958dc9e80828f58513ab10255f",
+      "rubricHash": "2859c9c4c356966cb1b4c2e3a5da82ef8695e86d1feb7e9f8f6a46ae60baeaa7",
+      "reportHash": "dd311b4b71db96195fbec994685b9c8f71cc2bf7d4ecd19d78806afbdc12b1df",
+      "committee": "approve",
+      "researchRounds": 1,
+      "committeeChecks": 1,
+      "elapsedSeconds": 494.8,
+      "judgeSeconds": 98.7,
+      "sessions": 8,
+      "flow": {
+        "requests": 52,
+        "input": 1484139,
+        "cached": 997248,
+        "output": 27585,
+        "reasoning": 3478
+      },
+      "tester": {
+        "requests": 11,
+        "input": 176514,
+        "cached": 131584,
+        "output": 5781,
+        "reasoning": 534
+      },
+      "judge": {
+        "requests": 6,
+        "input": 360664,
+        "cached": 259712,
+        "output": 3805,
+        "reasoning": 668
+      },
+      "toolCalls": {
+        "skill": 2,
+        "read": 84,
+        "shell": 6,
+        "patch": 1,
+        "grep": 20,
+        "glob": 3
+      },
+      "dimensions": {
+        "accuracy": 2,
+        "citationSupport": 2,
+        "coverage": 1,
+        "analysis": 2,
+        "uncertainty": 2,
+        "sourceQuality": 2,
+        "usefulness": 2
+      },
+      "checklist": {
+        "passed": 5,
+        "total": 6
+      },
+      "materialErrors": 0
+    },
+    {
+      "case": "git-history",
+      "launch": "assembled",
+      "scientistCorrections": 0,
+      "variant": "candidate-1",
+      "repeat": false,
+      "runtimeRevision": "47280108bd231b13b074c4bed56e1607bbe99e41",
+      "publicSkillHash": "04ef29cd19a7484ccf7ecc1b43b73c8f9d07103bf6ed00749e5caf92841d02fc",
+      "sourceTree": "855fec439045a914877631c100128c75fa863530",
+      "questionHash": "c61c7896dda49607dc72602d9d4d9a8e5d169fad762fb3a10ebae351d375f49c",
+      "judgeProtocolHash": "8e91372ae87b24a7cfb7b8d97b3ce1cd0f691d958dc9e80828f58513ab10255f",
+      "rubricHash": "aa106cba2699610bafa0ff522df7dc778624d54cb6b86e6abf90aff304db7493",
+      "reportHash": "b70b82ccc6ae7d65efb1925f4bfbc01f8b69aff2850b16133e1bd9a8196c81dc",
+      "committee": "approve",
+      "researchRounds": 1,
+      "committeeChecks": 1,
+      "elapsedSeconds": 451.5,
+      "judgeSeconds": 69.9,
+      "sessions": 8,
+      "flow": {
+        "requests": 37,
+        "input": 382503,
+        "cached": 217344,
+        "output": 23950,
+        "reasoning": 4929
+      },
+      "tester": {
+        "requests": 13,
+        "input": 285087,
+        "cached": 231040,
+        "output": 5948,
+        "reasoning": 657
+      },
+      "judge": {
+        "requests": 4,
+        "input": 52491,
+        "cached": 29696,
+        "output": 2911,
+        "reasoning": 543
+      },
+      "toolCalls": {
+        "skill": 2,
+        "read": 49,
+        "glob": 2,
+        "shell": 8,
+        "patch": 1,
+        "grep": 2
+      },
+      "dimensions": {
+        "accuracy": 2,
+        "citationSupport": 2,
+        "coverage": 1,
+        "analysis": 2,
+        "uncertainty": 2,
+        "sourceQuality": 2,
+        "usefulness": 2
+      },
+      "checklist": {
+        "passed": 5,
+        "total": 6
+      },
+      "materialErrors": 0
+    },
+    {
+      "case": "quantization",
+      "launch": "assembled",
+      "scientistCorrections": 0,
+      "variant": "candidate-2",
+      "repeat": false,
+      "runtimeRevision": "d2d8e7501022a14cc2e794909604c498f50acf87",
+      "publicSkillHash": "04ef29cd19a7484ccf7ecc1b43b73c8f9d07103bf6ed00749e5caf92841d02fc",
+      "sourceTree": "70dd9d20c61f2bb4bb439314393a45f44672d9ca",
+      "questionHash": "c0fca2639fad231c399285c3ba37c33634a9591e450c34ca448b8f3dedb7326d",
+      "judgeProtocolHash": "8e91372ae87b24a7cfb7b8d97b3ce1cd0f691d958dc9e80828f58513ab10255f",
+      "rubricHash": "2859c9c4c356966cb1b4c2e3a5da82ef8695e86d1feb7e9f8f6a46ae60baeaa7",
+      "reportHash": "4557d1a4e7cce929c5f282dd9cc0461431a63b32b777ac2016fc046e6564293c",
+      "committee": "approve",
+      "researchRounds": 1,
+      "committeeChecks": 1,
+      "elapsedSeconds": 496.0,
+      "judgeSeconds": 97.7,
+      "sessions": 8,
+      "flow": {
+        "requests": 59,
+        "input": 1545569,
+        "cached": 1102464,
+        "output": 30095,
+        "reasoning": 4639
+      },
+      "tester": {
+        "requests": 13,
+        "input": 213778,
+        "cached": 178816,
+        "output": 5906,
+        "reasoning": 921
+      },
+      "judge": {
+        "requests": 6,
+        "input": 353286,
+        "cached": 254592,
+        "output": 3762,
+        "reasoning": 503
+      },
+      "toolCalls": {
+        "skill": 2,
+        "read": 113,
+        "glob": 5,
+        "shell": 4,
+        "patch": 1,
+        "grep": 38,
+        "execute": 1
+      },
+      "dimensions": {
+        "accuracy": 2,
+        "citationSupport": 2,
+        "coverage": 1,
+        "analysis": 2,
+        "uncertainty": 2,
+        "sourceQuality": 2,
+        "usefulness": 1
+      },
+      "checklist": {
+        "passed": 5,
+        "total": 6
+      },
+      "materialErrors": 0
+    },
+    {
+      "case": "quantization",
+      "launch": "assembled",
+      "scientistCorrections": 0,
+      "variant": "candidate-2",
+      "repeat": true,
+      "runtimeRevision": "d2d8e7501022a14cc2e794909604c498f50acf87",
+      "publicSkillHash": "04ef29cd19a7484ccf7ecc1b43b73c8f9d07103bf6ed00749e5caf92841d02fc",
+      "sourceTree": "70dd9d20c61f2bb4bb439314393a45f44672d9ca",
+      "questionHash": "c0fca2639fad231c399285c3ba37c33634a9591e450c34ca448b8f3dedb7326d",
+      "judgeProtocolHash": "8e91372ae87b24a7cfb7b8d97b3ce1cd0f691d958dc9e80828f58513ab10255f",
+      "rubricHash": "2859c9c4c356966cb1b4c2e3a5da82ef8695e86d1feb7e9f8f6a46ae60baeaa7",
+      "reportHash": "a023ae5e59849f477ba9af9496d6ee99b40e460bcc51f0c6707eb58f17305f3f",
+      "committee": "approve",
+      "researchRounds": 2,
+      "committeeChecks": 2,
+      "elapsedSeconds": 782.7,
+      "judgeSeconds": 89.5,
+      "sessions": 13,
+      "flow": {
+        "requests": 93,
+        "input": 2157096,
+        "cached": 1554816,
+        "output": 43639,
+        "reasoning": 6343
+      },
+      "tester": {
+        "requests": 13,
+        "input": 204153,
+        "cached": 171520,
+        "output": 6679,
+        "reasoning": 941
+      },
+      "judge": {
+        "requests": 6,
+        "input": 301038,
+        "cached": 207232,
+        "output": 3678,
+        "reasoning": 400
+      },
+      "toolCalls": {
+        "skill": 2,
+        "read": 175,
+        "shell": 7,
+        "patch": 1,
+        "glob": 3,
+        "grep": 53
+      },
+      "dimensions": {
+        "accuracy": 2,
+        "citationSupport": 2,
+        "coverage": 1,
+        "analysis": 2,
+        "uncertainty": 2,
+        "sourceQuality": 2,
+        "usefulness": 1
+      },
+      "checklist": {
+        "passed": 5,
+        "total": 6
+      },
+      "materialErrors": 0
+    },
+    {
+      "case": "git-history",
+      "launch": "assembled",
+      "scientistCorrections": 0,
+      "variant": "candidate-2",
+      "repeat": false,
+      "runtimeRevision": "d2d8e7501022a14cc2e794909604c498f50acf87",
+      "publicSkillHash": "04ef29cd19a7484ccf7ecc1b43b73c8f9d07103bf6ed00749e5caf92841d02fc",
+      "sourceTree": "855fec439045a914877631c100128c75fa863530",
+      "questionHash": "c61c7896dda49607dc72602d9d4d9a8e5d169fad762fb3a10ebae351d375f49c",
+      "judgeProtocolHash": "8e91372ae87b24a7cfb7b8d97b3ce1cd0f691d958dc9e80828f58513ab10255f",
+      "rubricHash": "aa106cba2699610bafa0ff522df7dc778624d54cb6b86e6abf90aff304db7493",
+      "reportHash": "cfe955f7847f232e50639bf4c2700f5046da17b22f963b2b6ee247734462f769",
+      "committee": "approve",
+      "researchRounds": 1,
+      "committeeChecks": 1,
+      "elapsedSeconds": 420.4,
+      "judgeSeconds": 70.9,
+      "sessions": 8,
+      "flow": {
+        "requests": 32,
+        "input": 272073,
+        "cached": 109696,
+        "output": 21293,
+        "reasoning": 3252
+      },
+      "tester": {
+        "requests": 9,
+        "input": 136833,
+        "cached": 109312,
+        "output": 5682,
+        "reasoning": 469
+      },
+      "judge": {
+        "requests": 4,
+        "input": 52735,
+        "cached": 29952,
+        "output": 2769,
+        "reasoning": 473
+      },
+      "toolCalls": {
+        "skill": 2,
+        "read": 41,
+        "shell": 5,
+        "glob": 3,
+        "patch": 1,
+        "grep": 1
+      },
+      "dimensions": {
+        "accuracy": 2,
+        "citationSupport": 2,
+        "coverage": 1,
+        "analysis": 2,
+        "uncertainty": 2,
+        "sourceQuality": 2,
+        "usefulness": 2
+      },
+      "checklist": {
+        "passed": 5,
+        "total": 6
+      },
+      "materialErrors": 0
+    },
+    {
+      "case": "asyncio-failures",
+      "launch": "preset",
+      "scientistCorrections": 0,
+      "variant": "before-protocol-correction",
+      "repeat": false,
+      "runtimeRevision": "672cc0bf27e8571de0ec9bdea369fc38e765abc2",
+      "publicSkillHash": "04ef29cd19a7484ccf7ecc1b43b73c8f9d07103bf6ed00749e5caf92841d02fc",
+      "sourceTree": "cade8bf522ca397ed24db13510e8c73d48d3c0c9",
+      "questionHash": "b97bc56fe38280e4940e97fe3a9caf754c55923b090f15d5c3657c04997241c6",
+      "judgeProtocolHash": "8e91372ae87b24a7cfb7b8d97b3ce1cd0f691d958dc9e80828f58513ab10255f",
+      "rubricHash": "6fe1f6898ce9657c1d8cc976139b0d620572886065748782a34b231570f9c416",
+      "reportHash": "34092834d225de9dbb4b1812670087658e3fd355b87bc697a4db897ca39631ed",
+      "committee": "approve",
+      "researchRounds": 1,
+      "committeeChecks": 1,
+      "elapsedSeconds": 491.8,
+      "judgeSeconds": 72.0,
+      "sessions": 8,
+      "flow": {
+        "requests": 46,
+        "input": 704495,
+        "cached": 428928,
+        "output": 25573,
+        "reasoning": 6869
+      },
+      "tester": {
+        "requests": 19,
+        "input": 280223,
+        "cached": 235392,
+        "output": 4622,
+        "reasoning": 633
+      },
+      "judge": {
+        "requests": 4,
+        "input": 81098,
+        "cached": 40064,
+        "output": 2978,
+        "reasoning": 552
+      },
+      "toolCalls": {
+        "skill": 9,
+        "read": 58,
+        "shell": 13,
+        "patch": 1,
+        "grep": 3,
+        "glob": 2
+      },
+      "dimensions": {
+        "accuracy": 2,
+        "citationSupport": 2,
+        "coverage": 1,
+        "analysis": 2,
+        "uncertainty": 2,
+        "sourceQuality": 2,
+        "usefulness": 1
+      },
+      "checklist": {
+        "passed": 5,
+        "total": 6
+      },
+      "materialErrors": 0
+    },
+    {
+      "case": "postgres-backup",
+      "launch": "preset",
+      "scientistCorrections": 0,
+      "variant": "protocol-regression",
+      "repeat": false,
+      "runtimeRevision": "080e18294df09c703cf8769284e20bc5ae318e61",
+      "publicSkillHash": "04ef29cd19a7484ccf7ecc1b43b73c8f9d07103bf6ed00749e5caf92841d02fc",
+      "sourceTree": "1e15fd902913bab54ac79a5a18157a94c2e7f41b",
+      "questionHash": "e9abbd690c50a453c03b35e0232a9940a630abf8433fae662fe16b867bc8f117",
+      "judgeProtocolHash": "8e91372ae87b24a7cfb7b8d97b3ce1cd0f691d958dc9e80828f58513ab10255f",
+      "rubricHash": "7d014b017155498cab9629d8eac3905732aaf32c0f628165ccb1d29ee7d2f34c",
+      "reportHash": "f1b62c98e09b90b400350f2c6c7addba98933996f6dc6957357df073e33e608f",
+      "committee": "approve",
+      "researchRounds": 1,
+      "committeeChecks": 1,
+      "elapsedSeconds": 415.9,
+      "judgeSeconds": 78.2,
+      "sessions": 8,
+      "flow": {
+        "requests": 50,
+        "input": 966489,
+        "cached": 612224,
+        "output": 23285,
+        "reasoning": 3422
+      },
+      "tester": {
+        "requests": 18,
+        "input": 257542,
+        "cached": 214912,
+        "output": 4571,
+        "reasoning": 367
+      },
+      "judge": {
+        "requests": 5,
+        "input": 140533,
+        "cached": 93312,
+        "output": 3090,
+        "reasoning": 344
+      },
+      "toolCalls": {
+        "skill": 9,
+        "read": 53,
+        "shell": 10,
+        "patch": 1,
+        "grep": 7,
+        "glob": 3
+      },
+      "dimensions": {
+        "accuracy": 2,
+        "citationSupport": 2,
+        "coverage": 2,
+        "analysis": 2,
+        "uncertainty": 2,
+        "sourceQuality": 2,
+        "usefulness": 2
+      },
+      "checklist": {
+        "passed": 6,
+        "total": 6
+      },
+      "materialErrors": 0
+    },
+    {
+      "case": "go-loop-variables",
+      "launch": "preset",
+      "scientistCorrections": 0,
+      "variant": "fresh-holdout",
+      "repeat": false,
+      "runtimeRevision": "080e18294df09c703cf8769284e20bc5ae318e61",
+      "publicSkillHash": "04ef29cd19a7484ccf7ecc1b43b73c8f9d07103bf6ed00749e5caf92841d02fc",
+      "sourceTree": "a3a990e90be710c73c7b8b199d12c2aef4d5fc5f",
+      "questionHash": "1537d663d1563d13e7990fa231d40538e1a999c04a83969cbcc1ac236b61d15e",
+      "judgeProtocolHash": "8e91372ae87b24a7cfb7b8d97b3ce1cd0f691d958dc9e80828f58513ab10255f",
+      "rubricHash": "62dcdaa41562d718a2efe31b0fc0aeae9d97ee669d87ff8af586fbfa6bd3d094",
+      "reportHash": "976f2c5597a4c8b35a72098db383c8636b7c280ecf1647a12d764505b8a7b9a5",
+      "committee": "approve",
+      "researchRounds": 1,
+      "committeeChecks": 1,
+      "elapsedSeconds": 411.4,
+      "judgeSeconds": 54.7,
+      "sessions": 8,
+      "flow": {
+        "requests": 51,
+        "input": 769817,
+        "cached": 531712,
+        "output": 20118,
+        "reasoning": 2868
+      },
+      "tester": {
+        "requests": 27,
+        "input": 618463,
+        "cached": 553856,
+        "output": 5309,
+        "reasoning": 713
+      },
+      "judge": {
+        "requests": 4,
+        "input": 52197,
+        "cached": 22144,
+        "output": 1982,
+        "reasoning": 250
+      },
+      "toolCalls": {
+        "skill": 9,
+        "read": 72,
+        "shell": 13,
+        "glob": 2,
+        "patch": 1,
+        "grep": 14,
+        "execute": 1
+      },
+      "dimensions": {
+        "accuracy": 2,
+        "citationSupport": 2,
+        "coverage": 2,
+        "analysis": 2,
+        "uncertainty": 2,
+        "sourceQuality": 2,
+        "usefulness": 2
+      },
+      "checklist": {
+        "passed": 6,
+        "total": 6
+      },
+      "materialErrors": 0
+    },
+    {
+      "case": "http-cache-validation",
+      "launch": "preset",
+      "scientistCorrections": 0,
+      "variant": "fresh-holdout",
+      "repeat": false,
+      "runtimeRevision": "080e18294df09c703cf8769284e20bc5ae318e61",
+      "publicSkillHash": "04ef29cd19a7484ccf7ecc1b43b73c8f9d07103bf6ed00749e5caf92841d02fc",
+      "sourceTree": "64d728d7a4dd9b14cacf186ae686e8d9e3547d7b",
+      "questionHash": "20d7915c042207432bf3d08920bc674cb2c43906ee6bbaa540409c9e9a6cfb47",
+      "judgeProtocolHash": "8e91372ae87b24a7cfb7b8d97b3ce1cd0f691d958dc9e80828f58513ab10255f",
+      "rubricHash": "0ac3096fb21674942746e81fc500796957d4de05dc826f036d8978d677364b98",
+      "reportHash": "b3ccad4be7880346c11b2962938835bc4e725aef0513ef9256af9a9746b8e710",
+      "committee": "approve",
+      "researchRounds": 1,
+      "committeeChecks": 1,
+      "elapsedSeconds": 424.7,
+      "judgeSeconds": 66.9,
+      "sessions": 8,
+      "flow": {
+        "requests": 46,
+        "input": 506932,
+        "cached": 255360,
+        "output": 21702,
+        "reasoning": 3347
+      },
+      "tester": {
+        "requests": 24,
+        "input": 351491,
+        "cached": 312960,
+        "output": 5119,
+        "reasoning": 371
+      },
+      "judge": {
+        "requests": 5,
+        "input": 67442,
+        "cached": 29952,
+        "output": 2955,
+        "reasoning": 408
+      },
+      "toolCalls": {
+        "skill": 9,
+        "read": 40,
+        "shell": 13,
+        "patch": 1,
+        "grep": 3,
+        "execute": 1,
+        "glob": 1
+      },
+      "dimensions": {
+        "accuracy": 2,
+        "citationSupport": 2,
+        "coverage": 2,
+        "analysis": 2,
+        "uncertainty": 2,
+        "sourceQuality": 2,
+        "usefulness": 2
+      },
+      "checklist": {
+        "passed": 6,
+        "total": 6
+      },
+      "materialErrors": 0
+    }
+  ],
+  "protocolFailure": {
+    "case": "postgres-backup",
+    "variant": "before-protocol-correction",
+    "runtimeRevision": "672cc0bf27e8571de0ec9bdea369fc38e765abc2",
+    "sourceTree": "1e15fd902913bab54ac79a5a18157a94c2e7f41b",
+    "elapsedSeconds": 399.32546850585936,
+    "flow": {
+      "requests": 44,
+      "input": 822322,
+      "cached": 517632,
+      "output": 19408,
+      "reasoning": 2260
+    },
+    "tester": {
+      "requests": 28,
+      "input": 746239,
+      "cached": 657920,
+      "output": 3770,
+      "reasoning": 1021
+    },
+    "researchRounds": 1,
+    "attemptedAssignments": 2,
+    "requiredAssignments": 4,
+    "failure": "Scientist returned a research verdict with two assignments after the first completed round."
+  },
+  "committeeCalibration": {
+    "baseline": [
+      {
+        "fixture": "clean-paragraphs",
+        "expected": "approve",
+        "actual": "approve",
+        "usage": {
+          "requests": 5,
+          "input": 42585,
+          "cached": 21248,
+          "output": 580,
+          "reasoning": 163
+        },
+        "elapsedSeconds": 23.6
+      },
+      {
+        "fixture": "clean-bullets",
+        "expected": "approve",
+        "actual": "approve",
+        "usage": {
+          "requests": 5,
+          "input": 39247,
+          "cached": 18944,
+          "output": 481,
+          "reasoning": 100
+        },
+        "elapsedSeconds": 143.6
+      },
+      {
+        "fixture": "changed-number",
+        "expected": "changes",
+        "actual": "changes",
+        "usage": {
+          "requests": 5,
+          "input": 39884,
+          "cached": 17536,
+          "output": 542,
+          "reasoning": 30
+        },
+        "elapsedSeconds": 22.3
+      },
+      {
+        "fixture": "unsupported-conclusion",
+        "expected": "changes",
+        "actual": "changes",
+        "usage": {
+          "requests": 5,
+          "input": 37284,
+          "cached": 19072,
+          "output": 781,
+          "reasoning": 131
+        },
+        "elapsedSeconds": 29.3
+      },
+      {
+        "fixture": "missing-conditions",
+        "expected": "changes",
+        "actual": "changes",
+        "usage": {
+          "requests": 5,
+          "input": 42495,
+          "cached": 22400,
+          "output": 631,
+          "reasoning": 82
+        },
+        "elapsedSeconds": 24.7
+      },
+      {
+        "fixture": "contradiction",
+        "expected": "changes",
+        "actual": "changes",
+        "usage": {
+          "requests": 5,
+          "input": 38644,
+          "cached": 19584,
+          "output": 728,
+          "reasoning": 168
+        },
+        "elapsedSeconds": 24.3
+      },
+      {
+        "fixture": "omitted-method",
+        "expected": "changes",
+        "actual": "changes",
+        "usage": {
+          "requests": 5,
+          "input": 34194,
+          "cached": 17024,
+          "output": 752,
+          "reasoning": 92
+        },
+        "elapsedSeconds": 24.2
+      }
+    ]
+  },
+  "usage": {
+    "flow": {
+      "requests": 706,
+      "input": 14485282,
+      "cached": 9492224,
+      "output": 362054,
+      "reasoning": 59055
+    },
+    "tester": {
+      "requests": 223,
+      "input": 4440700,
+      "cached": 3737728,
+      "output": 79642,
+      "reasoning": 10126
+    },
+    "judge": {
+      "requests": 64,
+      "input": 2143333,
+      "cached": 1414656,
+      "output": 43246,
+      "reasoning": 6408
+    },
+    "committeeCalibration": {
+      "requests": 35,
+      "input": 274333,
+      "cached": 135808,
+      "output": 4495,
+      "reasoning": 766
+    },
+    "improvementProposals": {
+      "requests": 2,
+      "input": 69656,
+      "cached": 0,
+      "output": 1340,
+      "reasoning": 629
+    },
+    "toolProbes": {
+      "requests": 5,
+      "input": 36239,
+      "cached": 4480,
+      "output": 884,
+      "reasoning": 48
+    },
+    "total": {
+      "requests": 1035,
+      "input": 21449543,
+      "cached": 14784896,
+      "output": 491661,
+      "reasoning": 77032
+    }
+  }
+}
