@@ -46,6 +46,12 @@ export async function compare(settings) {
       workflowTokenDelta: candidate.tokens.workflow - baseline.tokens.workflow });
   }
   assert(pairs.length, 'No paired trials');
+  for (const side of ['baseline', 'candidate']) {
+    for (const key of ['runtimeRevision', 'skillHash']) {
+      const version = pairs[0][side][key];
+      assert(version && pairs.every(pair => pair[side][key] === version), `Mixed ${key} in ${side} trials`);
+    }
+  }
   const guarded = pairs.every(pair => pair.candidate.materialErrors <= pair.baseline.materialErrors &&
     pair.scoreDelta.accuracy >= 0 && pair.scoreDelta.citationSupport >= 0 && pair.checksDelta >= 0);
   const grouped = Object.groupBy(pairs, pair => pair.caseId);
