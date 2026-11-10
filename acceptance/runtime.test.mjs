@@ -15,7 +15,8 @@ import { claimWorkflow, createWorkflow, getWorkflow, updateWorkflow } from '../r
 import { prepareGroup } from '../workflow-groups.mjs';
 import { captureStopSessions, outcomeFromMessages, readExecution, stopSessions } from '../opencode-runtime.mjs';
 import { inspectTester } from './tester.mjs';
-import { validateWorkflow, participantSettings } from '../workflow-definition.mjs';
+import { validateWorkflow, participantSettings, validateItems } from '../workflow-definition.mjs';
+import { researchGraph, validateScientistVerdict } from '../research-workflow.mjs';
 
 const cli = [process.execPath, fileURLToPath(new URL('../dwf.mjs', import.meta.url))];
 const verdict = (outcome = 'approve') => JSON.stringify({ outcome, summary: `Observed ${outcome}` });
@@ -42,6 +43,18 @@ test('research-mid validates its structure and defaults to standard Sol in every
     change(value);
     assert.throws(() => validateWorkflow(value), /Workflow:/);
   }
+});
+
+test('research-mid rejects missing assignments and a fourth round before admission', async () => {
+  const graph = researchGraph(await researchDefinition());
+  const reject = message => { throw new Error(message); };
+  const oneAssignment = [{ id: 'one', instructions: 'One task' }];
+  assert.throws(() => validateScientistVerdict(graph, [], { outcome: 'scout', items: oneAssignment },
+    validateItems, reject), /двум скаутам/);
+  const rounds = Array.from({ length: 3 }, () => ({ node: graph.researchers, verdict: { outcome: 'done' } }));
+  assert.throws(() => validateScientistVerdict(graph, rounds, { outcome: 'research' },
+    validateItems, reject), /недопустимый/);
+  validateScientistVerdict(graph, rounds, { outcome: 'report' }, validateItems, reject);
 });
 
 function expireWorkflowLease(sandbox) {

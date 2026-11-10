@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
+from tempfile import TemporaryDirectory
 
 
 class PaperText(HTMLParser):
@@ -51,12 +52,7 @@ print(text)
     return text
 
 
-def prepare(case, definition, root):
-    corpus = root / "corpus" / case
-    raw_dir = root / "downloads" / case
-    if corpus.exists():
-        raise SystemExit(f"Corpus already exists at {corpus}. Use a fresh root to fetch again.")
-    raw_dir.mkdir(parents=True, exist_ok=True)
+def build_snapshot(case, definition, corpus, raw_dir):
     corpus.mkdir(parents=True)
     evidence = {}
     index = [f"Source collection for {case}. Evidence cutoff {definition['cutoff']}.", ""]
@@ -84,6 +80,19 @@ def prepare(case, definition, root):
     ]:
         subprocess.run(["git", *command], cwd=corpus, check=True)
     (raw_dir / "fingerprints.json").write_text(json.dumps(evidence, indent=2) + "\n")
+
+
+def prepare(case, definition, root):
+    corpus = root / "corpus" / case
+    if corpus.exists():
+        raise SystemExit(f"Corpus already exists at {corpus}. Use a fresh root to fetch again.")
+    raw_dir = root / "downloads" / case
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    corpus.parent.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(dir=corpus.parent) as staging:
+        snapshot = Path(staging) / case
+        build_snapshot(case, definition, snapshot, raw_dir)
+        snapshot.rename(corpus)
     print(corpus, flush=True)
 
 

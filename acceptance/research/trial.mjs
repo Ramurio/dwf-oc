@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, stat, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import { benchmarkWorkflows, runBenchmark } from '../benchmark.mjs';
 import { participantVisits } from '../../workflow-definition.mjs';
@@ -50,15 +51,20 @@ export async function modelEvidence(file, sessions) {
     item.reasoning += event.reasoningTokens ?? 0;
   }
   assert(sessions.every(id => usage[id]), 'Missing usage for a participant');
-  const tools = new Map();
-  for (const event of sent) {
-    for (const tool of event.tools ?? []) tools.set(`${event.providerSessionId}/${tool.id}`, tool.name);
-  }
   const totals = Object.fromEntries(['requests', 'input', 'cached', 'output', 'reasoning']
     .map(key => [key, Object.values(usage).reduce((sum, item) => sum + item[key], 0)]));
-  return { sent: sent.length, completed: complete.length, totals, usage,
-    tools: Object.fromEntries([...new Set(tools.values())].map(name =>
-      [name, [...tools.values()].filter(tool => tool === name).length])) };
+  return { sent: sent.length, completed: complete.length, totals, usage };
+}
+
+export function sessionTools(profile, sessions) {
+  // Read the persisted native message history of the pinned OpenCode version after shutdown.
+  const db = new DatabaseSync(join(profile, 'opencode.sqlite'), { readOnly: true });
+  try {
+    const messages = db.prepare("SELECT data FROM session_message WHERE session_id = ? AND type = 'assistant' ORDER BY seq");
+    return Object.fromEntries(sessions.map(session => [session, messages.all(session)
+      .flatMap(row => JSON.parse(row.data).content ?? [])
+      .filter(part => part.type === 'tool').map(part => ({ name: part.name, status: part.state.status }))]));
+  } finally { db.close(); }
 }
 
 export function checkResearchRun(workflow, task) {
@@ -106,23 +112,32 @@ export async function runResearchTrial(settings) {
     'Все участники используют обычную GPT-6.1 Sol с reasoning high. Сохрани текст поручения ниже целиком в task. Следи за фактическим запуском до завершения и передай отчёт из результата DWF.',
     task,
   ].join('\n\n');
-  const started = Date.now();
   const { attempt, assessment } = await runBenchmark({ root: join(root, 'trials'),
     project, baseline, prompt, model: standardModel, runtimeRevision, skillDirectory,
     preset, hidden, observeModel: true });
-  const workflows = benchmarkWorkflows(attempt);
   assert.equal(assessment.status, 'succeeded', JSON.stringify(assessment));
+  return summarizeTrial(attempt.directory, caseId);
+}
+
+export async function summarizeTrial(directory, caseId) {
+  const attempt = await jsonFile(join(directory, 'attempt.json'));
+  const workflows = benchmarkWorkflows(attempt);
   assert.equal(workflows.length, 1, 'Expected one actual workflow');
   const [workflow] = workflows;
-  const checked = checkResearchRun(workflow, task);
-  const wire = await modelEvidence(join(attempt.directory, 'evidence/provider.jsonl'),
+  const checked = checkResearchRun(workflow, caseTask(caseId));
+  const wire = await modelEvidence(join(directory, 'evidence/provider.jsonl'),
     [attempt.sessionId, ...checked.sessions]);
-  const result = { caseId, attempt: attempt.directory, runId: workflow.id,
+  const tools = { ...sessionTools(join(directory, 'opencode'), [attempt.sessionId]),
+    ...sessionTools(join(attempt.stateDirectory, 'opencode'), checked.sessions) };
+  const toolCounts = {};
+  for (const call of Object.values(tools).flat()) toolCounts[call.name] = (toolCounts[call.name] ?? 0) + 1;
+  const finished = (await stat(join(directory, 'assessment.json'))).mtimeMs;
+  const result = { caseId, attempt: directory, runId: workflow.id,
     graph: { ...workflow.definition, task: '' }, reportHash: hash(workflow.result.summary),
     outcome: workflow.result.outcome, rounds: checked.rounds, reviews: checked.reviews,
-    elapsedSeconds: (Date.now() - started) / 1000, wire };
-  await saveJson(join(attempt.directory, 'research.json'), result);
-  await writeFile(join(attempt.directory, 'research-report.md'), workflow.result.summary, { mode: 0o600 });
+    elapsedSeconds: (finished - attempt.createdAt) / 1000, wire, toolCounts, tools };
+  await saveJson(join(directory, 'research.json'), result);
+  await writeFile(join(directory, 'research-report.md'), workflow.result.summary, { mode: 0o600 });
   return result;
 }
 
