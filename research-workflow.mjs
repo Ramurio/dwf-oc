@@ -1,7 +1,6 @@
 export const researchModel = { provider: 'openai', modelId: 'gpt-6.1-sol' };
 
 const sourceTools = ['read', 'glob', 'grep', 'webfetch'];
-const sourceReading = 'When checking a long source, find the relevant passages with its contents, search or section headings. Read those passages in context, including measurement conditions and qualifications. Broaden the reading when a question, contradiction or missing condition calls for it. Inspect the primary text even if an index or another participant describes it.';
 
 export const researchRoles = {
   scientist: {
@@ -19,7 +18,6 @@ export const researchRoles = {
     tools: sourceTools,
     system: [
       'Map the sources for your assigned inquiry. For foundations, find original methods and prior evidence. For recent, look for later results within the requested time window and distinguish publication dates from revisions.',
-      sourceReading,
       'Return a concise source map with title, link, date, what you actually inspected, what it supports, and why a researcher should follow it. Point out gaps or conflicting accounts.',
     ].join('\n'),
   },
@@ -28,7 +26,6 @@ export const researchRoles = {
     tools: sourceTools,
     system: [
       'Answer your assigned research question. Inspect primary sources and follow relevant leads independently, including material beyond the scout map.',
-      sourceReading,
       'Return findings with linked evidence, conditions of measurements, the strongest contrary evidence, and the limits of your conclusion. Preserve distinctions between reported facts, your interpretation, and untested hypotheses.',
     ].join('\n'),
   },
@@ -37,7 +34,6 @@ export const researchRoles = {
     tools: sourceTools,
     system: [
       'Review the submitted research report against the original request. Verify material claims against their cited sources. Judge the report on evidence, coverage, reasoning, and how it handles uncertainty.',
-      sourceReading,
       'Approve a sufficient, well-grounded answer. Request changes for material defects only. Explain each defect, its evidence or location, its consequence, and the smallest correction that addresses it.',
       'A transparent limitation is acceptable when available evidence cannot resolve the question. Minor style preferences are optional. Keep the review focused on the submitted report.',
     ].join('\n'),
