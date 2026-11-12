@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DWF — атлас запусков</title>
+<style>
+:root{--paper:#f7f6f2;--white:#fffefa;--ink:#292e2c;--muted:#606963;--rule:#dcded6;--wire:#7c877e;--accent:#b54529;--tint:#f3e5dc;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;--mono:ui-monospace,SFMono-Regular,Consolas,monospace}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:14px/1.5 var(--sans)}button,input,textarea{font:inherit}button{color:inherit;cursor:pointer;border:0;background:none}h1,h2,h3,p{margin:0}a{color:inherit}[hidden]{display:none!important}button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visible,textarea:focus-visible{outline:2px solid var(--ink);outline-offset:4px}button:hover{color:var(--accent)}
+.topbar{min-height:56px;border-bottom:1px solid var(--rule);display:flex;align-items:center;gap:24px;padding:12px 24px}.brand{display:flex;align-items:center;gap:10px;font-size:20px;font-weight:750;letter-spacing:-1px}.brand svg{width:24px;height:24px}.top-title{font-size:13px;color:var(--muted)}.demo{margin-left:auto;display:flex;align-items:center;gap:12px;color:var(--muted);font-size:12px}.tag{font-size:10px;letter-spacing:.08em;border:1px solid #b7bdb4;padding:2px 6px;font-weight:600}
+.shell{display:grid;grid-template-columns:208px minmax(0,1fr);min-height:calc(100dvh - 56px)}.sidebar{border-right:1px solid var(--rule);padding:28px 12px;display:flex;flex-direction:column}.side-head{padding:0 12px 22px}.eyebrow{font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}.side-head p{margin-top:6px;color:var(--muted);font-size:12px}.run{display:block;width:100%;text-align:left;border-left:2px solid transparent;padding:14px 12px;margin-bottom:12px}.run[aria-pressed=true]{border-color:var(--ink);background:#e9ebe3;color:var(--ink)}.run:hover{background:#eeeee7}.run-project{display:flex;justify-content:space-between;gap:8px;font:11px/1.6 var(--mono);color:var(--muted)}.run strong{display:block;font-size:14px;font-weight:600;margin:7px 0}.run-state{font-size:12px;color:var(--muted)}.run-state:before{content:"";display:inline-block;width:6px;height:6px;background:var(--accent);border-radius:50%;margin-right:6px}.sidebar-note{margin-top:auto;padding:48px 12px 0;font-size:12px;color:var(--muted)}.sidebar-note strong{display:block;font-weight:500;color:var(--ink);margin-bottom:8px}
+.work{min-width:0}.run-header{padding:24px 28px 20px;display:flex;align-items:center;justify-content:space-between;gap:24px}.run-meta{display:flex;flex-wrap:wrap;align-items:center;gap:10px;color:var(--muted);font-size:12px;margin-bottom:5px}.run-meta code{font:11px var(--mono)}h1{font:400 34px/1.15 Georgia,"Times New Roman",serif;letter-spacing:-.6px;overflow-wrap:anywhere}.run-description{font-size:13px;color:var(--muted);margin-top:8px}.read-button{flex:none;font-size:12px;text-decoration:underline;text-underline-offset:4px;padding:8px 0}.atlas-body{display:grid;grid-template-columns:minmax(0,1fr);align-items:start}.atlas-body.inspecting{grid-template-columns:minmax(0,1fr) 392px}.map-stack{min-width:0}.now{margin:0 28px;display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--rule);font-size:13px}.now-mark{width:8px;height:8px;background:var(--accent);border-radius:50%;flex:none}.now button{text-align:left;padding:0;font-weight:550}.now .elapsed{margin-left:auto;color:var(--muted);font:12px var(--mono);white-space:nowrap}
+.map-viewport{overflow:auto;margin:0 20px;scrollbar-color:var(--wire) var(--paper);scrollbar-width:thin}.map-viewport svg{display:block;width:min(100%,calc((100dvh - 290px)*960/480));min-width:768px;max-width:1040px;height:auto;margin:0 auto;overflow:visible}.pan-hint{display:flex;justify-content:space-between;margin:0 20px 10px;font-size:12px;color:var(--muted)}
+.track{fill:none;stroke:var(--wire);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}.track.control{marker-end:url(#arrow)}.track.result{stroke-dasharray:4 5;stroke-width:1.6;marker-end:url(#arrow-result)}.track.rail{marker-end:none}.track.active{stroke:var(--accent);stroke-width:3;marker-end:url(#arrow-accent)}.track.pending{stroke:#a8afa7;stroke-dasharray:2 6}.station{cursor:pointer;outline:none}.station .hit{fill:transparent;stroke:none}.station .body{fill:var(--paper);stroke:var(--ink);stroke-width:2}.glyph{fill:none;stroke:var(--ink);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.station .selection{fill:none;stroke:var(--ink);stroke-width:2;opacity:0}.station[aria-pressed=true] .selection{opacity:1}.station .focus-ring{fill:none;stroke:var(--ink);stroke-width:1.6;stroke-dasharray:2 3;opacity:0;pointer-events:none}.station:focus-visible .focus-ring{opacity:1}.station:hover .body{fill:#e5e8df}.station.active .body{fill:var(--accent);stroke:var(--accent)}.station.active .glyph{stroke:var(--white)}.context-plus{stroke:var(--ink);stroke-width:1.5;fill:none}.station.active .context-plus{stroke:var(--accent)}.station-label{font-size:20px;font-weight:600;fill:var(--ink)}.sub-label,.route-label,.member-label,.status-label{font-size:16px;fill:var(--muted)}.member-label{fill:var(--ink)}.status-label{font-size:16px}.label-mask{fill:var(--paper)}.active-text{fill:var(--accent);font-weight:600}.expand{cursor:pointer;outline:none}.expand rect{fill:var(--paper);stroke:var(--rule)}.expand text{fill:var(--ink);font-size:20px}.expand:hover rect,.expand:focus-visible rect{stroke:var(--ink);fill:#e9ebe3}.terminal{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.map-caption{margin:0 28px;padding:2px 0 14px;color:var(--muted);font-size:12px;display:flex;justify-content:space-between;gap:12px}.legend{border-top:1px solid var(--rule);margin:0 28px;padding:14px 0;display:flex;flex-wrap:wrap;gap:12px 20px;color:var(--muted);font-size:12px}.legend span{display:flex;align-items:center;gap:8px}.key-line{width:24px;border-top:2px solid var(--wire);position:relative}.key-line:after{content:"";position:absolute;right:-1px;top:-4px;border-left:5px solid var(--wire);border-top:3px solid transparent;border-bottom:3px solid transparent}.key-line.result{border-top:1.5px dashed var(--wire)}.key-line.result:after{border:0;border-top:1px solid var(--wire);border-right:1px solid var(--wire);height:5px;width:5px;transform:rotate(45deg);top:-3px}.key-active{width:9px;height:9px;border-radius:50%;background:var(--accent)}.key-selected{width:14px;height:14px;border:1.5px solid var(--ink);clip-path:polygon(0 0,35% 0,35% 35%,65% 35%,65% 0,100% 0,100% 100%,65% 100%,65% 65%,35% 65%,35% 100%,0 100%)}.key-fresh{width:14px;height:14px;border:1.5px solid var(--ink);border-radius:3px;position:relative}.key-fresh:after{content:"+";position:absolute;right:-5px;top:-9px;line-height:12px;background:var(--paper);font-size:13px;color:var(--ink)}.app-footer{border-top:1px solid var(--rule);margin:0 28px;padding:12px 0;color:var(--muted);font-size:11px;display:flex;justify-content:space-between;gap:12px}
+.guide{margin:4px 28px 20px;padding:20px 0;border-top:1px solid var(--rule);font-size:13px}.guide h2{font-size:16px}.guide p{max-width:80ch;margin-top:10px;color:var(--muted)}.role-key{display:flex;gap:12px 20px;flex-wrap:wrap;margin:16px 0}.role-key span{display:flex;gap:6px;align-items:center}.role-key svg{width:20px;height:20px}
+.inspector{background:var(--white);border-left:1px solid var(--rule);height:calc(100dvh - 192px);min-height:460px;overflow:auto;padding:0 24px 24px;scroll-margin-top:16px}.inspect-top{position:sticky;top:0;z-index:1;display:flex;justify-content:space-between;gap:12px;background:var(--white);padding:20px 0 14px;border-bottom:1px solid var(--rule)}.inspect-top h2{font-size:24px;line-height:1.2;font-weight:550;margin:5px 0;letter-spacing:-.4px;overflow-wrap:anywhere}.inspect-role{font:12px var(--mono);color:var(--muted)}.close{width:32px;height:32px;flex:none;font-size:26px;line-height:1;border:1px solid var(--rule);border-radius:4px}.member-picker{display:flex;flex-wrap:wrap;gap:6px;margin:16px 0}.member-picker button{border:1px solid var(--rule);border-radius:4px;padding:6px 9px;font-size:12px;overflow-wrap:anywhere;max-width:100%}.member-picker button[aria-pressed=true]{border-color:var(--ink);background:#e9ebe3}.member-picker .live:before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:5px}
+.call-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin:20px 0 8px}.section-label{font-size:12px;color:var(--muted);font-weight:500}.latest{font-size:12px;text-decoration:underline;text-underline-offset:3px;padding:0}.call-picker{display:flex;gap:4px;flex-wrap:wrap}.call-picker button{border-bottom:2px solid var(--rule);padding:8px 7px;font:12px var(--mono)}.call-picker button[aria-pressed=true]{border-color:var(--ink);background:#edeee7}.call-picker .live{color:var(--accent)}.call-state{font-size:12px;margin:14px 0 0;color:var(--muted)}.call-state.active{color:var(--accent)}.past-note{border-left:2px solid var(--ink);padding-left:10px;margin-top:12px;font-size:12px;color:var(--muted)}.detail-block{margin:18px 0}.detail-block h3{font-size:12px;font-weight:500;color:var(--muted);margin-bottom:6px}.detail-block p{font-size:14px;line-height:1.6;overflow-wrap:anywhere}.result-pending{color:var(--muted)}.context{border-top:1px solid var(--rule);padding-top:16px;margin-top:22px}.context-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:550}.context p{font-size:12px;line-height:1.6;color:var(--muted);margin-top:6px}.context code{font:12px/1.6 var(--mono);overflow-wrap:anywhere;color:var(--ink)}.session{display:block;margin:8px 0}.previous{display:block;font-size:11px;color:var(--muted)}.entry{margin:14px 0 20px}.entry-head{display:flex;justify-content:space-between;gap:10px;align-items:center}.entry h3{font-size:13px;font-weight:550}.copy{border:1px solid var(--ink);border-radius:4px;padding:6px 10px;font-size:12px}.copy:hover{background:#e9ebe3}.command{display:block;width:100%;resize:vertical;min-height:64px;border:1px solid var(--rule);border-radius:4px;background:var(--paper);padding:10px;font:12px/1.5 var(--mono);color:var(--ink);margin:10px 0 6px;overflow-wrap:anywhere}.entry-note,.copy-status{font-size:12px;color:var(--muted);line-height:1.5}.copy-status:not(:empty){color:var(--accent);margin:8px 0}.settings{display:grid;grid-template-columns:100px minmax(0,1fr);gap:7px;font-size:13px;border-top:1px solid var(--rule);padding-top:18px;margin:18px 0}.settings dt{color:var(--muted)}.settings dd{margin:0;overflow-wrap:anywhere}.skills,.inspect-history{font-size:13px;border-top:1px solid var(--rule);padding:14px 0}summary{cursor:pointer}.skill{padding:12px 0 0}.skill strong{font-weight:550}.skill p{font-size:12px;color:var(--muted);margin-top:4px}.history{margin-top:12px}.invocation{display:grid;width:100%;grid-template-columns:44px 1fr;gap:3px 8px;text-align:left;border-top:1px solid var(--rule);padding:10px 6px;font-size:12px}.invocation[aria-pressed=true]{background:#edeee7;border-left:2px solid var(--ink);padding-left:4px}.invocation time{font:12px/1.5 var(--mono);grid-row:span 2}.invocation strong{font-weight:500}.invocation code{font:11px/1.6 var(--mono);overflow-wrap:anywhere;color:var(--muted)}.back-map{font-size:12px;text-decoration:underline;text-underline-offset:3px;margin-top:12px;padding:4px 0}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}noscript{display:block;padding:32px}
+@media(max-width:1439px){.atlas-body.inspecting{grid-template-columns:minmax(0,1fr)}.inspector{height:auto;min-height:0;overflow:visible;border-left:0;border-top:1px solid var(--rule);padding:0 28px 24px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:32px}.inspect-top{grid-column:1/-1;position:static}.inspector .member-picker{grid-column:1/-1}.inspect-secondary{padding-top:4px}.run-header{padding-top:20px;padding-bottom:16px}}
+@media(min-width:1440px){.inspecting .map-caption{display:block}.inspecting .map-caption span{display:block;margin-bottom:5px}.inspecting .map-viewport{margin:0 16px}.inspecting .now{gap:8px;font-size:12px}.inspecting .now .elapsed{display:none}.member-picker{display:grid;grid-template-columns:1fr 1fr}.member-picker button{text-align:left}}
+@media(max-width:1100px){.shell{grid-template-columns:184px minmax(0,1fr)}.sidebar{padding-left:8px;padding-right:8px}.run-header{padding-left:20px;padding-right:20px}.now,.legend,.map-caption,.app-footer,.guide{margin-left:20px;margin-right:20px}.map-viewport{margin:0 12px}}
+@media(max-width:800px){.topbar{padding:12px 16px;gap:16px}.top-title{font-size:12px}.demo span{display:none}.shell{display:block}.sidebar{padding:16px;border-right:0;border-bottom:1px solid var(--rule)}.side-head{padding:0 0 12px;display:flex;align-items:center;justify-content:space-between}.side-head p{margin:0;font-size:11px}.runs{display:grid;grid-template-columns:1fr 1fr;gap:8px}.run{padding:10px 8px;margin:0}.run strong{font-size:13px}.run-project{font-size:11px}.run-state{font-size:11px}.sidebar-note{display:none}.run-header{padding:20px 16px;align-items:start;gap:8px}h1{font-size:28px}.run-description{font-size:12px}.run-meta code{font-size:10px}.read-button{max-width:62px;text-align:right}.now{margin:0 16px;align-items:baseline}.now .elapsed{display:none}.map-viewport{margin:0 12px}.map-viewport svg{width:864px;min-width:864px;max-width:none}.pan-hint{display:flex;justify-content:space-between;margin:4px 16px 8px}.map-caption,.legend,.app-footer,.guide{margin-left:16px;margin-right:16px}.map-caption{display:block}.map-caption span{display:block;margin:6px 0}.app-footer{display:block}.app-footer span{display:block;margin:4px 0}.inspector{display:block;padding:0 20px 24px}.inspect-top{position:static}.inspect-secondary{padding:0}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+.station:focus-visible{outline:none}
+@media print{.sidebar,.read-button,.close,.copy,.expand,.pan-hint{display:none}.shell,.atlas-body.inspecting{display:block}.map-viewport{overflow:visible}.map-viewport svg{min-width:0;width:100%}.inspector{height:auto;overflow:visible;border:0}.inspect-top{position:static}}
+</style>
+</head>
+<body>
+<header class="topbar"><div class="brand"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16h8a8 8 0 0 0 0-16ZM4 12h16" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="4" cy="12" r="3" fill="var(--paper)" stroke="currentColor" stroke-width="2"/></svg>DWF</div><span class="top-title">Атлас запусков</span><div class="demo"><b class="tag">ДЕМО</b><span>Вымышленные данные · без подключения</span></div></header>
+<div class="shell">
+<aside class="sidebar" aria-label="Недавние запуски всех проектов">
+  <div class="side-head"><div class="eyebrow">Недавние запуски</div><p>Все проекты · сегодня</p></div>
+  <nav class="runs" aria-label="Выбрать запуск">
+    <button class="run" data-run="research" aria-pressed="true"><span class="run-project">atlas-lab <time>09:42</time></span><strong>Исследование памяти</strong><span class="run-state">Исследователь работает</span></button>
+    <button class="run" data-run="build" aria-pressed="false"><span class="run-project">local-notes <time>08:33</time></span><strong>Экспорт заметок</strong><span class="run-state">Правки после проверки</span></button>
+  </nav>
+  <p class="sidebar-note"><strong>Наблюдать здесь.<br>Направлять — в OpenCode.</strong>Все запуски, сессии<br>и результаты вымышлены.</p>
+</aside>
+<main class="work">
+  <header class="run-header"><div><div class="run-meta"><span id="project-name"></span><span>/</span><code id="run-id"></code></div><h1 id="run-title"></h1><p class="run-description" id="run-description"></p></div><button class="read-button" id="read-guide" aria-expanded="false" aria-controls="guide">Как читать карту</button></header>
+  <div class="atlas-body" id="atlas-body">
+    <div class="map-stack">
+      <div class="now"><i class="now-mark" aria-hidden="true"></i><button id="now-text" title="Открыть текущего участника"></button><span class="elapsed" id="now-time"></span></div>
+      <p class="pan-hint" hidden><span>Карта шире экрана</span><span id="pan-direction">Листайте вправо →</span></p>
+      <div class="map-viewport" id="map-viewport" tabindex="0" aria-label="Карта архитектуры. На узком экране листайте вправо или используйте клавиши со стрелками."><svg id="topology" viewBox="0 0 960 464" role="group" aria-labelledby="topology-title topology-desc"><title id="topology-title">Архитектура запуска</title><desc id="topology-desc">Все возможные пути выбранного демо-запуска.</desc></svg></div>
+      <div class="map-caption"><span>Все возможные пути, не хронология</span><span>Нажмите участника, чтобы открыть его вызовы</span></div>
+      <div class="legend" aria-label="Условные обозначения"><span><i class="key-line"></i>Вызов</span><span><i class="key-line result"></i>Результат</span><span><i class="key-active"></i>Сейчас</span><span><i class="key-selected"></i>Выбран</span><span><i class="key-fresh"></i>Новый контекст</span><span>✓ Получен результат</span></div>
+      <section class="guide" id="guide" hidden><h2>Маршруты — отдельно от памяти</h2><p>Сплошная стрелка вызывает участника. Пунктир возвращает результат, но не создаёт вызов. В группе верхняя линия раздаёт задания параллельно; нижняя собирает все результаты. Бледный пунктир — результат ещё ожидается.</p><p>Петля «изменения» вызывает прежнего участника повторно. Круг означает продолжение контекста, квадрат с плюсом — новый контекст при обычном входе (<code>memory:false</code>). Фактическую непрерывность подтверждает ID сессии, а не название роли.</p><div class="role-key" id="role-key"></div><p>Терракотовая заливка и «сейчас» — выполнение. Чёрные уголки — ваш выбор. Просмотр прошлого вызова меняет только детали, не текущее состояние карты.</p><p>Это автономный макет наблюдения, без редактора и управления запуском. В будущем <code>dwf ui --start</code> запустит локальный сервис и завершит команду; сервис останется до перезагрузки или <code>dwf ui --stop</code>. Подключение к реальным сессиям OpenCode ещё не реализовано.</p></section>
+      <footer class="app-footer"><span>Демо-снимок · сегодня, 09:42</span><span>Без сервера и внешних запросов</span></footer>
+    </div>
+    <aside class="inspector" id="inspector" aria-label="Выбранный участник и его вызовы" hidden></aside>
+  </div>
+</main>
+</div>
+<div class="sr-only" id="announcement" role="status" aria-live="polite"></div>
+<noscript>Для интерактивной карты нужен JavaScript. Это автономное демо; подключение к DWF не выполняется.</noscript>
+<script>
+'use strict';
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const skills={research:['Исследование источников','Сопоставлять первичные источники и отмечать пробелы в доказательствах.'],interface:['Проверка интерфейса','Проверять понятность контекста и возврата результата на конкретных сценариях.'],review:['Критическое ревью','Проверять выводы независимо от автора; отделять дефекты от предпочтений.'],code:['Работа с кодом','Вносить минимальное законченное изменение и проверять его поведение.'],verify:['Проверка поведения','Проверять сценарии, граничные случаи и воспроизводимость результата.']};
+function inv(time,session,task,result,state='done',options={}){return{time,session,task,result,state,model:'OpenAI · GPT-5',reasoning:'Высокий',mode:'Обычный',skills:['research'],...options}}
+const scientist={id:'scientist',name:'Учёный',role:'scientist',memory:true,invocations:[
+  inv('09:12','demo_ses_scientist_01','Разработать план исследования памяти агентов.','Нужны два направления разведки: сессии и существующие интерфейсы.'),
+  inv('09:17','demo_ses_scientist_01','Сопоставить два разведывательных отчёта.','Выбраны четыре вопроса для независимого исследования.'),
+  inv('09:25','demo_ses_scientist_01','Собрать выводы четырёх исследователей.','Передал комитету предложение: продолжение сессии по ID, отдельная маркировка сброса памяти.'),
+  inv('09:30','demo_ses_scientist_01','Учесть замечания комитета: перепроверить идентичность сессий и ручной вход.','Повторно вызвал двух разведчиков в их прежних сессиях.'),
+  inv('09:35','demo_ses_scientist_01','Сопоставить повторные отчёты разведчиков и уточнить задания исследователей.','Уточнил задания четырём участникам; ожидаю оставшийся результат по интерфейсу.','waiting')
+]};
+const scouts=['Сессии','Инструменты'].map((name,i)=>({id:'scout-'+i,name,role:'scout',memory:true,invocations:[
+  inv('09:14','demo_ses_scout_'+(i+1),i===0?'Найти правила продолжения сессий.':'Изучить способы входа в OpenCode.',i===0?'Роль не определяет идентичность. Нужен фактический ID сессии.':'Для входа используется команда opencode --session <ID>.','done',{mode:'Быстрый',reasoning:'Средний'}),
+  inv('09:32','demo_ses_scout_'+(i+1),i===0?'Перепроверить правило memory:false.':'Уточнить ручной вход без подключения UI.',i===0?'При обычном повторном входе memory:false создаёт новый контекст.':'UI может дать команду. Само подключение требует реальной сессии и интеграции.','done',{mode:'Быстрый',reasoning:'Средний'})
+]}));
+const researchTasks=['Сопоставить источники об идентичности агента.','Разделить контекст и результат вызова.','Оценить цену повторного чтения контекста.','Проверить, как показать продолжение и новый контекст.'];
+const researchResults=['Источники сходятся: идентичность определяется сессией, не ролью.','Результат вызова — артефакт; контекст остаётся у конкретной сессии.','Свежий контекст требует повторной передачи задания и материалов.','Карточки скрывают общий маршрут. Нужны постоянная карта и локальная история.'];
+const researchers=['Источники','Контекст','Стоимость','Интерфейс'].map((name,i)=>({id:'researcher-'+i,name,role:'researcher',memory:false,invocations:[
+  inv('09:19','demo_ses_r'+(i+1)+'_a',researchTasks[i],researchResults[i],'done',{skills:i===3?['research','interface']:['research']}),
+  inv('09:38','demo_ses_r'+(i+1)+'_b',researchTasks[i]+' Повторная независимая проверка после замечаний комитета; не полагаться на прежний контекст.',i===3?null:['Подтверждено на повторной выборке: ID сессии — единственный надёжный ключ.','Описан отдельный возврат результата, не похожий на новый вызов.','Для свежих сессий нужно заново передавать только релевантные материалы.'][i],i===3?'active':'done',{skills:i===3?['research','interface']:['research'],reasoning:i===3?'Высокий':'Средний'})
+]}));
+const committee={id:'committee',name:'Комитет',role:'committee',memory:false,invocations:[inv('09:28','demo_ses_committee_a','Независимо оценить предложение учёного.','Изменения: история не доказывает сброс контекста. Показать старую и новую сессии одного элемента группы.','done',{model:'Anthropic · Claude Sonnet 4',skills:['review']})]};
+const worker={id:'worker',name:'Исполнитель',role:'worker',memory:true,invocations:[
+  inv('08:10','demo_ses_worker_01','Добавить экспорт заметок в Markdown.','Экспорт реализован; передал на ревью.','done',{skills:['code']}),
+  inv('08:20','demo_ses_worker_01','Исправить замечание ревьюера: экранировать заголовки.','Экранирование исправлено. Повторное ревью пройдено.','done',{skills:['code']}),
+  inv('08:33','demo_ses_worker_01','Исправить замечание проверяющего: пустая заметка должна экспортироваться без ошибки.',null,'active',{skills:['code']})
+]};
+const reviewer={id:'reviewer',name:'Ревьюер',role:'reviewer',memory:true,invocations:[inv('08:18','demo_ses_reviewer_01','Проверить реализацию экспорта.','Изменения: заголовки Markdown не экранируются.','done',{skills:['review'],model:'Anthropic · Claude Sonnet 4'}),inv('08:27','demo_ses_reviewer_01','Повторно проверить экранирование.','Одобрено. Можно передать проверяющему.','done',{skills:['review'],model:'Anthropic · Claude Sonnet 4'})]};
+const verifier={id:'verifier',name:'Проверяющий',role:'verifier',memory:true,invocations:[inv('08:30','demo_ses_verifier_01','Проверить экспорт обычной, пустой и Unicode-заметки.','Изменения: пустая заметка приводит к ошибке. Вернул исполнителю.','done',{skills:['verify'],mode:'Быстрый',reasoning:'Средний'})]};
+const runs={
+  research:{project:'atlas-lab',title:'Исследование памяти',description:'Как сохранять контекст между вызовами агента?',now:'Сейчас: исследователь «Интерфейс»',since:'с 09:38',activeGroup:'researchers',groups:{scientist:[scientist],scouts,researchers,committee:[committee]}},
+  build:{project:'local-notes',title:'Экспорт заметок',description:'Markdown-экспорт с независимым ревью и проверкой.',now:'Сейчас: исполнитель исправляет пустой экспорт',since:'с 08:33',activeGroup:'worker',groups:{worker:[worker],reviewer:[reviewer],verifier:[verifier]}}
+};
+let runId='research',selected=null,selectedInvocation=null,expanded={scouts:false,researchers:true},copyGeneration=0;
+const savedViews={};
+const glyphs={scientist:'<circle r="8"/><path d="M-12 0H12M0-12V12"/>',scout:'<path d="M-10 7L0-10 10 7ZM-4 3H4"/>',researcher:'<path d="M-9-9H9V9H-9ZM-9-2H9M-2-2V9"/>',committee:'<circle cx="-7" cy="-4" r="3"/><circle cx="7" cy="-4" r="3"/><circle cy="7" r="3"/>',worker:'<path d="M-9-8H9V9H-9ZM-4-12V-5M4-12V-5"/>',reviewer:'<path d="M0-12L12 0 0 12-12 0ZM-5 0L-1 4 6-4"/>',verifier:'<path d="M-6-10H6L12 0 6 10H-6L-12 0ZM-5 0L-1 4 6-4"/>',orchestrator:'<circle r="4"/><path d="M0-12V-4M0 4V12M-12 0H-4M4 0H12"/>'};
+const markers='<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0L8 4 0 8Z" fill="var(--wire)"/></marker><marker id="arrow-result" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0L8 4 0 8" fill="none" stroke="var(--wire)" stroke-width="1.4"/></marker><marker id="arrow-accent" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0L8 4 0 8Z" fill="var(--accent)"/></marker></defs>';
+function path(d,kind='control',id=''){return `<path class="track ${kind}" d="${d}" ${id?`data-edge="${id}"`:''}/>`}
+function text(x,y,value,cls='sub-label',anchor='start'){return `<text class="${cls}" x="${x}" y="${y}" text-anchor="${anchor}">${esc(value)}</text>`}
+function label(x,y,value,sub='',anchor='start'){return `<g class="label">${text(x,y,value,'station-label',anchor)}${sub?text(x,y+24,sub,'sub-label',anchor):''}</g>`}
+function routeLabel(x,y,value){return `<g><rect class="label-mask"/>${text(x,y,value,'route-label')}</g>`}
+function fitLabelMasks(){
+  for(const mask of $('#topology').querySelectorAll('.label-mask')){
+    const b=mask.parentElement.querySelector('text').getBBox();
+    for(const [key,value] of Object.entries({x:b.x-4,y:b.y-4,width:b.width+8,height:b.height+8}))mask.setAttribute(key,value);
+  }
+}
+function isActive(p){return p.invocations.at(-1).state==='active'}
+function station(group,x,y,member=null,small=false){
+  const people=runs[runId].groups[group],p=member||people[0],isGroup=people.length>1&&!member;
+  const active=!isGroup&&isActive(p),isSelected=selected?.group===group&&(member?selected.member===p.id:!expanded[group]);
+  const r=small?16:24,s=r+12;
+  const name=isGroup?`${group==='scouts'?'Разведчики':'Исследователи'}, ${people.length} параллельных участника`:`${p.name}, ${p.role}`;
+  const body=p.memory?`<circle class="body" r="${r}"/>`:`<path class="body" d="M${r-8} ${-r}H${-r+6}Q${-r} ${-r} ${-r} ${-r+6}V${r-6}Q${-r} ${r} ${-r+6} ${r}H${r-6}Q${r} ${r} ${r} ${r-6}V${-r+8}Z"/><path class="context-plus" d="M${r-3} ${-r-3}h10m-5-5v10"/>`;
+  return `<g class="station ${active?'active':''}" role="button" tabindex="0" aria-label="${esc(name)}${active?', сейчас выполняется':''}" aria-pressed="${!!isSelected}" data-group="${group}" ${member?`data-member="${p.id}"`:''} transform="translate(${x} ${y})"><rect class="hit" x="-32" y="-32" width="64" height="64"/><rect class="focus-ring" x="${-r-16}" y="${-r-16}" width="${2*r+32}" height="${2*r+32}" rx="8"/><path class="selection" d="M${-s} ${-s+8}v-8h8M${s-8} ${-s}h8v8M${s} ${s-8}v8h-8M${-s+8} ${s}h-8v-8"/>${body}<g class="glyph" ${small?'transform="scale(.8)"':''}>${glyphs[p.role]}</g><title>${esc(name)}. ${p.memory?'Повторный вход продолжает сессию участника.':'Новый контекст при повторном входе.'}</title></g>`;
+}
+function expandButton(group,x,y){return `<g class="expand" role="button" tabindex="0" aria-label="${expanded[group]?'Свернуть':'Раскрыть'} ${group==='scouts'?'разведчиков':'исследователей'}" aria-expanded="${expanded[group]}" data-expand="${group}" transform="translate(${x} ${y})"><rect x="-16" y="-16" width="32" height="32" rx="4"/><text text-anchor="middle" y="6">${expanded[group]?'−':'+'}</text></g>`}
+const measure=document.createElement('canvas').getContext('2d');
+function nameLines(value,width=104){
+  measure.font='16px '+getComputedStyle(document.body).fontFamily;
+  const size=s=>measure.measureText(s).width,hyphen='‐';
+  function splitWord(word,budget=width){
+    if(size(word)<=budget)return [word];
+    const chars=Array.from(word),vowels=[];
+    chars.forEach((c,i)=>{if(/[аеёиоуыэюяaeiouy]/i.test(c))vowels.push(i)});
+    // Prefer syllable-like boundaries, retaining ь/ъ/й with the preceding part.
+    // This is a small offline fallback, not a dictionary hyphenation engine.
+    const preferred=vowels.slice(0,-1).map((v,i)=>{
+      let cut=v+1+(vowels[i+1]-v>2?1:0);
+      if(/[ьъй]/i.test(chars[cut]||''))cut++;
+      return cut;
+    });
+    const target=size(word)/Math.ceil(size(word)/(budget-size(hyphen)));
+    const fits=i=>i>=2&&i<=chars.length-2&&size(chars.slice(0,i).join('')+hyphen)<=budget;
+    const valid=i=>fits(i)&&!/[ьъй]/i.test(chars[i]);
+    let cuts=preferred.filter(i=>valid(i)&&size(chars.slice(0,i).join(''))>=target*.65);
+    if(!cuts.length)cuts=chars.map((_,i)=>i).filter(valid);
+    if(!cuts.length)cuts=chars.map((_,i)=>i).filter(fits);
+    // A measured, balanced split avoids a nearly full line plus one character.
+    const cut=cuts.sort((a,b)=>Math.abs(size(chars.slice(0,a).join(''))-target)-Math.abs(size(chars.slice(0,b).join(''))-target))[0];
+    if(cut===undefined)return [word];
+    return [chars.slice(0,cut).join('')+hyphen,...splitWord(chars.slice(cut).join(''),budget)];
+  }
+  function balanceWords(words){
+    // Fewest lines first; within that budget minimize raggedness, not font size.
+    const memo=new Map();
+    function fit(start){
+      if(start===words.length)return {lines:[],cost:0};
+      if(memo.has(start))return memo.get(start);
+      let best;
+      for(let end=start+1;end<=words.length;end++){
+        const line=words.slice(start,end).join(' '),w=size(line);
+        if(w>width)break;
+        const rest=fit(end),candidate={lines:[line,...rest.lines],cost:(width-w)**2+rest.cost+(line.length===1?width**2:0)};
+        if(!best||candidate.lines.length<best.lines.length||(candidate.lines.length===best.lines.length&&candidate.cost<best.cost))best=candidate;
+      }
+      memo.set(start,best);return best;
+    }
+    return fit(0).lines;
+  }
+  const source=value.trim().split(/\s+/),units=[];
+  // Keep short conjunctions/prepositions with the following word, including
+  // when that word itself needs a discretionary hyphen.
+  for(let i=0;i<source.length;i++)units.push(source[i].length<=2&&i+1<source.length?source[i]+' '+source[++i]:source[i]);
+  const lines=[];let words=[];
+  for(const word of units){
+    if(size(word)<=width){words.push(word);continue}
+    lines.push(...balanceWords(words));words=[];
+    const space=word.lastIndexOf(' '),prefix=space<0?'':word.slice(0,space+1);
+    const parts=splitWord(word.slice(space+1),width-size(prefix));parts[0]=prefix+parts[0];
+    lines.push(...parts.slice(0,-1));words.push(parts.at(-1));
+  }
+  return [...lines,...balanceWords(words)];
+}
+function nameExtra(group){return expanded[group]?Math.max(...runs[runId].groups[group].map(p=>nameLines(p.name,group==='scouts'?192:104).length-1))*20:0}
+function fan(group,y){
+  if(!expanded[group])return '';
+  const people=runs[runId].groups[group],xs=people.length===2?[624,848]:[568,680,792,904],last=xs.at(-1);
+  let rails=path(`M448 ${y-24}V${y-28}Q448 ${y-36} 456 ${y-36}H${last-8}Q${last} ${y-36} ${last} ${y-28}`,'rail');
+  xs.forEach((x,i)=>{rails+=path(`M${x} ${y-(i===xs.length-1?28:36)}V${y-16}`,isActive(people[i])?'control active':'control')});
+  // Every lower branch is a result, never a new call. Join at the group port.
+  xs.forEach((x,i)=>{rails+=path(`M${x} ${y+16}V${y+56}`,`result rail ${isActive(people[i])?'pending':''}`)});
+  rails+=path(`M${last} ${y+56}H496Q488 ${y+56} 488 ${y+48}V${y+20}Q488 ${y+12} 480 ${y+12}H${people[0].memory?469:472}`,'result');
+  return `<g data-fan="${group}">${rails}${people.map((p,i)=>{
+    const lines=nameLines(p.name,group==='scouts'?192:104);
+    return station(group,xs[i],y,p,true)+`<g class="member-name" data-label-for="${p.id}" data-label-group="${group}" style="cursor:pointer"><text class="member-label" text-anchor="middle">${lines.map((line,n)=>`<tspan x="${xs[i]}" y="${y+84+n*20}">${esc(line)}</tspan>`).join('')}</text>${text(xs[i],y+106+(lines.length-1)*20,isActive(p)?'сейчас':'✓ результат',isActive(p)?'status-label active-text':'status-label','middle')}</g>`;
+  }).join('')}</g>`;
+}
+function renderMap(){
+  const research=runId==='research';let body='';
+  if(research){
+    const scoutExtra=expanded.scouts?28+nameExtra('scouts'):0;
+    const y=244+scoutExtra,c=402+scoutExtra+nameExtra('researchers');
+    $('#topology').setAttribute('viewBox',`0 0 960 ${c+78}`);
+    body+=path(`M128 ${y-24}V98Q128 90 136 90H424`,'control','scientist-scouts');
+    body+=path(`M448 114V130Q448 138 440 138H184Q176 138 176 146V${y-20}Q176 ${y-12} 168 ${y-12}H149`,'result','scouts-scientist');
+    body+=path(`M152 ${y}H424`,'control active','scientist-researchers');
+    body+=path(`M448 ${y+24}V${y+40}Q448 ${y+48} 440 ${y+48}H184Q176 ${y+48} 176 ${y+40}V${y+20}Q176 ${y+12} 168 ${y+12}H149`,'result pending','researchers-scientist');
+    body+=path(`M128 ${y+24}V${c-8}Q128 ${c} 136 ${c}H424`,'control','scientist-committee');
+    body+=path(`M472 ${c}H864`,'control','committee-end');
+    body+=path(`M448 ${c+24}V${c+40}Q448 ${c+48} 440 ${c+48}H96Q88 ${c+48} 88 ${c+40}V${y+20}Q88 ${y+12} 96 ${y+12}H107`,'control','committee-changes');
+    body+=routeLabel(232,124,'оба результата')+routeLabel(232,y+34,'все 4 результата');
+    body+=routeLabel(232,c+32,'изменения');body+=routeLabel(648,c-16,'одобрено');
+    body+=label(80,y-18,'Учёный','scientist','end');
+    body+=label(232,36,'Разведчики','scout');
+    body+=label(232,y-54,'Исследователи','researcher');
+    body+=label(232,c-48,'Комитет','committee');
+    body+=station('scientist',128,y)+station('scouts',448,90)+station('researchers',448,y)+station('committee',448,c);
+    body+=fan('scouts',90)+fan('researchers',y);
+    body+=expandButton('scouts',472,30)+expandButton('researchers',472,y-60);
+    body+=`<circle class="terminal" cx="880" cy="${c}" r="16"/><circle cx="880" cy="${c}" r="5" fill="var(--ink)"/>`+text(880,c+36,'Конец · null','sub-label','middle');
+    if(expanded.scouts)body+=text(568,40,'2 фиксированных · параллельно');
+    else body+=text(568,86,'2 фиксированных · параллельно')+text(568,112,'Каждый сохраняет свою сессию');
+    if(expanded.researchers)body+=text(568,y-50,'4 элемента · параллельно');
+    else body+=text(568,y-4,'3 из 4 результатов получены')+text(568,y+22,'«Интерфейс» работает','sub-label active-text');
+  }else{
+    $('#topology').setAttribute('viewBox','0 0 960 480');
+    body+=path('M168 168H396','control','worker-reviewer');
+    body+=path('M444 168H680','control','reviewer-verifier');
+    body+=path('M728 168H888','control','verifier-end');
+    body+=path('M420 192V256Q420 264 412 264H164Q156 264 156 256V189','control','reviewer-changes');
+    body+=path('M704 192V336Q704 344 696 344H104Q96 344 96 336V176Q96 168 104 168H120','control active','verifier-changes');
+    body+=routeLabel(248,152,'готово');body+=routeLabel(524,152,'одобрено');body+=routeLabel(772,152,'пройдено');
+    body+=routeLabel(232,248,'изменения');body+=routeLabel(232,328,'изменения');
+    body+=label(144,88,'Исполнитель','worker · сейчас','middle')+label(420,88,'Ревьюер','reviewer','middle')+label(704,88,'Проверяющий','verifier','middle');
+    body+=station('worker',144,168)+station('reviewer',420,168)+station('verifier',704,168);
+    body+='<circle class="terminal" cx="904" cy="168" r="16"/><circle cx="904" cy="168" r="5" fill="var(--ink)"/>'+text(904,216,'Конец · null','sub-label','middle');
+    body+=text(232,400,'Обе петли вызывают того же исполнителя')+text(232,424,'Его сессия продолжается — ID виден в истории');
+  }
+  $('#topology').innerHTML=`<title id="topology-title">${research?'Архитектура исследования':'Архитектура сборки и ревью'}</title><desc id="topology-desc">${research?'Учёный вызывает двух разведчиков, четырёх исследователей или комитет. Группы возвращают результаты учёному; комитет одобряет завершение или вызывает учёного повторно. Сейчас работает исследователь «Интерфейс».':'Исполнитель передаёт работу ревьюеру, затем проверяющему и к завершению. Изменения от ревьюера и проверяющего вызывают того же исполнителя повторно. Сейчас исполнитель исправляет замечание проверяющего.'}</desc>${markers}${body}`;
+  fitLabelMasks();
+}
+function selectedPerson(){return runs[runId].groups[selected.group].find(p=>p.id===selected.member)}
+function selectNode(group,memberId){
+  const people=runs[runId].groups[group],p=people.find(p=>p.id===memberId)||people.find(isActive)||people[0];
+  selected={group,member:p.id,originMember:memberId||null};selectedInvocation=p.invocations.length-1;
+  renderMap();renderInspector();$('#inspector').scrollTop=0;
+  $('#inspector h2').focus({preventScroll:true});
+  if(innerWidth<1440)$('#inspector').scrollIntoView({block:'start'});
+  $('#announcement').textContent=`Открыт участник ${p.name}. Показан последний вызов.`;
+}
+function renderInspector(){
+  copyGeneration++;
+  const panel=$('#inspector');panel.hidden=!selected;$('#atlas-body').classList.toggle('inspecting',!!selected);
+  if(!selected)return;
+  const people=runs[runId].groups[selected.group],p=selectedPerson(),n=selectedInvocation,v=p.invocations[n],prev=p.invocations[n-1],same=prev&&prev.session===v.session,past=n<p.invocations.length-1;
+  const states={active:'Выполняется',done:'Результат получен',waiting:'Ожидает результаты'};
+  panel.innerHTML=`
+    <div class="inspect-top"><div><div class="eyebrow">Выбранный участник</div><h2 tabindex="-1">${esc(p.name)}</h2><div class="inspect-role">${p.role}${p.id!==p.role?' · '+p.id:''}</div></div><button class="close" id="close-inspector" aria-label="Закрыть детали и вернуться к карте">×</button></div>
+    ${people.length>1?`<div class="member-picker" aria-label="Участники группы">${people.map(m=>`<button data-pick="${m.id}" class="${isActive(m)?'live':''}" aria-pressed="${m.id===p.id}">${esc(m.name)}</button>`).join('')}</div>`:''}
+    <div class="inspect-primary">
+      <div class="call-head"><h3 class="section-label">Вызовы участника</h3>${past?'<button class="latest" id="latest-call">К последнему →</button>':'<span class="section-label">Последний выбран</span>'}</div>
+      <div class="call-picker" aria-label="Выбрать вызов">${p.invocations.map((call,i)=>`<button data-invocation="${i}" class="${call.state==='active'?'live':''}" aria-label="Вызов ${call.time}, ${states[call.state]}${i===p.invocations.length-1?', последний':''}" aria-pressed="${i===n}">${call.time}${call.state==='active'?' ●':''}</button>`).join('')}</div>
+      ${past?`<p class="past-note">Просмотр прошлого вызова. На карте по-прежнему: ${esc(runs[runId].now.replace('Сейчас: ',''))}.</p>`:''}
+      <p class="call-state ${v.state==='active'?'active':''}">${past?'Архив · ':''}${v.time} · ${states[v.state]}</p>
+      <dl class="settings"><dt>Модель</dt><dd>${esc(v.model)}</dd><dt>Рассуждение</dt><dd>${v.reasoning}</dd><dt>Режим</dt><dd>${v.mode} · ${v.mode==='Быстрый'?'fast':'ordinary'}</dd></dl>
+      <details class="skills"><summary>Навыки · ${v.skills.length}</summary>${v.skills.map(k=>`<div class="skill"><strong>${skills[k][0]}</strong><p>${skills[k][1]}</p></div>`).join('')}</details>
+      <section class="detail-block"><h3>Задача</h3><p>${esc(v.task)}</p></section>
+      <section class="detail-block"><h3>Результат</h3><p class="${v.result?'':'result-pending'}">${v.result?esc(v.result):'Ещё не получен. Участник выполняет задание.'}</p></section>
+    </div>
+    <div class="inspect-secondary">
+      <div class="context"><div class="context-title">${p.memory?'↺ Продолжающийся контекст':'＋ Свежий контекст'}</div><p>${p.memory?'Повторный вход продолжает сессию участника.':'memory:false · каждый повторный вход создаёт сессию.'}</p><code class="session">${v.session}</code>${prev?`<p>${same?'ID совпадает с предыдущим вызовом.':'Новый ID. Прежний контекст не перенесён.'}</p><span class="previous">Предыдущий: <code>${prev.session}</code></span>`:'<p>Первый показанный вызов этого участника.</p>'}</div>
+      <section class="entry"><div class="entry-head"><h3>Команда для OpenCode</h3><button class="copy" id="copy-command">Копировать</button></div><label class="sr-only" for="entry-command">Команда входа в выбранную демо-сессию</label><textarea class="command" id="entry-command" rows="2" readonly spellcheck="false">opencode --session ${v.session}</textarea><p class="copy-status" id="copy-status" role="status"></p><p class="entry-note">Вымышленный демо-ID. Команда не подключает к реальной сессии; интеграция — будущая работа.</p></section>
+      <details class="inspect-history"><summary>История и ID сессий · ${p.invocations.length}</summary><div class="history">${p.invocations.map((call,i)=>`<button class="invocation" data-invocation="${i}" aria-pressed="${i===n}"><time>${call.time}</time><strong>${states[call.state]}${i>0?(p.invocations[i-1].session===call.session?' · тот же ID':' · новый ID'):''}</strong><code>${call.session}</code></button>`).join('')}</div></details>
+      <button class="back-map" id="back-map">Вернуться к карте ↑</button>
+    </div>`;
+}
+function chooseInvocation(n,fromHistory=false){
+  const scroll=$('#inspector').scrollTop,skillsOpen=$('.skills')?.open;
+  selectedInvocation=n;renderInspector();$('.skills').open=skillsOpen;
+  if(fromHistory)$('.inspect-history').open=true;
+  const target=$(`${fromHistory?'.history':'.call-picker'} [data-invocation="${n}"]`);
+  target.focus({preventScroll:true});$('#inspector').scrollTop=scroll;
+  $('#announcement').textContent=`Показан вызов ${selectedPerson().invocations[n].time}. Текущее выполнение не изменилось.`;
+}
+function mapSelection(){return document.querySelector(`[data-group="${selected.group}"][data-member="${selected.member}"]`)||document.querySelector(`[data-group="${selected.group}"]`)}
+function closeInspector(){
+  const previous=selected;selected=null;renderInspector();renderMap();
+  const target=(previous.originMember&&document.querySelector(`[data-group="${previous.group}"][data-member="${previous.originMember}"]`))||document.querySelector(`[data-group="${previous.group}"]:not([data-member])`);
+  target.focus({preventScroll:true});target.scrollIntoView({block:'center',inline:'center'});
+}
+function chooseRun(id){
+  if($('#run-title').textContent)savedViews[runId]={selected,selectedInvocation,expanded:{...expanded}};
+  runId=id;const view=savedViews[id];selected=view?.selected||null;selectedInvocation=view?.selectedInvocation??null;expanded=view?.expanded||{scouts:false,researchers:true};
+  const run=runs[id];document.querySelectorAll('[data-run]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.run===id));
+  $('#project-name').textContent=run.project;$('#run-id').textContent='demo_run_'+id;$('#run-title').textContent=run.title;$('#run-description').textContent=run.description;$('#now-text').textContent=run.now+' ↗';$('#now-time').textContent=run.since;
+  renderMap();renderInspector();$('#map-viewport').scrollLeft=0;window.scrollTo({top:0,behavior:'auto'});
+  $('#announcement').textContent=`Выбран демо-запуск «${run.title}», проект ${run.project}.`;
+}
+async function copyCommand(){
+  const generation=copyGeneration,field=$('#entry-command'),status=$('#copy-status'),value=field.value;
+  try{
+    if(!navigator.clipboard?.writeText)throw new Error('unavailable');
+    await navigator.clipboard.writeText(value);
+    if(generation===copyGeneration)status.textContent='Команда скопирована. Это демо-ID, не подключение.';
+  }catch{
+    if(generation!==copyGeneration)return;
+    status.textContent='Не удалось скопировать. Команда выделена: нажмите Ctrl+C / ⌘C.';field.focus();field.select();
+  }
+}
+document.addEventListener('click',e=>{
+  const run=e.target.closest('[data-run]');if(run){chooseRun(run.dataset.run);return}
+  const expand=e.target.closest('[data-expand]');if(expand){const group=expand.dataset.expand;expanded[group]=!expanded[group];renderMap();document.querySelector(`[data-expand="${group}"]`).focus({preventScroll:true});return}
+  const node=e.target.closest('[data-group]');if(node){selectNode(node.dataset.group,node.dataset.member);return}
+  const name=e.target.closest('[data-label-for]');if(name){selectNode(name.dataset.labelGroup,name.dataset.labelFor);return}
+  const pick=e.target.closest('[data-pick]');if(pick){selectNode(selected.group,pick.dataset.pick);$(`[data-pick="${pick.dataset.pick}"]`).focus({preventScroll:true});return}
+  const history=e.target.closest('[data-invocation]');if(history){chooseInvocation(Number(history.dataset.invocation),!!history.closest('.history'));return}
+  if(e.target.closest('#latest-call')){chooseInvocation(selectedPerson().invocations.length-1);return}
+  if(e.target.closest('#now-text')){const group=runs[runId].activeGroup;selectNode(group,runs[runId].groups[group].find(isActive).id);return}
+  if(e.target.closest('#close-inspector')){closeInspector();return}
+  if(e.target.closest('#back-map')){const target=mapSelection();target.focus({preventScroll:true});target.scrollIntoView({block:'center',inline:'center'});return}
+  if(e.target.closest('#copy-command'))copyCommand();
+  if(e.target.closest('#read-guide')){const open=$('#guide').hidden;$('#guide').hidden=!open;$('#read-guide').setAttribute('aria-expanded',open);if(open){$('#guide').scrollIntoView({block:'nearest'});$('#guide h2').tabIndex=-1;$('#guide h2').focus({preventScroll:true})}}
+});
+document.addEventListener('keydown',e=>{
+  const target=e.target.closest('.station,.expand');
+  if(target&&(e.key==='Enter'||e.key===' ')){e.preventDefault();target.dispatchEvent(new MouseEvent('click',{bubbles:true}))}
+  if(e.key==='Escape'){
+    if(!$('#guide').hidden){$('#guide').hidden=true;$('#read-guide').setAttribute('aria-expanded','false');$('#read-guide').focus()}
+    else if(selected)closeInspector();
+  }
+});
+$('#role-key').innerHTML=Object.entries({worker:'Исполнитель',reviewer:'Ревьюер',verifier:'Проверяющий',orchestrator:'Оркестратор',scientist:'Учёный',scout:'Разведчик',researcher:'Исследователь',committee:'Комитет'}).map(([key,name])=>`<span><svg viewBox="-16 -16 32 32" aria-hidden="true"><g class="glyph">${glyphs[key]}</g></svg>${name} · ${key}</span>`).join('');
+function updatePan(){
+  const map=$('#map-viewport'),end=map.scrollWidth-map.clientWidth;
+  $('.pan-hint').hidden=end<2;
+  $('#pan-direction').textContent=map.scrollLeft<4?'Листайте вправо →':map.scrollLeft>end-4?'← Листайте влево':'← Листайте карту →';
+}
+$('#map-viewport').addEventListener('scroll',updatePan,{passive:true});
+new ResizeObserver(updatePan).observe($('#map-viewport'));
+// Native focus scrolling omits sticky headers and the outline's outer margin.
+// After native scrolling, reveal the full control in its actual scroll owner.
+// Measure the header each time so wrapped names do not require magic offsets.
+let focusFrame;
+$('#inspector').addEventListener('focusin',()=>{
+  cancelAnimationFrame(focusFrame);
+  focusFrame=requestAnimationFrame(()=>{
+    const panel=$('#inspector'),head=panel.querySelector('.inspect-top'),target=document.activeElement;
+    if(!head||!panel.contains(target))return;
+    const sticky=getComputedStyle(head).position==='sticky';
+    if(sticky&&head.contains(target))return;
+    const r=target.getBoundingClientRect(),p=panel.getBoundingClientRect();
+    const top=sticky?Math.max(0,head.getBoundingClientRect().bottom)+8:8;
+    const bottom=sticky?Math.min(innerHeight,p.bottom)-8:innerHeight-8;
+    const scroller=sticky?panel:document.scrollingElement;
+    if(r.top<top)scroller.scrollTop+=r.top-top;
+    else if(r.bottom>bottom)scroller.scrollTop+=r.bottom-bottom;
+  });
+});
+chooseRun('research');
+</script>
+</body>
+</html>

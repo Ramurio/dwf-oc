@@ -13,3 +13,6 @@ acceptance-results/
 .beads-credential-key
 .beads/proxieddb/
 *.gate.lock*
+
+# Local design verification artifacts
+.evidence/
