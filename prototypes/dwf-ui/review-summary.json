@@ -1,0 +1,65 @@
+{
+  "variant": "lines-astra",
+  "designer": {
+    "model": "openai/gpt-6-astra",
+    "reasoning": "xhigh",
+    "speed": "normal"
+  },
+  "reviewRounds": 2,
+  "htmlSha256": "3112ee76461596213b72f59d4537947c7aca40b95edfa96040919da43e0c5c6c",
+  "critics": [
+    {
+      "model": "openai/gpt-6.1-sol",
+      "reasoning": "xhigh",
+      "speed": "normal",
+      "outcome": "approve",
+      "scores": {
+        "design": 10,
+        "usability": 10
+      }
+    },
+    {
+      "model": "openai/gpt-6-astra",
+      "reasoning": "xhigh",
+      "speed": "normal",
+      "outcome": "approve",
+      "scores": {
+        "design": 10,
+        "usability": 10
+      }
+    }
+  ],
+  "checkedViewports": [
+    [
+      1440,
+      900
+    ],
+    [
+      1280,
+      720
+    ],
+    [
+      1024,
+      768
+    ],
+    [
+      390,
+      844
+    ]
+  ],
+  "verifiedBehaviors": [
+    "both demo workflows and their control/result paths",
+    "participant and invocation selection",
+    "current state preserved during historical inspection",
+    "session continuity and fresh session identifiers",
+    "keyboard navigation and focus restoration",
+    "clipboard readback and manual fallback",
+    "enlarged text and reduced motion"
+  ],
+  "scope": "Standalone prototype with fictional data",
+  "limitations": [
+    "Browser review used Chrome",
+    "200% zoom used viewport/DPR equivalence",
+    "Live DWF/OpenCode integration is future work"
+  ]
+}
