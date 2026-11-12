@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { registerHooks } from 'node:module';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { claimWorkflow, createWorkflow, getWorkflow, queueWorkflowCommand, updateWorkflow } from './run-store.mjs';
+import { DatabaseSync } from 'node:sqlite';
+import { claimWorkflow, createWorkflow, getWorkflow, publicError, queueWorkflowCommand, updateWorkflow } from './run-store.mjs';
 
 // Schedule commands at native I/O boundaries while exercising the real controller and store.
 let io;
@@ -469,3 +470,133 @@ test('ordinary admission retry retains the original input before applying later 
   assert.notEqual(f.admitted[1].inputId, f.admitted[2].inputId);
   assert.match(f.admitted[2].request.text, /Later clarification/);
 });
+
+test('legacy ordinary visits without admissionStarted retain their frozen input before queued steering', async t => {
+  const visit = { node: 'review', participant: 'review', sessionId: 'ses_legacy', inputId: 'msg_legacy',
+    prompt: 'Saved legacy request\nЮникод  ', revision: 'original' };
+  const f = await fixture(t, { visits: [visit] });
+  f.command('steer', 'review', 'First later clarification');
+  f.command('steer', 'review', 'Second later clarification');
+  await f.run();
+  const state = f.state();
+  assert.equal(state.status, 'succeeded', state.error);
+  assert.deepEqual(state.controls.map(command => command.status), ['applied', 'applied']);
+  assert.deepEqual(f.admitted.slice(0, 3).map(request => request.sessionId), Array(3).fill('ses_legacy'));
+  assert.equal(f.admitted[0].inputId, visit.inputId);
+  assert.equal(f.admitted[0].request.text, visit.prompt);
+  assert.match(f.admitted[1].request.text, /First later clarification/);
+  assert.match(f.admitted[2].request.text, /Second later clarification/);
+  assert(!Object.hasOwn(state.visits[0], 'admissionStarted'));
+});
+
+for (const [marker, admitted] of [[undefined, false], [true, false], [true, true]]) {
+  test(`partially admitted groups preserve terminal children and retry only unfinished inputs (marker=${marker}, admitted=${admitted})`, async t => {
+    const definition = { task: 'Resume persisted children', workspace: 'directory', entry: 'jobs',
+      nodes: { review: { role: 'reviewer' }, verify: { role: 'verifier' } },
+      groups: { jobs: { member: 'review', items: ['done', 'error', 'active', 'pending'].map(id => ({ id })) } },
+      transitions: { jobs: { done: 'verify', failed: null, changes: null },
+        review: { approve: 'verify', changes: null }, verify: { approve: null, changes: null } } };
+    const children = ['done', 'error', 'active', 'pending'].map(id => ({ node: 'review', participant: `jobs/${id}`,
+      required: id !== 'error', item: { id, detail: `saved ${id}` }, sessionId: `ses_${id}`, inputId: `msg_${id}`,
+      revision: 'original', prompt: `Saved ${id}`,
+      ...(id === 'done' ? { verdict: { outcome: 'approve', summary: 'Persisted result without admitted flag' } } : {}),
+      ...(id === 'error' ? { error: 'Persisted branch error' } : {}),
+      ...(id === 'active' ? { admitted: true } : {}) }));
+    const f = await fixture(t, { definition, visits: [{ node: 'jobs', revision: 'original', children, admitted,
+      ...(marker === undefined ? {} : { admissionStarted: marker }) }] });
+    const reads = [];
+    const read = io.read;
+    io.read = async request => { reads.push(request.inputId); return read(request); };
+    await f.run();
+    const state = f.state();
+    // Group aggregation tolerates the optional error, but the existing final
+    // mandatory-approval check still rejects the missing mapped review.
+    assert.equal(state.status, 'failed');
+    assert.match(state.error, /jobs\/error/);
+    assert.equal(f.admitted.filter(request => request.inputId.startsWith('msg_')).length, 2);
+    assert.equal(f.admitted[0].inputId, 'msg_pending');
+    assert.deepEqual(reads.slice(0, 2), ['msg_active', 'msg_pending']);
+    assert.deepEqual(state.visits[0].children[0], children[0]);
+    assert.deepEqual(state.visits[0].children[1], children[1]);
+    assert.deepEqual(state.visits[0].verdict.results.map(result => result.participant), children.map(child => child.participant));
+    assert.equal(state.visits[0].verdict.results[1].error, 'Persisted branch error');
+    assert.equal(state.visits[0].verdict.outcome, 'done');
+  });
+}
+
+test('a legacy research-mid correction retries its saved input without reopening the original request', async t => {
+  const definition = JSON.parse(await readFile(new URL('./workflows/research-mid.json', import.meta.url), 'utf8'));
+  const correction = { inputId: 'msg_correction', prompt: 'DWF needs a corrected JSON response\nЮникод  ' };
+  const visit = { node: 'scientist', participant: 'scientist', sessionId: 'ses_scientist', inputId: 'msg_original',
+    prompt: 'Original scientist request', revision: 'original', admitted: false, correction };
+  const f = await fixture(t, { definition, visits: [visit] });
+  const admit = io.admit;
+  io.admit = async request => {
+    await admit(request);
+    if (f.admitted.length === 1) throw new Error('Lost correction acknowledgement');
+  };
+  const reads = [];
+  io.read = async request => {
+    reads.push(request.inputId);
+    return { outcome: { status: 'succeeded', result: JSON.stringify({ outcome: 'scout', summary: 'Corrected assignments',
+      items: [{ id: 'foundations', instructions: 'Sources' }, { id: 'recent', instructions: 'Recent sources' }] }) } };
+  };
+  let stopped = false;
+  io.snapshot = () => {
+    if (!stopped && f.state().visits[0].verdict) { stopped = true; f.command('stop'); }
+    return 'original';
+  };
+  await f.run();
+  const state = f.state();
+  assert.equal(state.status, 'cancelled');
+  assert.deepEqual(reads, ['msg_correction']);
+  assert.equal(state.visits[0].verdict.outcome, 'scout');
+  assert.equal(f.admitted.length, 2);
+  assert.deepEqual(f.admitted[0], f.admitted[1]);
+  assert.equal(f.admitted[0].sessionId, visit.sessionId);
+  assert.equal(f.admitted[0].inputId, correction.inputId);
+  assert.equal(f.admitted[0].request.text, correction.prompt);
+  assert.equal(state.visits[0].prompt, visit.prompt);
+  assert(!Object.hasOwn(state.visits[0], 'admissionStarted'));
+});
+
+test('a persisted terminal error is not sent or read again', async t => {
+  const f = await fixture(t, { visits: [{ node: 'review', error: 'Saved terminal error' }] });
+  io.read = () => { throw publicError('Terminal error was incorrectly polled'); };
+  await f.run();
+  assert.equal(f.state().status, 'failed');
+  assert.equal(f.state().error, 'Saved terminal error');
+  assert.equal(f.admitted.length, 0);
+});
+
+for (const kind of ['single', 'fixed', 'map']) {
+  const group = kind !== 'single';
+  for (const control of ['stop', 'replacement owner']) {
+    test(`${control} prevents stale ${kind} admission after the saved boundary`, async t => {
+      const child = { node: 'review', participant: kind === 'map' ? 'jobs/alpha' : 'review',
+        ...(kind === 'map' ? { item: { id: 'alpha' } } : {}), sessionId: 'ses_saved', inputId: 'msg_saved',
+        revision: 'original', prompt: 'Frozen request' };
+      const definition = { task: 'Fence admission', workspace: 'directory', entry: group ? 'jobs' : 'review',
+        nodes: { review: { role: 'reviewer' }, verify: { role: 'verifier' } },
+        ...(group ? { groups: { jobs: kind === 'map' ? { member: 'review', items: [{ id: 'alpha' }] } : { members: ['review'] } } } : {}),
+        transitions: { review: { approve: 'verify', changes: null }, verify: { approve: null, changes: null },
+          ...(group ? { jobs: { done: 'verify', failed: null, changes: null } } : {}) } };
+      const visit = group ? { node: 'jobs', admissionStarted: true, children: [child] } : { ...child, admissionStarted: true };
+      const f = await fixture(t, { definition, visits: [visit] });
+      io.connect = async () => {
+        if (control === 'stop') f.command('stop');
+        else {
+          const db = new DatabaseSync(join(f.root, 'dwf.sqlite'));
+          try { db.prepare('UPDATE workflows SET expires = 0 WHERE id = ?').run(f.id); }
+          finally { db.close(); }
+          assert.equal(claimWorkflow(f.root, f.id, 'replacement'), true);
+        }
+        return {};
+      };
+      await f.run();
+      assert.equal(f.admitted.length, 0);
+      assert.equal(f.state().status, control === 'stop' ? 'cancelled' : 'running');
+      if (control === 'stop') assert.equal(f.state().controls[0].status, 'applied');
+    });
+  }
+}
