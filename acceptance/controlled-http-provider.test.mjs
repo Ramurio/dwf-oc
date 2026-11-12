@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { join } from 'node:path';
 import { readFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { setImmediate as nextTurn } from 'node:timers/promises';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { createControlledHttpProvider, assertHigh, hash, nativeProviderConfig } from './controlled-http-provider.mjs';
 import { createSandbox, originalStillWorking, transcript, waitFor, writeJson } from './harness.mjs';
 
@@ -11,20 +15,26 @@ async function setup(run) {
   const events = () => transcript(join(sandbox.control, 'provider.jsonl'));
   const task = 'План\u2028свежего запроса ' + sandbox.token;
   const controllers = [];
+  const responses = [];
   const request = async () => {
     const controller = new AbortController();
     controllers.push(controller);
-    return fetch(model.baseURL + '/chat/completions', {
+    const response = await fetch(model.baseURL + '/chat/completions', {
       method: 'POST', signal: controller.signal,
       headers: { 'Content-Type': 'application/json', 'x-opencode-session': 'ses_fixture_control', Authorization: 'DO_NOT_RECORD' },
       body: JSON.stringify({ model: 'planner', stream: true,
         messages: [{ role: 'system', content: 'Controlled system context' }, { role: 'user', content: task }],
         reasoning_effort: 'high', max_tokens: 8192 }),
     });
+    // An unread, unreachable Response can be finalized by fetch and close the held SSE transport.
+    responses.push(response);
+    return response;
   };
   try { await run({ sandbox, model, events, task, controllers, request }); }
   finally {
     for (const controller of controllers) controller.abort();
+    // Keep ownership until teardown; aborted bodies may already be errored, consumed ones locked.
+    await Promise.allSettled(responses.filter(response => !response.body.locked).map(response => response.body.cancel()));
     await model.close();
     await sandbox.cleanup();
   }
@@ -82,6 +92,10 @@ test('a second model call cannot hide a lifetime failure; high is only an explic
     await request();
     const ready = (await events()).find(event => event.type === 'received');
     await request();
+    if (globalThis.gc) {
+      // Let fetch's temporary roots expire and run response finalizers before checking the witness.
+      for (let i = 0; i < 20; i++) { await nextTurn(); globalThis.gc(); await nextTurn(); }
+    }
     const world = { sandbox, controlledModel: model, ready, task, startClient: { exited: true }, released: false };
     await assert.rejects(originalStillWorking(world), /LIFETIME_FAILURE: новый модельный вызов/);
     assert.throws(() => assertHigh({ ...ready, reasoning: undefined }), /reasoning high/);
@@ -93,4 +107,13 @@ test('a second model call cannot hide a lifetime failure; high is only an explic
     assert.equal(catalogModel.body, undefined);
     assert.deepEqual(catalogModel.variants, [{ id: 'high', body: { reasoning_effort: 'high' } }]);
   });
+});
+
+test('HTTP fixture retains unread responses across garbage collection', async () => {
+  // Select only the original scenario, not this subprocess regression (no recursive spawning).
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT; // Start an independent runner, not a child on the parent's test protocol.
+  const { stdout } = await promisify(execFile)(process.execPath, ['--expose-gc', '--test', '--test-reporter=tap',
+    '--test-name-pattern=^a second model call', fileURLToPath(import.meta.url)], { env, timeout: 15000 });
+  assert.match(stdout, /^# pass 1$/m, 'The GC subprocess must actually execute the original scenario');
 });
