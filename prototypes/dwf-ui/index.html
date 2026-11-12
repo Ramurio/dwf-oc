@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>DWF — рабочий контур</title>
+<style>
+:root{--paper:#f5f6f8;--ink:#283244;--muted:#59677b;--line:#dce1e7;--loop:#6554a4;--loop-soft:#eeebf6;--active:#126f61;--active-soft:#e5f2ee;font-family:"Avenir Next",Avenir,"Segoe UI",sans-serif;color:var(--ink);background:var(--paper);font-synthesis:none}
+*{box-sizing:border-box}body{margin:0}button,select,textarea{font:inherit;color:inherit}button{cursor:pointer;border:0;background:none}button:disabled{cursor:default}button:hover{background-color:var(--loop-soft)}button:focus-visible,summary:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--loop);outline-offset:3px}h1,h2,h3,p{margin:0}svg{display:block}[hidden]{display:none!important}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.app-header{height:52px;padding:0 24px;display:flex;align-items:center;gap:16px;border-bottom:1px solid var(--line);background:white}.brand{display:flex;align-items:center;gap:9px;font-size:21px;font-weight:750;letter-spacing:-.8px}.brand svg{width:25px;height:25px;color:var(--loop)}.header-label{border-left:1px solid var(--line);padding-left:16px;font-size:13px;color:var(--muted)}.demo-label{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)}.demo-label b{font-weight:600;color:var(--loop);padding:3px 8px;border:1px solid #d8d0e9;border-radius:5px}
+.layout{display:grid;grid-template-columns:208px minmax(0,1fr);min-height:calc(100dvh - 52px)}.runs{padding:24px 12px 18px;display:flex;flex-direction:column;border-right:1px solid var(--line);background:#fff}.runs h2{font-size:14px;font-weight:650;padding:0 12px}.runs-sub{font-size:12px;color:var(--muted);padding:3px 12px 22px}.run{width:100%;padding:14px 12px;text-align:left;position:relative;border:1px solid transparent;border-radius:9px;margin-bottom:10px}.run[aria-pressed=true]{background:var(--loop-soft);border-color:#d8d0e9}.run[aria-pressed=true]:before{content:"";position:absolute;left:-13px;top:16px;bottom:16px;width:3px;background:var(--loop);border-radius:0 3px 3px 0}.run-project{font-size:12px;color:var(--muted);display:flex;justify-content:space-between;align-items:center;gap:5px}.run strong{display:block;font-size:14px;line-height:1.45;font-weight:600;margin:8px 0 12px;overflow-wrap:anywhere}.run-status{font-size:12px;color:var(--active);display:flex;align-items:center;gap:6px}.status-mark{display:inline-block;width:6px;height:6px;background:currentColor;border-radius:50%;flex:none}.sidebar-note{margin-top:auto;padding:32px 12px 0;font-size:12px;line-height:1.7;color:var(--muted)}.sidebar-note strong{font-weight:500;color:var(--ink);display:block}
+.workspace{min-width:0;padding:22px 24px 16px}.run-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.project-line{font-size:12px;color:var(--muted);margin-bottom:5px;display:flex;gap:12px;flex-wrap:wrap}.project-line span:first-child{color:var(--loop);font-weight:650}h1{font-size:25px;line-height:1.3;letter-spacing:-.65px;font-weight:650;overflow-wrap:anywhere}.heading-number{font-size:12px;color:var(--muted);white-space:nowrap;padding-top:2px}.execution{display:flex;align-items:center;gap:8px;font-size:13px;line-height:1.5;margin-top:12px;color:var(--active)}.execution strong{font-weight:650}.execution svg{width:17px;height:17px;flex:none}.stage-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:19px 0 7px;font-size:12px;color:var(--muted)}.stage-head h2{font-size:13px;font-weight:600;color:var(--ink)}.stage-actions{display:flex;align-items:center;gap:16px}.text-button{padding:6px 10px;border:1px solid var(--line);background:#fff;border-radius:6px;font-size:12px;min-height:32px}
+.graph-scroll{overflow:auto;scrollbar-width:thin;scrollbar-color:#bcb4d3 transparent;border-radius:14px;background:white;border:1px solid var(--line)}
+/* A geometrically compact drawing, not type enlarged inside a shrunken SVG. */
+.graph{display:block;width:100%;min-width:800px;height:clamp(416px,min(calc((100vw - 258px)*.52),calc(100dvh - 252px)),620px);min-height:416px}
+.graph text{font-family:"Avenir Next",Avenir,"Segoe UI",sans-serif;font-size:16px;fill:var(--ink)}
+.graph [role="button"]{scroll-margin:8px}
+.guide-disclosure{display:flow-root}.guide-disclosure,.skills,.skills summary,#grammar-toggle,#participant{scroll-margin:8px}.guide-disclosure .grammar{margin:6px 0 14px}.text-button[aria-expanded="true"]{border-color:var(--loop);background:var(--loop-soft);color:var(--loop)}
+.graph .shell{fill:#f4f2f9;stroke:#d0c9e1;stroke-width:1.3}.graph .caption,.graph .role,.graph .member-state{fill:var(--muted)}.graph .boundary-label,.graph .port-label{fill:var(--loop);font-weight:600}.graph .title{font-size:19px;font-weight:650;letter-spacing:-.3px}.graph .status{fill:var(--active);font-weight:600}.graph .edge{fill:none;stroke:#65758b;stroke-width:1.7;marker-end:url(#arrow)}.graph .loop-edge{fill:none;stroke:var(--loop);stroke-width:1.9;marker-end:url(#loop-arrow)}.graph .data-edge{fill:none;stroke:#7c899c;stroke-width:1.5;stroke-dasharray:4 5;marker-end:url(#data-arrow)}.graph .label{fill:#536176;paint-order:stroke;stroke:#f4f2f9;stroke-width:5px;stroke-linejoin:round}.graph .loop-label{fill:var(--loop)}.graph .primitive-body{fill:white;stroke:#acb6c7;stroke-width:1.4}.graph .group-body{fill:#fafbfc;stroke:#b5bfce;stroke-width:1.4}.graph .active-body{fill:var(--active-soft);stroke:#78a99d;stroke-width:1.5}.graph .node,.graph .member{cursor:pointer}.graph .node:hover>.primitive-body,.graph .node:hover>.group-body,.graph .node[aria-pressed=true]>.primitive-body,.graph .node[aria-pressed=true]>.group-body{stroke:var(--loop);stroke-width:2.8}.graph .node:focus,.graph .member:focus{outline:none}.graph .node:focus-visible>.primitive-body,.graph .node:focus-visible>.group-body{stroke:var(--loop);stroke-width:3.5}.graph .member-cell{fill:white;stroke:#cbd3df;stroke-width:1}.graph .member.active .member-cell{fill:var(--active);stroke:var(--active)}.graph .member-label{font-weight:600}.graph .member.active text{fill:white}.graph .member.active .member-state{fill:#d9eee8}.graph .member:hover .member-cell,.graph .member[aria-pressed=true] .member-cell,.graph .member:focus-visible .member-cell{stroke:var(--loop);stroke-width:3}.graph .member[aria-pressed=true] .selection,.graph .member:focus-visible .selection{display:block}.graph .selection{display:none;fill:none;stroke:var(--loop);stroke-width:2}.graph .port{fill:white;stroke:var(--loop);stroke-width:1.7}.graph .data-port{fill:white;stroke:#7c899c;stroke-width:1.5}.graph .junction{fill:var(--loop)}.graph .done{fill:white;stroke:#9ca9ba;stroke-width:1.4}
+.legend{display:flex;gap:18px;flex-wrap:wrap;align-items:center;padding:13px 2px 0;font-size:12px;color:var(--muted)}.legend-item{display:flex;align-items:center;gap:7px}.legend svg{width:26px;height:15px;flex:none}.activity-key{width:9px;height:9px;background:var(--active);border-radius:3px}.legend .inspect-hint{margin-left:auto}.grammar{margin-top:14px;font-size:13px;line-height:1.7;max-width:850px;color:var(--muted);padding:14px 18px;border-left:3px solid #c8c2dc;background:white}.grammar strong{font-weight:600;color:var(--ink)}.narrow-hint{display:none}
+.inspector{position:fixed;inset:12px 12px 12px auto;margin:0;width:448px;max-width:calc(100% - 24px);height:calc(100dvh - 24px);max-height:none;border:1px solid #d1d6df;border-radius:14px;background:white;color:var(--ink);padding:0;box-shadow:0 12px 60px #28324430;overflow:hidden}.inspector[open]{display:flex;flex-direction:column}.inspector::backdrop{background:#28324430}.inspector-head{display:flex;justify-content:space-between;align-items:flex-start;padding:22px 24px 18px;border-bottom:1px solid var(--line);gap:12px}.inspector-head h2{font-size:23px;line-height:1.3;font-weight:650;letter-spacing:-.5px;overflow-wrap:anywhere}.inspector-caption{font-size:12px;color:var(--muted);margin-bottom:5px}.inspector-role{font-size:13px;color:var(--muted);margin-top:5px;overflow-wrap:anywhere}.close{flex:none;width:36px;height:36px;border:1px solid var(--line);border-radius:50%;font-size:25px;line-height:1;color:var(--muted);display:grid;place-items:center}.inspector-scroll{overflow-y:auto;overscroll-behavior:contain;padding:20px 24px 24px;scrollbar-width:thin;overflow-wrap:anywhere;min-height:0}.member-choice{margin-bottom:18px}.member-choice label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}.member-choice select{width:100%;min-width:0;border:1px solid #b9c2d1;border-radius:7px;padding:10px;background:white;font-size:14px}.identity-name{font-size:15px;font-weight:600;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 8px}.item-id{font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--muted);font-weight:400}.policy{font-size:13px;line-height:1.6;color:var(--muted);margin-top:6px}.policy strong{font-weight:600;color:var(--ink)}.history{margin:20px 0}.history h3{font-size:13px;font-weight:600;margin-bottom:9px;display:flex;justify-content:space-between}.history h3 span{font-weight:400;color:var(--muted)}.history-list{display:flex;flex-direction:column;gap:3px}.history-call{text-align:left;padding:8px 10px;border:1px solid transparent;display:grid;grid-template-columns:43px minmax(0,1fr);gap:9px;font-size:13px;border-radius:7px;line-height:1.5}.history-call[aria-pressed=true]{background:var(--loop-soft);border-color:#d8d0e9}.history-call time{color:var(--muted)}.history-call strong{font-weight:550;display:block}.history-call small{display:block;font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--muted);overflow-wrap:anywhere}.ongoing{color:var(--active)}.call-detail{border-top:1px solid var(--line);padding-top:18px}.call-label{font-size:13px;color:var(--loop);font-weight:600;margin-bottom:7px}.session-id{display:block;font:13px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere}.session-note{font-size:13px;line-height:1.6;color:var(--muted);margin-top:7px}.settings{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:18px 0;font-size:14px}.setting:first-child{grid-column:1/-1}.setting span{display:block;font-size:12px;color:var(--muted);margin-bottom:3px}.skills{border-block:1px solid var(--line);padding:11px 0;font-size:13px;line-height:1.65}.skills summary{cursor:pointer;font-weight:600}.skills ul{padding-left:18px;margin-bottom:0}.skills li+li{margin-top:10px}.skills strong{font-weight:600}.call-text{font-size:14px;line-height:1.65}.call-text h3{font-size:13px;font-weight:650;margin:18px 0 6px}.pending{color:var(--muted)}.handoff{margin-top:24px;padding-top:18px;border-top:1px solid var(--line)}.handoff h3{font-size:14px;font-weight:600;margin-bottom:10px}.command{display:block;width:100%;resize:vertical;min-height:68px;background:var(--paper);border:1px solid var(--line);border-radius:7px;padding:10px;font:13px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere}.copy{width:100%;padding:11px;margin-top:9px;border-radius:7px;background:var(--ink);color:white;font-size:14px;font-weight:600}.copy:hover{background:var(--loop)}.copy-note,.copy-status{font-size:12px;line-height:1.65;margin-top:10px;color:var(--muted)}.copy-status{color:var(--active);scroll-margin-block:16px}.copy-status.error{color:#9c402c}
+.inspector-head h2:focus{outline:none}
+.call-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.call-tabs .history-call{display:block;scroll-margin:8px}.call-tabs .history-call time{display:block;font-size:12px;margin-bottom:2px}
+@media(max-width:1200px){.layout{grid-template-columns:184px minmax(0,1fr)}.workspace{padding:18px 18px 14px}.heading-number{display:none}.runs{padding-inline:10px}.runs h2,.runs-sub{padding-inline:8px}.run{padding:12px 9px}.run[aria-pressed=true]:before{left:-11px}.run strong{font-size:13px}.run-project,.run-status{font-size:12px}.sidebar-note{padding-inline:8px}.stage-actions>span,.legend .inspect-hint{display:none}.graph{height:clamp(416px,min(calc((100vw - 222px)*.52),calc(100dvh - 248px)),600px)}h1{font-size:23px}}
+@media(max-width:1000px){.layout{grid-template-columns:170px minmax(0,1fr)}.workspace{padding-inline:12px}.narrow-hint{display:block;font-size:12px;color:var(--muted);margin:5px 0 10px}.graph{height:416px}.legend{gap:10px 16px}}
+@media(max-width:760px){.app-header{height:52px;padding:0 16px;gap:12px}.header-label{border:0;padding:0;font-size:12px}.demo-label span{display:none}.layout{display:block}.runs{padding:16px;border-right:0;border-bottom:1px solid var(--line)}.runs h2{display:inline;padding:0;font-size:13px}.runs-sub{display:inline;padding:0 0 0 8px}.run-list{display:flex;gap:8px;margin-top:12px}.run{width:50%;padding:10px;margin:0}.run[aria-pressed=true]:before{display:none}.run strong{font-size:12px;margin:6px 0 9px;line-height:1.5}.run-project{flex-wrap:wrap;font-size:12px}.run-status{font-size:12px}.sidebar-note{display:none}.workspace{padding:18px 16px}.project-line{gap:8px;font-size:12px}.project-line span:last-child{display:none}h1{font-size:23px}.execution{font-size:13px;align-items:flex-start;line-height:1.6}.execution svg{margin-top:2px}.stage-head{margin:18px 0 8px}.graph-scroll{margin-inline:-16px;border-radius:0;border-inline:0}.graph{width:900px;min-width:900px;height:468px;min-height:468px}.narrow-hint{display:block;line-height:1.5}.legend{gap:10px 15px;font-size:12px}.inspector{inset:0;max-width:100%;width:100%;height:100dvh;border:0;border-radius:0}.inspector-head{padding:20px}.inspector-scroll{padding:18px 20px}.grammar{font-size:13px}.text-button{min-height:36px}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<header class="app-header">
+ <div class="brand"><svg viewBox="0 0 30 30" aria-hidden="true"><path d="M24 10V8a5 5 0 0 0-5-5H10a7 7 0 0 0-7 7v10a7 7 0 0 0 7 7h10a7 7 0 0 0 7-7v-5H14m4-4-4 4 4 4" fill="none" stroke="currentColor" stroke-width="2.2"/></svg>DWF</div>
+ <span class="header-label">Рабочие контуры</span>
+ <div class="demo-label"><b>Демо</b><span>Вымышленные данные · без подключения</span></div>
+</header>
+<div class="layout">
+ <nav class="runs" aria-label="Недавние запуски всех проектов">
+  <h2>Недавние запуски</h2><p class="runs-sub">Все проекты</p>
+  <div class="run-list">
+   <button class="run" data-run="research" aria-pressed="true"><span class="run-project">memory-lab <time datetime="2026-11-12T14:32">14:32</time></span><strong>Память исследовательских агентов</strong><span class="run-status"><i class="status-mark"></i>Исследование идёт</span></button>
+   <button class="run" data-run="build" aria-pressed="false"><span class="run-project">local-runner <time datetime="2026-11-12T13:08">13:08</time></span><strong>Восстановление сессии после сбоя</strong><span class="run-status"><i class="status-mark"></i>Доработка</span></button>
+  </div>
+  <div class="sidebar-note"><strong>12 ноября 2026</strong>Демо-состояние сохранено.<br>Просмотр и вход в OpenCode.</div>
+ </nav>
+ <main class="workspace">
+  <div class="run-heading"><div><div class="project-line" id="project-line"></div><h1 id="run-title"></h1></div><span class="heading-number" id="run-id"></span></div>
+  <p class="execution" id="execution" aria-live="polite"></p>
+  <div class="guide-disclosure">
+   <div class="stage-head"><h2>Архитектура</h2><div class="stage-actions"><span>Все возможные переходы</span><button class="text-button" id="grammar-toggle" aria-expanded="false" aria-controls="grammar">Как читать</button></div></div>
+   <div class="grammar" id="grammar" hidden><strong>Оболочка объединяет участников, внешний маршрут возвращает управление.</strong> Сплошная стрелка вызывает агента. Пунктир доставляет результат, но не вызывает. Группа возвращает управление, когда готовы все её участники. Совпадение контекста проверяется по ID сессии в деталях, а не по роли. Выбор прошлого вызова не меняет текущее исполнение.</div>
+  </div>
+  <p class="narrow-hint">↔ Схема шире экрана. Листайте, чтобы увидеть участников и выход.</p>
+  <div class="graph-scroll" tabindex="0" role="region" aria-label="Архитектура; на узком экране прокручивается по горизонтали"><svg class="graph" id="graph" viewBox="0 0 1000 520" role="group" aria-labelledby="graph-title graph-desc"></svg></div>
+  <div class="legend" aria-label="Обозначения">
+   <span class="legend-item"><svg viewBox="0 0 27 15" aria-hidden="true"><path d="M1 8h23m-5-4 5 4-5 4" fill="none" stroke="#65758b" stroke-width="1.6"/></svg>Вызов</span>
+   <span class="legend-item"><svg viewBox="0 0 27 15" aria-hidden="true"><path d="M1 8h22" fill="none" stroke="#7c899c" stroke-width="1.5" stroke-dasharray="3 3"/><path d="m19 4 5 4-5 4" fill="none" stroke="#7c899c" stroke-width="1.5"/></svg>Только результат</span>
+   <span class="legend-item"><svg viewBox="0 0 27 15" aria-hidden="true"><path d="M25 2H8a5 5 0 0 0 0 10h12m-4-4 4 4-4 3" fill="none" stroke="#6554a4" stroke-width="1.7"/></svg>Повторный вход</span>
+   <span class="legend-item"><i class="activity-key"></i>Работает сейчас</span>
+   <span class="inspect-hint">Нажмите на агента для деталей</span>
+  </div>
+ </main>
+</div>
+<dialog class="inspector" id="inspector" aria-labelledby="inspector-title">
+ <div class="inspector-head"><div><p class="inspector-caption">Детали примитива</p><h2 id="inspector-title" tabindex="-1"></h2><p class="inspector-role" id="inspector-role"></p></div><button class="close" id="close-inspector" aria-label="Закрыть детали">×</button></div>
+ <div class="inspector-scroll" id="inspector-content"></div>
+</dialog>
+<noscript><p>Для интерактивной схемы нужен JavaScript. Все данные находятся в этом файле; сеть не требуется.</p></noscript>
+<script>
+(() => {
+'use strict';
+const $ = selector => document.querySelector(selector);
+// Reveal the whole requested unit when it fits, otherwise its readable beginning.
+// A disclosure includes its trigger; a selection includes its focus-outline margin.
+function reveal(element){
+ if(!element?.isConnected)return;
+ const scroller=element.closest('.inspector-scroll'),rect=element.getBoundingClientRect();
+ if(scroller){
+  // scrollIntoView(start) also scrolls the overflow-hidden dialog, hiding its header.
+  // Only the reading pane owns this scroll; the title and close control stay put.
+  const port=scroller.getBoundingClientRect(),top=Math.max(0,port.top),bottom=Math.min(innerHeight,port.bottom);
+  if(rect.height+16>bottom-top||rect.top-8<top)scroller.scrollTop+=rect.top-top-8;
+  else if(rect.bottom+8>bottom)scroller.scrollTop+=rect.bottom-bottom+8;
+ }else{
+  element.scrollIntoView({block:rect.height+16>innerHeight?'start':'nearest',inline:'nearest'});
+ }
+}
+const esc = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const skillSets = {
+ scientist:[['research-synthesis','Сопоставление свидетельств и постановка проверяемых вопросов.'],['delegation','Независимые задания участникам и сбор выводов.']],
+ scout:[['source-discovery','Поиск первичных публикаций и проверка происхождения источников.']],
+ researcher:[['evidence-check','Проверка утверждений по первичным источникам.'],['counterexamples','Поиск отрицательных результатов и границ применимости.']],
+ committee:[['research-review','Проверка полноты доказательств и независимая оценка выводов.']],
+ worker:[['code-work','Изменение кода и узкие поведенческие проверки.']],
+ reviewer:[['code-review','Поиск регрессий и проверка соответствия задаче.']],
+ verifier:[['behavioral-checks','Проверка результата через наблюдаемое поведение.']]
+};
+const settings = {
+ scientist:{model:'GPT-6 Astra',reasoning:'Высокий',mode:'Обычный'},
+ scout:{model:'GPT-6 Mini',reasoning:'Средний',mode:'Fast'},
+ researcher:{model:'GPT-6 Astra',reasoning:'Высокий',mode:'Обычный'},
+ committee:{model:'Claude Sonnet 4.5',reasoning:'Высокий',mode:'Обычный'},
+ worker:{model:'GPT-6 Astra',reasoning:'Высокий',mode:'Обычный'},
+ reviewer:{model:'Claude Sonnet 4.5',reasoning:'Высокий',mode:'Обычный'},
+ verifier:{model:'GPT-6 Mini',reasoning:'Средний',mode:'Fast'}
+};
+function call(time,session,state,task,result,extra={}) {return {time,session,state,task,result,...extra};}
+function participant(id,name,role,calls) {return {id,name,role,calls};}
+const researchTopics = [
+ ['retrieval','Поиск','Проверить, помогает ли внешнее хранилище находить ранее полученные факты.','Внешний индекс улучшил поиск фактов, но не доказал перенос навыка.','Проверить результат на независимом корпусе.','Эффект воспроизводится только при совпадении формата запросов.'],
+ ['context','Контекст','Сравнить длинный контекст с кратким резюме истории.','Резюме сокращает стоимость; редкие детали теряются.','Проверить потерю редких деталей при повторном сжатии.','После третьего сжатия пропадают две оговорки. Добавлены первичные цитаты.'],
+ ['transfer','Перенос','Найти свидетельства переноса между разными задачами.','Найдено три заявленных улучшения, без независимой репликации.','Отделить перенос решения от повторного использования подсказки.','Два улучшения объясняются повтором подсказки; одно требует репликации.'],
+ ['limits','Контрпримеры','Найти ограничения долговременной памяти агентов.','Выделены загрязнение памяти и накопление неверных выводов. Не проверены противоречащие записи.','Проверить противоречащие записи: сможет ли агент отказаться от устаревшего вывода?','Результат ещё не возвращён. Сейчас проверяется конфликт свежих и сохранённых свидетельств.']
+];
+const runs = {
+ research:{project:'memory-lab',title:'Память исследовательских агентов',id:'demo-rsch-018',started:'Сегодня, 14:32',execution:'<strong>Контрпримеры</strong> проверяет конфликтующие записи. Ещё 3 участника готовы.',nodes:{
+  scientist:{title:'Научный руководитель',role:'scientist',memory:true,members:[participant('lead','Научный руководитель','scientist',[
+   call('14:32','demo_scientist_01','Передал разведчикам','Исследовать, когда долговременная память помогает автономным агентам.','Выделены два направления поиска: публикации и практические реализации.'),
+   call('14:34','demo_scientist_01','Уточнил разведку','Проверить первичность найденных источников.','Те же разведчики получили уточняющие задания в своих сессиях.'),
+   call('14:36','demo_scientist_01','Передал исследователям','Разделить собранные свидетельства на независимые вопросы.','Созданы четыре независимых участника: поиск, контекст, перенос, контрпримеры.'),
+   call('14:41','demo_scientist_01','Передал комитету','Собрать выводы четырёх исследователей и передать отчёт на оценку.','Отчёт передан комитету. Ограничения выделены отдельно от подтверждённых эффектов.'),
+   call('14:44','demo_scientist_01','Ожидает результаты','Учесть замечания комитета: проверить перенос и противоречия в памяти.','Назначены четыре уточняющие проверки. Исследователи вызваны с новыми контекстами; руководитель продолжает demo_scientist_01.')])]},
+  scouts:{title:'Разведчики',role:'scout',memory:true,group:'2 фиксированных участника',members:[
+   participant('papers','Публикации','scout',[
+    call('14:33','demo_scout_papers_01','Готово','Найти первичные исследования памяти агентов.','Найдено 12 работ; пять содержат открытые наборы проверок.'),
+    call('14:35','demo_scout_papers_01','Готово','Уточнить источники трёх спорных утверждений.','Два утверждения подтверждены первичными работами, одно исключено. Список передан руководителю.')]),
+   participant('systems','Реализации','scout',[
+    call('14:33','demo_scout_systems_01','Готово','Найти реализации памяти с открытым кодом.','Найдены четыре системы с разными стратегиями извлечения.'),
+    call('14:35','demo_scout_systems_01','Готово','Проверить воспроизводимость опубликованных примеров.','Два примера воспроизводимы по описанию; у двух не хватает конфигурации.')])]},
+  researchers:{title:'Исследователи',role:'researcher',memory:false,group:'4 участника по элементам данных',members:researchTopics.map(([id,name,oldTask,oldResult,newTask,newResult],i)=>participant(id,name,'researcher',[
+   call('14:37',`demo_research_${id}_01`,'Готово',oldTask,oldResult,{reasoning:'Средний'}),
+   call('14:45',`demo_research_${id}_02`,i===3?'Работает':'Готово',newTask,newResult)]))},
+  committee:{title:'Комитет',role:'committee',memory:false,members:[participant('review','Оценка отчёта','committee',[
+   call('14:42','demo_committee_01','Замечания','Проверить достаточность доказательств для итогового вывода о пользе памяти.','Вернуть руководителю: отделить перенос навыков от повторения подсказок и проверить конфликтующие записи. Одобрение пока невозможно.')])]}
+ }},
+ build:{project:'local-runner',title:'Восстановление сессии после сбоя',id:'demo-build-041',started:'Сегодня, 13:08',execution:'<strong>Разработчик</strong> исправляет замечания верификатора в той же сессии.',nodes:{
+  worker:{title:'Разработчик',role:'worker',memory:true,members:[participant('implementation','Разработчик','worker',[
+   call('13:08','demo_worker_01','Передал на ревью','Восстанавливать последнюю сессию проекта после перезапуска процесса.','Добавлено чтение session ID из локального состояния и восстановление подключения.'),
+   call('13:14','demo_worker_01','Исправил ревью','Учесть замечание ревьюера: не смешивать сессии разных проектов.','Ключ состояния дополнен абсолютным путём проекта. Добавлены проверки изоляции.'),
+   call('13:24','demo_worker_01','Работает','Учесть замечание верификатора: не падать при оборванной записи состояния.','Результат ещё не возвращён. Добавляется атомарная запись и восстановление из резервной копии.')])]},
+  reviewer:{title:'Ревьюер',role:'reviewer',memory:true,members:[participant('review','Ревьюер','reviewer',[
+   call('13:12','demo_reviewer_01','Замечания','Проверить восстановление сессии и изоляцию проектов.','Session ID хранится под общим ключом. Два проекта могут подключиться к одной сессии. Вернуть разработчику.'),
+   call('13:18','demo_reviewer_01','Одобрено','Проверить исправление изоляции проектов.','Ключ привязан к абсолютному пути; проверка двух проектов проходит. Передать верификатору.')])]},
+  verifier:{title:'Верификатор',role:'verifier',memory:true,members:[participant('verification','Верификатор','verifier',[
+   call('13:21','demo_verifier_01','Замечания','Проверить восстановление после штатного выхода и аварийного завершения.','Штатное восстановление работает. При аварии во время записи файл оказывается повреждён. Вернуть разработчику.')])]}
+ }}
+};
+const state={run:'research',node:null,member:0,call:0};
+const defs=`<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M1 1 9 5 1 9Z" fill="#65758b"/></marker><marker id="loop-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M1 1 9 5 1 9Z" fill="#6554a4"/></marker><marker id="data-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="m2 1 7 4-7 4" fill="none" stroke="#7c899c" stroke-width="1.3"/></marker></defs>`;
+const selected=id=>state.node===id;
+function nodeAttrs(id,label){return `class="node" role="button" tabindex="0" data-node="${id}" aria-label="${esc(label)}" aria-haspopup="dialog" aria-pressed="${selected(id)}"`;}
+function memberCell(node,index,x,y){
+ const member=runs.research.nodes[node].members[index],active=member.calls.at(-1).state==='Работает';
+ return `<g class="member ${active?'active':''}" role="button" tabindex="0" data-node="${node}" data-member="${index}" aria-label="${esc(member.name)}, ${member.role}, ${active?'работает':'готово'}" aria-haspopup="dialog" aria-pressed="${state.node===node&&state.member===index}"><rect class="selection" x="${x-4}" y="${y-4}" width="184" height="62" rx="13"/><rect class="member-cell" x="${x}" y="${y}" width="176" height="54" rx="9"/><text class="member-label" x="${x+13}" y="${y+22}">${esc(member.name)}</text><text class="member-state" x="${x+13}" y="${y+43}">${active?'работает':'готово'}</text></g>`;
+}
+function researchGraph(){
+ return `<title id="graph-title">Исследование: параллельные группы в контуре возврата</title><desc id="graph-desc">Учёный вызывает двух разведчиков, четырёх исследователей или комитет. Когда готовы все участники группы, управление возвращается учёному. Результаты доставляются отдельно пунктиром. Комитет вызывает учёного с замечаниями или одобряет и завершает запуск. Сейчас работает исследователь «Контрпримеры».</desc>${defs}
+ <rect class="shell" x="20" y="24" width="908" height="472" rx="48"/>
+ <rect x="50" y="13" width="209" height="25" rx="6" fill="white"/><text class="boundary-label" x="60" y="31">Контур исследования</text>
+ <!-- The control collector joins groups only after all members finish. -->
+ <path class="loop-edge" data-route="scouts-scientist" d="M842 128H895V470H78Q50 470 50 442V250H113"/>
+ <path class="loop-edge" data-route="researchers-scientist" d="M842 304H895"/>
+ <path class="loop-edge" data-route="committee-scientist" d="M322 450V470H266"/>
+ <circle class="junction" cx="895" cy="304" r="3"/><circle class="junction" cx="322" cy="470" r="3"/>
+ <text class="label loop-label" x="852" y="105">все</text><text class="label loop-label" x="852" y="124">готовы</text>
+ <text class="label loop-label" x="852" y="280">все</text><text class="label loop-label" x="852" y="299">готовы</text>
+ <text class="port-label" x="68" y="342">Повторный</text><text class="port-label" x="68" y="362">вход</text>
+ <text class="label loop-label" x="341" y="481">замечания</text>
+ <path class="edge" data-route="scientist-scouts" d="M235 198Q310 128 432 128"/><text class="label" x="291" y="116">разведать</text>
+ <path class="edge" data-route="scientist-researchers" d="M253 250H432"/><text class="label" x="283" y="238">исследовать</text>
+ <path class="edge" data-route="scientist-committee" d="M216 313Q248 354 304 394"/><text class="label" x="266" y="377">на оценку</text>
+ <path class="data-edge" data-result="scouts-scientist" d="M432 173H331Q288 173 246 219"/><text class="label" x="312" y="191">результаты</text>
+ <path class="data-edge" data-result="researchers-scientist" d="M432 341H326Q290 341 235 299"/><text class="label" x="323" y="330">результаты</text>
+ <path class="data-edge" data-result="committee-scientist" d="M239 422H198Q170 422 170 319"/><text class="label" x="68" y="400">заключение</text>
+ <!-- The white bridge is a crossing, not a connection to the collector. -->
+ <path d="M404 422H969" fill="none" stroke="#f4f2f9" stroke-width="8"/>
+ <path class="edge" data-route="committee-end" d="M404 422H969"/><text class="label" x="605" y="449">одобрено</text>
+ <rect class="port" x="924" y="418" width="8" height="8"/>
+ <g ${nodeAttrs('scientist','Учёный, scientist, ожидает результаты')}><circle class="primitive-body" cx="183" cy="250" r="70"/><path d="M173 207h20m-14-8v8l-7 12q-3 5 3 5h17q5 0 2-5l-7-12v-8" fill="none" stroke="#8b96a7" stroke-width="1.5"/><text class="title" x="183" y="251" text-anchor="middle">Учёный</text><text class="role" x="183" y="273" text-anchor="middle">scientist</text><text class="caption" x="183" y="295" text-anchor="middle">ожидает</text></g>
+ <rect class="port" x="108" y="245" width="10" height="10" rx="2"/><circle class="data-port" cx="246" cy="219" r="4"/><circle class="data-port" cx="235" cy="299" r="4"/><circle class="data-port" cx="170" cy="319" r="4"/>
+ <g ${nodeAttrs('scouts','Разведчики, scout, два фиксированных параллельных участника')}><rect class="group-body" x="432" y="60" width="410" height="132" rx="27"/><text class="title" x="453" y="88">Разведчики</text><text class="role" x="821" y="88" text-anchor="end">scout × 2</text><text class="caption" x="453" y="110">Фиксированные · параллельно</text></g>
+ ${memberCell('scouts',0,453,122)}${memberCell('scouts',1,645,122)}
+ <g ${nodeAttrs('researchers','Исследователи, researcher, четыре параллельных участника; три готовы, Контрпримеры работает')}><rect class="group-body active-body" x="432" y="218" width="410" height="190" rx="27"/><text class="title" x="453" y="247">Исследователи</text><text class="role" x="821" y="247" text-anchor="end">researcher × 4</text><text class="caption" x="453" y="269">По элементам · параллельно</text></g>
+ ${researchTopics.map((_,i)=>memberCell('researchers',i,453+(i%2)*192,281+Math.floor(i/2)*62)).join('')}
+ <g ${nodeAttrs('committee','Комитет, committee, последняя оценка: замечания')}><path class="primitive-body" d="M263 394H380L404 422 380 450H263L239 422Z"/><text class="title" x="322" y="419" text-anchor="middle">Комитет</text><text class="role" x="322" y="440" text-anchor="middle">committee</text></g>
+ <circle class="done" cx="979" cy="422" r="11"/><circle cx="979" cy="422" r="5" fill="#9ca9ba"/><text class="caption" x="978" y="457" text-anchor="end">Конец</text>`;
+}
+function buildGraph(){
+ return `<title id="graph-title">Доработка: ревью и верификация с возвратом разработчику</title><desc id="graph-desc">Разработчик вызывает ревьюера. Одобрение ревьюера вызывает верификатора. Готово у верификатора завершает запуск. Замечания от любой проверки возвращают управление тому же разработчику. Заключения доставляются отдельно пунктиром. Сейчас работает разработчик.</desc>${defs}
+ <rect class="shell" x="20" y="58" width="908" height="404" rx="48"/>
+ <rect x="50" y="47" width="181" height="25" rx="6" fill="white"/><text class="boundary-label" x="60" y="65">Контур доработки</text>
+ <path class="loop-edge" data-route="reviewer-worker" d="M477 322V422H80Q50 422 50 392V250H114"/>
+ <path class="loop-edge" data-route="verifier-worker" d="M760 322V422H482"/>
+ <circle class="junction" cx="477" cy="422" r="3"/>
+ <text class="label loop-label" x="491" y="382">замечания</text><text class="label loop-label" x="774" y="382">замечания</text>
+ <text class="port-label" x="68" y="355">Повторный</text><text class="port-label" x="68" y="375">вход</text>
+ <path class="edge" data-route="worker-reviewer" d="M270 250H399"/><text class="label" x="299" y="237">на ревью</text>
+ <path class="edge" data-route="reviewer-verifier" d="M555 250H682"/><text class="label" x="580" y="237">одобрено</text>
+ <path class="edge" data-route="verifier-end" d="M838 250H968"/><text class="label" x="873" y="237">готово</text><rect class="port" x="924" y="246" width="8" height="8"/>
+ <path class="data-edge" data-result="reviewer-worker" d="M450 178Q356 123 250 200"/><text class="label" x="317" y="154">заключение</text>
+ <path class="data-edge" data-result="verifier-worker" d="M760 178V107H249Q200 107 195 172"/><text class="label" x="548" y="98">результат проверки</text>
+ <g ${nodeAttrs('worker','Разработчик, worker, работает в той же сессии')}><circle class="primitive-body active-body" cx="192" cy="250" r="78"/><path d="m180 204-8 7 8 7m24-14 8 7-8 7m-8-18-7 22" fill="none" stroke="#126f61" stroke-width="1.5"/><text class="title" x="192" y="253" text-anchor="middle">Разработчик</text><text class="role" x="192" y="276" text-anchor="middle">worker</text><text class="status" x="192" y="302" text-anchor="middle">работает</text></g>
+ <rect class="port" x="109" y="245" width="10" height="10" rx="2"/><circle class="data-port" cx="250" cy="200" r="4"/><circle class="data-port" cx="195" cy="172" r="4"/>
+ <g ${nodeAttrs('reviewer','Ревьюер, reviewer, последняя оценка: одобрено')}><path class="primitive-body" d="M424 178H530L555 250 530 322H424L399 250Z"/><text class="title" x="477" y="238" text-anchor="middle">Ревьюер</text><text class="role" x="477" y="262" text-anchor="middle">reviewer</text><text class="caption" x="477" y="292" text-anchor="middle">одобрено</text></g>
+ <g ${nodeAttrs('verifier','Верификатор, verifier, последняя оценка: замечания')}><path class="primitive-body" d="M707 178H813L838 250 813 322H707L682 250Z"/><text class="title" x="760" y="238" text-anchor="middle">Верификатор</text><text class="role" x="760" y="262" text-anchor="middle">verifier</text><text class="caption" x="760" y="292" text-anchor="middle">замечания</text></g>
+ <circle class="done" cx="979" cy="250" r="11"/><circle cx="979" cy="250" r="5" fill="#9ca9ba"/><text class="caption" x="978" y="287" text-anchor="end">Конец</text>`;
+}
+function renderGraph(){$('#graph').innerHTML=state.run==='research'?researchGraph():buildGraph();}
+function renderRun(){
+ const run=runs[state.run];
+ document.querySelectorAll('[data-run]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.run===state.run)));
+ $('#run-title').textContent=run.title;
+ $('#project-line').innerHTML=`<span>${esc(run.project)}</span><span>${esc(run.started)}</span><span>12 ноября 2026</span>`;
+ $('#run-id').textContent=run.id;
+ $('#execution').innerHTML=`<svg viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="none" stroke="currentColor"/><path d="M9 5v4l3 2" fill="none" stroke="currentColor"/></svg><span>${run.execution}</span>`;
+ renderGraph();$('.graph-scroll').scrollLeft=0;
+}
+function current(){const node=runs[state.run].nodes[state.node],member=node.members[state.member];return {node,member,invocation:member.calls[state.call]};}
+function selectNode(id,memberIndex){
+ const node=runs[state.run].nodes[id];state.node=id;state.member=memberIndex??(id==='researchers'?3:0);state.call=node.members[state.member].calls.length-1;
+ renderGraph();renderInspector();$('#inspector').showModal();$('#inspector-title').focus({preventScroll:true});$('#inspector-content').scrollTop=0;
+}
+function renderInspector({preserveScroll=false}={}){
+ const scrollTop=preserveScroll?$('#inspector-content').scrollTop:0;
+ const {node,member,invocation:c}=current(),config={...settings[member.role],...c};
+ const same=member.calls.filter(v=>v.session===c.session).length;
+ const sessionNote=same>1?`Один ID у ${same} вызовов этого участника — контекст продолжается.`:node.memory?'Это первый вызов участника. При обычном повторном входе сессия продолжится.':'Этот вызов использует отдельный контекст. Предыдущая сессия не становится его памятью.';
+ $('#inspector-title').textContent=node.title;
+ $('#inspector-role').textContent=`${node.role}${node.group?' / '+node.group:''}`;
+ $('#inspector-content').innerHTML=`
+ ${node.group?`<div class="member-choice"><label for="participant">Участник</label><select id="participant">${node.members.map((m,i)=>`<option value="${i}" ${i===state.member?'selected':''}>${esc(m.name)}${m.calls.at(-1).state==='Работает'?' — работает':''}</option>`).join('')}</select></div>`:''}
+ <section class="identity"><div class="identity-name">${node.group?'':esc(member.name)}<span class="item-id">item: ${esc(member.id)}</span></div><p class="policy">${node.memory?'<strong>Сессия сохраняется при повторном входе.</strong> Отдельно для каждого участника.':'<strong>Новая сессия при каждом входе.</strong> memory: false.'}</p></section>
+ <section class="history"><h3>Вызовы участника <span>${member.calls.length} ${member.calls.length===1?'вызов':member.calls.length<5?'вызова':'вызовов'}</span></h3><div class="call-tabs">${member.calls.map((v,i)=>`<button class="history-call" data-call="${i}" aria-pressed="${state.call===i}"><time>${esc(v.time)}${i===member.calls.length-1?' · последний':''}</time><strong class="${v.state==='Работает'?'ongoing':''}">${esc(v.state)}</strong></button>`).join('')}</div></section>
+ <section class="call-detail"><p class="call-label">${state.call===member.calls.length-1?'Последний':'Исторический'} вызов · ${esc(c.time)} · демо</p><code class="session-id">${esc(c.session)}</code>
+ <div class="call-text"><h3>Задача этого вызова</h3><p id="call-task">${esc(c.task)}</p><h3>Результат${c.state==='Работает'?' · ещё не получен':''}</h3><p id="call-result" class="${c.state==='Работает'?'pending':''}">${esc(c.result)}</p></div>
+ <div class="settings"><div class="setting"><span>Модель</span>${esc(config.model)}</div><div class="setting"><span>Рассуждение</span>${esc(config.reasoning)}</div><div class="setting"><span>Режим</span>${config.mode==='Fast'?'Fast · быстрый':'Обычный'}</div></div>
+ <details class="skills"><summary>Навыки · ${skillSets[member.role].length}</summary><ul>${skillSets[member.role].map(([name,desc])=>`<li><strong>${esc(name)}</strong><br>${esc(desc)}</li>`).join('')}</ul></details>
+ <p class="session-note">${sessionNote}</p></section>
+ <section class="handoff"><h3>Войти в сессию через OpenCode</h3><label class="sr-only" for="command">Демонстрационная команда выбранной сессии</label><textarea class="command" id="command" readonly spellcheck="false">opencode --session ${esc(c.session)}</textarea><button class="copy" id="copy-command">Копировать команду</button><p class="copy-status" id="copy-status" role="status" hidden></p><p class="copy-note">Демо-ID, не реальное подключение. Команду запускают из папки ${esc(runs[state.run].project)}. Интеграция с реальными сессиями — будущая работа.</p></section>`;
+ $('#inspector-content').scrollTop=scrollTop;
+}
+function closeInspector(){
+ if(!$('#inspector').open)return;
+ const id=state.node,member=state.member;
+ $('#inspector').close();state.node=null;renderGraph();
+ const target=$(`#graph [data-node="${id}"][data-member="${member}"]`)||$(`#graph [data-node="${id}"]`);
+ target?.focus({preventScroll:true});
+ // A participant selected inside the dialog may be outside the panned canvas.
+ // Reveal it after focus applies the outline, preserving the nearest viewport.
+ reveal(target);
+}
+async function copyCommand(){
+ const command=$('#command'),status=$('#copy-status'),button=$('#copy-command'),value=command.value;
+ button.disabled=true;
+ try{
+  if(!navigator.clipboard?.writeText)throw new Error('Clipboard unavailable');
+  await navigator.clipboard.writeText(value);
+  if(!status.isConnected)return;
+  status.hidden=false;status.className='copy-status';status.textContent='Команда скопирована. Подключение не выполнялось.';
+  status.scrollIntoView({block:'nearest'});
+ }catch{
+  if(!status.isConnected)return;
+  status.hidden=false;status.className='copy-status error';status.textContent='Буфер обмена недоступен. Команда выделена — скопируйте её вручную.';
+  command.focus();command.select();status.scrollIntoView({block:'nearest'});
+ }finally{if(button.isConnected)button.disabled=false;}
+}
+document.addEventListener('click',event=>{
+ const runButton=event.target.closest('[data-run]');
+ if(runButton){state.run=runButton.dataset.run;renderRun();return;}
+ const nodeButton=event.target.closest('#graph [data-node]');
+ if(nodeButton){selectNode(nodeButton.dataset.node,nodeButton.dataset.member===undefined?undefined:Number(nodeButton.dataset.member));return;}
+ const historyButton=event.target.closest('[data-call]');
+ if(historyButton){
+  state.call=Number(historyButton.dataset.call);
+  // Changing a call is not a new inspection: retain the reader's position.
+  renderInspector({preserveScroll:true});
+  const target=$(`[data-call="${state.call}"]`);
+  target.focus({preventScroll:true});
+  reveal(target);
+  return;
+ }
+ if(event.target.closest('#copy-command'))copyCommand();
+});
+$('#inspector-content').addEventListener('change',event=>{
+ if(event.target.id==='participant'){state.member=Number(event.target.value);state.call=runs[state.run].nodes[state.node].members[state.member].calls.length-1;renderGraph();renderInspector();$('#participant').focus({preventScroll:true});reveal($('#participant'));}
+});
+$('#inspector-content').addEventListener('toggle',event=>{
+ const details=event.target;
+ if(details.matches('.skills'))reveal(details.open?details:details.querySelector('summary'));
+},true);
+$('#close-inspector').addEventListener('click',closeInspector);
+$('#inspector').addEventListener('cancel',event=>{event.preventDefault();closeInspector();});
+$('#grammar-toggle').addEventListener('click',()=>{
+ const trigger=$('#grammar-toggle'),expanded=trigger.getAttribute('aria-expanded')==='true';
+ trigger.setAttribute('aria-expanded',String(!expanded));
+ trigger.textContent=expanded?'Как читать':'Скрыть пояснение';
+ $('#grammar').hidden=expanded;
+ reveal(expanded?trigger:$('.guide-disclosure'));
+});
+document.addEventListener('keydown',event=>{
+ if(event.key==='Tab'&&$('#inspector').open){
+  const controls=[...$('#inspector').querySelectorAll('button:not(:disabled),select,summary,textarea')].filter(e=>e.getClientRects().length);
+  const first=controls[0],last=controls.at(-1);
+  if(event.shiftKey&&(document.activeElement===first||document.activeElement===$('#inspector-title'))){event.preventDefault();last.focus();}
+  else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+ }
+ const node=event.target.closest('#graph [data-node]');
+ if(node&&(event.key==='Enter'||event.key===' ')){event.preventDefault();node.dispatchEvent(new MouseEvent('click',{bubbles:true}));}
+});
+renderRun();
+})();
+</script>
+</body>
+</html>
