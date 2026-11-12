@@ -15,7 +15,7 @@ import { canonical } from './tester.mjs';
 
 const projectDirectory = fileURLToPath(new URL('../', import.meta.url));
 const model = { providerID: 'openai', id: 'gpt-6.1-sol-ultrafast', variant: 'high' };
-const runtimeFiles = ['dwf.mjs', 'workflow-definition.mjs', 'workflow-runtime.mjs', 'workflow-git.mjs',
+const runtimeFiles = ['dwf.mjs', 'workflow-definition.mjs', 'workflow-runtime.mjs', 'workflow-admission.mjs', 'workflow-git.mjs',
   'run-store.mjs', 'opencode-runtime.mjs', 'role-skills.mjs', 'skills', 'package.json', 'package-lock.json',
   'acceptance/tester.mjs', 'workflow-groups.mjs', 'research-workflow.mjs', 'acceptance/model-observer'];
 

@@ -11,6 +11,7 @@ import { parseVerdict, rolePermissions, rolePrompt, roleAgents, checkApprovals,
 import { researchGraph, researchResult, scientistPhase, validateScientistVerdict } from './research-workflow.mjs';
 import { mergeWorkspace, snapshot, writeReviewDiff, verificationWorkspace } from './workflow-git.mjs';
 import { prepareGroup, groupVerdict, integrateGroup } from './workflow-groups.mjs';
+import { admissionStage } from './workflow-admission.mjs';
 
 export function publicWorkflow(state) {
   const current = state.visits.at(-1);
@@ -121,6 +122,8 @@ function finishParticipant(state, visit, outcome) {
     visit.correction = { inputId: 'msg_' + randomUUID(),
       prompt: `DWF needs a corrected JSON response for this stage. ${error.publicMessage}\n${phase}\nA scout verdict has exactly two assignments with IDs foundations and recent. A research verdict has exactly four assignments with unique IDs and instructions.` };
     visit.admitted = false;
+    // The correction is a separate saved input in this session. Do not reopen
+    // preparation or change the already-crossed admissionStarted boundary.
     delete visit.progress;
     return;
   }
@@ -171,7 +174,9 @@ export async function runWorkflow(root, id) {
         break;
       }
       let visit = state.visits.at(-1);
-      if (!visit || visit.verdict) {
+      const stage = visit && admissionStage(visit);
+      if (stage === 'finished' && !visit.verdict) throw publicError(visit.error);
+      if (!visit || stage === 'finished') {
         const steering = state.controls?.find(command => command.kind === 'steer' && command.status === 'pending');
         const steered = steering && {
           ...participantVisits(state.visits).findLast(item => item.participant === steering.node),
@@ -250,7 +255,7 @@ export async function runWorkflow(root, id) {
           save(false);
         }
       }
-      if (!visit.admitted && visit.admissionStarted === false) {
+      if (admissionStage(visit) === 'prepared') {
         await withWorkflowAction(root, state, owner, () => {
           if (state.controls?.some(command => command.status === 'pending' && command.kind === 'stop')) {
             state.visits.pop();
@@ -274,16 +279,21 @@ export async function runWorkflow(root, id) {
             child.steering = steering.id;
             steering.status = 'delivered';
           }
-          // A lost acknowledgement must retry this exact request, including after recovery.
+          // Commit this boundary before any external send. From here on controls
+          // cannot alter these inputs; late steering becomes a subsequent visit.
+          // A lost acknowledgement retries the saved sessionId, inputId and full text.
           visit.admissionStarted = true;
         });
         continue;
       }
       if (visit.children) {
-        if (!visit.admitted) {
+        const awaitingAdmission = visit.children.filter(child => admissionStage(child, visit) === 'admission_started');
+        // The group's barrier and each child's acknowledgement are separate facts.
+        // Saved verdicts/errors are terminal even in older records without admitted.
+        if (admissionStage(visit) === 'admission_started' || awaitingAdmission.length) {
           await withWorkflowAction(root, state, owner, async () => {
             if (state.controls?.some(command => command.status === 'pending' && command.kind === 'stop')) return;
-            await Promise.all(visit.children.filter(child => !child.admitted && !child.error).map(async child => {
+            await Promise.all(awaitingAdmission.map(async child => {
               try {
                 await admit(client, request(state, child));
                 child.admitted = true;
@@ -294,12 +304,12 @@ export async function runWorkflow(root, id) {
                 else state.service = 'unavailable';
               }
             }));
-            visit.admitted = visit.children.every(child => child.admitted || child.error);
+            visit.admitted = visit.children.every(child => ['admitted', 'finished'].includes(admissionStage(child, visit)));
           });
-          if (!visit.admitted) { client = undefined; await pause(300); continue; }
+          if (admissionStage(visit) !== 'admitted') { client = undefined; await pause(300); continue; }
         }
         if (!acknowledged) { acknowledge(); acknowledged = true; }
-        const active = visit.children.filter(child => !child.verdict && !child.error);
+        const active = visit.children.filter(child => admissionStage(child, visit) === 'admitted');
         const executions = await Promise.allSettled(active.map(child => readExecution(client, request(state, child))));
         for (const [index, execution] of executions.entries()) {
           const child = active[index];
@@ -311,13 +321,13 @@ export async function runWorkflow(root, id) {
             if (error.publicMessage) child.error = error.publicMessage;
             else { state.service = 'unavailable'; client = undefined; }
           }
-          if (child.steering && (child.verdict || child.error)) {
+          if (child.steering && admissionStage(child, visit) === 'finished') {
             state.controls.find(command => command.id === child.steering).status = 'applied';
           }
         }
         save(false);
         if (state.controls?.some(command => command.kind === 'stop' && command.status === 'pending')) continue;
-        if (visit.children.every(child => child.verdict || child.error)) {
+        if (visit.children.every(child => admissionStage(child, visit) === 'finished')) {
           await withWorkflowAction(root, state, owner, () => {
             if (state.controls?.some(command => command.kind === 'stop' && command.status === 'pending')) return;
             visit.verdict = groupVerdict(visit);
@@ -329,7 +339,7 @@ export async function runWorkflow(root, id) {
         } else await pause(300);
         continue;
       }
-      if (!visit.admitted) {
+      if (admissionStage(visit) === 'admission_started') {
         try {
           await withWorkflowAction(root, state, owner, async () => {
             if (state.controls?.some(command => command.status === 'pending' && command.kind === 'stop')) return;
@@ -345,8 +355,9 @@ export async function runWorkflow(root, id) {
           await pause(300);
           continue;
         }
-        if (!visit.admitted) continue;
       }
+      // Only acknowledged inputs may be polled for a result.
+      if (admissionStage(visit) !== 'admitted') continue;
       if (!acknowledged) { acknowledge(); acknowledged = true; }
       let outcome;
       try {

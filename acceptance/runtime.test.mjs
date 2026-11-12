@@ -9,7 +9,8 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { OpenCode } from '@opencode/client';
 import { Service } from '@opencode/client/service';
-import { createSandbox, cliJson, transcript, waitFor, writeJson, taggedProcesses, launch } from './harness.mjs';
+import { createSandbox, cliJson, transcript, waitFor, within, writeJson, readJson, taggedProcesses, launch } from './harness.mjs';
+import { installAdmissionFault } from './admission-faults.mjs';
 import { createControlledHttpProvider, nativeProviderConfig } from './controlled-http-provider.mjs';
 import { claimWorkflow, createWorkflow, getWorkflow, updateWorkflow } from '../run-store.mjs';
 import { prepareGroup } from '../workflow-groups.mjs';
@@ -65,7 +66,7 @@ function expireWorkflowLease(sandbox) {
   } finally { db.close(); }
 }
 
-async function fixture(t, definition, reply, directory = false, overrides = {}) {
+async function fixture(t, definition, reply, directory = false, overrides = {}, faultOptions) {
   const sandbox = await createSandbox();
   const provider = await createControlledHttpProvider({ directory: sandbox.control, token: sandbox.token, reply });
   t.after(async () => {
@@ -101,9 +102,20 @@ async function fixture(t, definition, reply, directory = false, overrides = {}) 
   await writeFile(join(sandbox.root, 'AGENTS.md'), 'Inherited runtime test instructions');
   const file = join(sandbox.root, 'workflow.json');
   await writeJson(file, definition);
-  const run = await cliJson(sandbox.spawn(cli, ['start', '--file', file]), 20000);
+  const fault = faultOptions && installAdmissionFault(sandbox, faultOptions.boundary, faultOptions.index);
+  const start = sandbox.spawn(cli, ['start', '--file', file]);
+  let run;
+  if (fault && fault.boundary !== 'observe') {
+    const marker = await waitFor(() => readJson(fault.marker), 20000, `native admission fault: ${fault.boundary}`);
+    run = { runId: marker.id };
+    if (fault.boundary !== 'lost_response') {
+      assert.deepEqual(await within(start.exit, 5000, 'start observes controller crash'), { code: 1, signal: null });
+      await within(start.close, 5000, 'crashed start closes');
+      assert(start.stderr.includes(run.runId), 'Failed start must retain the original runId');
+    }
+  } else run = await cliJson(start, 20000);
   const events = () => transcript(join(sandbox.control, 'provider.jsonl'));
-  return { ...sandbox, runId: run.runId, events,
+  return { ...sandbox, runId: run.runId, events, start, fault,
     command: args => cliJson(sandbox.spawn(cli, args), 20000),
     release: () => writeJson(join(sandbox.control, 'release.json'), { token: sandbox.token, all: true }),
     finish: () => waitFor(async () => {
@@ -804,3 +816,194 @@ test('accepted map targets survive discarded preparation and native controller r
     assert(call.prompt.includes(JSON.stringify(item)));
   }
 });
+
+function admissionDefinition(kind) {
+  const node = { role: 'orchestrator', tools: [], skills: [] };
+  return { task: 'Preserve admission bytes: Юникод\nsecond line  ', workspace: 'directory',
+    entry: kind === 'single' ? 'left' : 'jobs',
+    nodes: { left: node, ...(kind === 'fixed' ? { right: node } : {}), summary: node },
+    ...(kind === 'single' ? {} : { groups: { jobs: kind === 'fixed' ? { members: ['left', 'right'] } :
+      { member: 'left', items: [{ id: 'alpha', detail: 'Первый' }, { id: 'beta', detail: 'Second' }] } } }),
+    transitions: { left: { done: 'summary' }, ...(kind === 'fixed' ? { right: { done: 'summary' } } : {}),
+      ...(kind === 'single' ? {} : { jobs: { done: 'summary', changes: null, failed: null } }), summary: { done: null } } };
+}
+
+async function assertAdmissionHistory(sandbox, result) {
+  const inputs = result.visits.flatMap(visit => visit.children ?? [visit]);
+  const calls = await transcript(sandbox.fault.calls);
+  const events = (await sandbox.events()).filter(event => event.type === 'received');
+  const endpoint = await Service.discover({ file: join(sandbox.state, 'opencode/state/opencode/service.json') });
+  const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) });
+  for (const sessionID of new Set(inputs.map(input => input.sessionId))) {
+    const messages = (await client.message.list({ sessionID, limit: 100, order: 'asc' })).data;
+    const users = messages.filter(message => message.type === 'user');
+    const saved = inputs.filter(input => input.sessionId === sessionID);
+    assert.deepEqual(users.map(message => message.id), saved.map(input => input.inputId));
+    for (const [index, input] of saved.entries()) {
+      const text = users[index].text;
+      assert.deepEqual(Buffer.from(text), Buffer.from(input.prompt), 'Native history must preserve the saved request bytes');
+      const attempts = calls.filter(call => call.inputId === input.inputId);
+      assert(attempts.length);
+      for (const attempt of attempts) {
+        assert.equal(attempt.sessionId, input.sessionId);
+        assert.deepEqual(Buffer.from(attempt.request.text), Buffer.from(input.prompt));
+      }
+      assert.equal(events.filter(event => event.providerSessionId === sessionID && event.prompt === input.prompt).length, 1,
+        'One logical input must execute exactly once despite repeated transport calls');
+    }
+  }
+  assert.equal(calls.filter(call => !inputs.some(input => input.inputId === call.inputId)).length, 0);
+  for (const visit of [...result.visits, ...inputs]) {
+    assert(!Object.hasOwn(visit, 'stage'));
+    assert(!Object.hasOwn(visit, 'admissionStage'));
+  }
+  return calls;
+}
+
+for (const kind of ['single', 'fixed', 'map']) {
+  for (const boundary of ['prepared', 'admission_started', 'accepted', 'lost_response']) {
+    test(`public CLI ${kind} admission recovers at ${boundary} with immutable native inputs`, { timeout: 60000 }, async t => {
+      const sandbox = await fixture(t, admissionDefinition(kind), () => verdict('done'), true, {}, { boundary });
+      const saved = await waitFor(() => {
+        const state = getWorkflow(sandbox.state, sandbox.runId);
+        return (boundary !== 'lost_response' || state.service === 'unavailable') && state;
+      }, 5000, 'durable fault boundary');
+      const first = saved.visits[0];
+      assert.equal(first.admissionStarted, boundary !== 'prepared');
+      assert(!first.admitted);
+      if (boundary === 'prepared' || boundary === 'admission_started') {
+        assert.equal((await sandbox.events()).filter(event => event.type === 'received').length, 0);
+        assert.equal((await transcript(sandbox.fault.calls)).length, 0);
+      }
+      const original = structuredClone(first.children ?? [first]);
+      if (boundary !== 'prepared') {
+        const message = join(sandbox.root, 'late-steering.txt');
+        for (const [index, text] of ['First late clarification', 'Second late clarification'].entries()) {
+          await writeFile(message, text);
+          const target = original[index % original.length].participant;
+          const queued = await sandbox.command(['steer', sandbox.runId, target, '--message-file', message]);
+          assert.equal(queued.command.status, 'pending');
+        }
+      }
+      if (boundary === 'lost_response') {
+        const { pid } = await readJson(sandbox.fault.marker);
+        assert(taggedProcesses(sandbox.token).some(item => item.pid === pid), 'Lost response must leave the original controller alive');
+        await sandbox.fault.reconnect();
+        assert.deepEqual(await cliJson(sandbox.start, 20000), { runId: sandbox.runId });
+      } else expireWorkflowLease(sandbox);
+      const inspected = await sandbox.command(['inspect', sandbox.runId]);
+      assert.equal(inspected.runId, sandbox.runId);
+      await sandbox.release();
+      const result = await sandbox.finish();
+      assert.equal(result.status, 'succeeded', result.error);
+      const recovered = result.visits[0].children ?? [result.visits[0]];
+      for (const [index, input] of recovered.entries()) {
+        for (const field of ['sessionId', 'inputId', 'prompt', 'participant', 'item']) {
+          assert.deepEqual(input[field], original[index][field], field);
+        }
+      }
+      if (boundary !== 'prepared') {
+        assert.deepEqual(result.controls.map(command => command.status), ['applied', 'applied']);
+        for (const [index, text] of ['First late clarification', 'Second late clarification'].entries()) {
+          const later = result.visits[index + 1];
+          assert(later.prompt.includes(text));
+          assert.equal(later.sessionId, original[index % original.length].sessionId);
+          assert.notEqual(later.inputId, original[index % original.length].inputId);
+        }
+      }
+      const calls = await assertAdmissionHistory(sandbox, result);
+      if (['accepted', 'lost_response'].includes(boundary)) {
+        assert(calls.filter(call => call.inputId === original[0].inputId).length >= 2);
+      }
+    });
+  }
+
+  if (kind !== 'single') {
+    test(`public CLI restarts a partially acknowledged ${kind} group and retries only its unfinished admission`,
+      { timeout: 60000 }, async t => {
+        const sandbox = await fixture(t, admissionDefinition(kind), () => verdict('done'), true, {},
+          { boundary: 'lost_response', index: 2 });
+        const saved = await waitFor(() => {
+          const state = getWorkflow(sandbox.state, sandbox.runId);
+          return state.service === 'unavailable' && state;
+        }, 5000, 'partial admission committed');
+        assert.deepEqual(saved.visits[0].children.map(child => Boolean(child.admitted)), [true, false]);
+        const { pid } = await readJson(sandbox.fault.marker);
+        process.kill(pid, 'SIGKILL');
+        await within(sandbox.start.exit, 5000, 'start observes partial controller crash');
+        await within(sandbox.start.close, 5000, 'partial start closes');
+        expireWorkflowLease(sandbox);
+        await sandbox.fault.reconnect();
+        assert.equal((await sandbox.command(['inspect', sandbox.runId])).runId, sandbox.runId);
+        await sandbox.release();
+        const result = await sandbox.finish();
+        assert.equal(result.status, 'succeeded', result.error);
+        assert.deepEqual(result.visits.map(visit => visit.node), ['jobs', 'summary']);
+        const calls = await assertAdmissionHistory(sandbox, result);
+        for (const [index, before] of saved.visits[0].children.entries()) {
+          const after = result.visits[0].children[index];
+          for (const field of ['sessionId', 'inputId', 'prompt', 'participant', 'item']) assert.deepEqual(after[field], before[field]);
+          assert.equal(calls.filter(call => call.inputId === before.inputId).length, index === 0 ? 1 : 2);
+          assert.equal(result.visits[0].verdict.results[index].participant, before.participant);
+        }
+      });
+
+    test(`public CLI resumes legacy ${kind} children with saved results and errors but missing acknowledgements`,
+      { timeout: 60000 }, async t => {
+        const definition = admissionDefinition(kind);
+        definition.transitions.jobs.failed = 'summary';
+        definition.nodes.summary = { ...definition.nodes.summary, instructions: 'Summary branch' };
+        if (kind === 'fixed') {
+          definition.nodes.right = { ...definition.nodes.right, instructions: 'Right branch fails' };
+          definition.nodes.extra = definition.nodes.left;
+          definition.transitions.extra = { done: 'summary' };
+          definition.groups.jobs.members.push('extra');
+        } else {
+          definition.groups.jobs.items[1].detail = 'Right branch fails';
+          definition.groups.jobs.items.push({ id: 'gamma', detail: 'Third' });
+        }
+        const sandbox = await fixture(t, definition, ({ prompt }) =>
+          prompt.includes('Right branch fails') && !prompt.includes('Summary branch') ? 'invalid JSON' : verdict('done'),
+        true, {}, { boundary: 'observe' });
+        // Produce real native results/errors, then seed an older partial-admission representation.
+        // The third native input stays held, independently of the controller's acknowledgement.
+        const state = getWorkflow(sandbox.state, sandbox.runId);
+        const [left, right] = state.visits[0].children;
+        const calls = await waitFor(async () => {
+          const calls = (await sandbox.events()).filter(event => event.type === 'received');
+          return calls.length === 3 && calls;
+        }, 10000, 'three held native children');
+        await writeJson(join(sandbox.control, 'release.json'), { token: sandbox.token,
+          callIds: calls.filter(call => [left.sessionId, right.sessionId].includes(call.providerSessionId)).map(call => call.callId) });
+        const settled = await waitFor(() => {
+          const saved = getWorkflow(sandbox.state, sandbox.runId);
+          return saved.visits[0].children[0].verdict && saved.visits[0].children[1].error && saved;
+        }, 10000, 'durable native result and branch error');
+        const controller = taggedProcesses(sandbox.token).find(item =>
+          execFileSync('ps', ['-p', String(item.pid), '-o', 'command='], { encoding: 'utf8' }).includes('workflow-runtime.mjs'));
+        assert(controller);
+        process.kill(controller.pid, 'SIGKILL');
+        expireWorkflowLease(sandbox);
+        assert.equal(claimWorkflow(sandbox.state, sandbox.runId, 'legacy-fixture'), true);
+        const group = settled.visits[0];
+        group.admitted = false;
+        delete group.admissionStarted;
+        for (const child of group.children) delete child.admitted;
+        updateWorkflow(sandbox.state, settled, 'legacy-fixture', true);
+        assert.equal((await sandbox.command(['inspect', sandbox.runId])).runId, sandbox.runId);
+        await sandbox.release();
+        const result = await sandbox.finish();
+        assert.equal(result.status, 'succeeded', result.error);
+        assert.deepEqual(result.visits.map(visit => visit.node), ['jobs', 'summary']);
+        assert.deepEqual(result.visits[0].children.slice(0, 2), group.children.slice(0, 2));
+        assert.deepEqual(result.visits[0].verdict.results.map(child => child.status), ['completed', 'failed', 'completed']);
+        const attempts = await assertAdmissionHistory(sandbox, result);
+        for (const [index, child] of group.children.entries()) {
+          assert.equal(attempts.filter(call => call.inputId === child.inputId).length, index === 2 ? 2 : 1);
+          for (const field of ['sessionId', 'inputId', 'prompt', 'participant', 'item']) {
+            assert.deepEqual(result.visits[0].children[index][field], child[field]);
+          }
+        }
+      });
+  }
+}

@@ -2,13 +2,34 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { benchmarkAssessment, benchmarkEnvironment, benchmarkWorkflows, monitorBenchmark, prepareBenchmark } from './benchmark.mjs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { benchmarkAssessment, benchmarkEnvironment, benchmarkWorkflows, monitorBenchmark } from './benchmark.mjs';
 import { claimWorkflow, createWorkflow, updateWorkflow } from '../run-store.mjs';
 
-test('benchmark archives a pristine baseline with no future Git objects or runtime task records', async t => {
+async function frozenCurrentRuntime(directory) {
+  // prepareBenchmark deliberately archives a commit, not the working tree. Put the
+  // current sources (including new modules) in a test-owned repo so uncommitted
+  // changes exercise the real archive selection instead of silently testing old HEAD.
+  const project = fileURLToPath(new URL('../', import.meta.url));
+  const source = join(directory, 'runtime-source');
+  const files = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: project })
+    .toString().split('\0').filter(Boolean);
+  for (const file of new Set(files)) {
+    await mkdir(dirname(join(source, file)), { recursive: true });
+    await cp(join(project, file), join(source, file));
+  }
+  for (const args of [['init', '-q', '-b', 'main'], ['config', 'user.name', 'Test'],
+    ['config', 'user.email', 'test@example.invalid'], ['add', '--force', '.'], ['commit', '-qm', 'Current runtime fixture']]) {
+    execFileSync('git', args, { cwd: source, stdio: 'pipe' });
+  }
+  await symlink(join(project, 'node_modules'), join(source, 'node_modules'));
+  return import(pathToFileURL(join(source, 'acceptance/benchmark.mjs')));
+}
+
+test('benchmark archives a runnable current runtime and a pristine baseline without future Git objects or task records', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'dwf-benchmark-test-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const source = join(directory, 'upstream');
@@ -28,6 +49,7 @@ test('benchmark archives a pristine baseline with no future Git objects or runti
   await writeFile(join(skillDirectory, 'SKILL.md'), 'Benchmark skill fixture\n');
   await writeFile(join(skillDirectory, 'references/cli.md'), 'Benchmark CLI fixture\n');
   const settings = { root: join(directory, 'benchmark'), project: source, baseline, prompt: 'Use DWF.', skillDirectory };
+  const { prepareBenchmark } = await frozenCurrentRuntime(directory);
   const first = await prepareBenchmark(settings);
   const second = await prepareBenchmark(settings);
   assert.notEqual(first.sessionId, second.sessionId);
@@ -41,6 +63,11 @@ test('benchmark archives a pristine baseline with no future Git objects or runti
   await assert.rejects(readFile(join(first.runtime, '.beads/issues.jsonl')), { code: 'ENOENT' });
   await assert.rejects(readFile(join(first.runtime, 'acceptance/benchmark-results.json')), { code: 'ENOENT' });
   await assert.rejects(readFile(join(first.runtime, 'docs/autonomous-goal.md')), { code: 'ENOENT' });
+  // Exercise the archived CLI's actual import graph, not just the presence of a
+  // hand-maintained file list. No model, service, credentials or macOS sandbox needed.
+  const schema = JSON.parse(execFileSync(process.execPath, [join(first.runtime, 'dwf.mjs'), 'schema'],
+    { cwd: first.workspace, encoding: 'utf8', stdio: 'pipe', timeout: 10000 }));
+  assert(schema.roles.worker.includes('done'));
   await assert.rejects(prepareBenchmark({ ...settings, root: join(source, 'benchmark') }), /outside/);
 });
 
