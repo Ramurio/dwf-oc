@@ -96,12 +96,14 @@ export async function cliJson(record, limit) {
   return value;
 }
 
-// ps поддерживает эту форму на macOS и Linux. Значения чужого окружения не выводятся.
+// Linux требует BSD-опции без дефиса. Значения чужого окружения не выводятся.
 export function taggedProcesses(token) {
   let listing;
   try {
-    listing = execFileSync('ps', ['eww', '-axo', 'uid=,pid=,lstart=,stat=,command='], {
-      encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
+    const selection = process.platform === 'linux' ? ['axeww', '-o'] : ['eww', '-axo'];
+    listing = execFileSync('ps', [...selection, 'uid=,pid=,lstart=,stat=,command='], {
+      encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, env: { ...process.env, LC_ALL: 'C' },
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
   } catch {
     // Ошибка execFileSync содержит stdout с окружением: не передавать её форматтеру.
@@ -117,7 +119,9 @@ export function taggedProcesses(token) {
 }
 
 export function processIdentity(pid = process.pid) {
-  const value = execFileSync('ps', ['-p', String(pid), '-o', 'uid=,pid=,lstart='], { encoding: 'utf8' }).trim();
+  const value = execFileSync('ps', ['-p', String(pid), '-o', 'uid=,pid=,lstart='], {
+    encoding: 'utf8', env: { ...process.env, LC_ALL: 'C' }, stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim();
   const match = value.match(/^(\d+)\s+(\d+)\s+((?:\S+\s+){4}\S+)$/);
   assert(match, 'Не удалось определить идентичность процесса');
   return { uid: Number(match[1]), pid: Number(match[2]), born: match[3].replace(/\s+/g, ' ') };
@@ -216,10 +220,22 @@ export async function createSandbox() {
   const control = join(root, 'control');
   const state = join(root, 'state');
   await Promise.all([mkdir(workspace, { mode: 0o700 }), mkdir(control, { mode: 0o700 }), mkdir(state, { mode: 0o700 })]);
+  const profile = join(root, 'profile');
+  for (const name of ['home', 'config', 'data', 'cache', 'state', 'tmp', 'runtime']) {
+    await mkdir(join(profile, name), { recursive: true, mode: 0o700 });
+  }
   await writeFile(join(workspace, 'untouched.txt'), 'Файлы проекта планнер не изменяет.\n');
   const token = randomUUID();
-  const env = { ...process.env, DWF_STATE_DIR: state, DWF_ACCEPTANCE_TOKEN: token,
+  const env = { ...process.env, HOME: join(profile, 'home'), OPENCODE_TEST_HOME: join(profile, 'home'),
+    OPENCODE_CONFIG_DIR: join(profile, 'config'), OPENCODE_CONFIG: '',
+    XDG_CONFIG_HOME: join(profile, 'config'), XDG_DATA_HOME: join(profile, 'data'),
+    XDG_CACHE_HOME: join(profile, 'cache'), XDG_STATE_HOME: join(profile, 'state'),
+    XDG_RUNTIME_DIR: join(profile, 'runtime'), TMPDIR: join(profile, 'tmp'),
+    DWF_STATE_DIR: state, DWF_ACCEPTANCE_TOKEN: token,
     DWF_ACCEPTANCE_CONTROL_DIR: control };
+  delete env.OPENCODE_CONFIG_CONTENT;
+  delete env.OPENCODE_DB;
+  delete env.DWF_OPENCODE_PORT;
   delete env.DWF_MODEL_PROVIDER_MODULE;
   delete env.DWF_AUTH_SOURCE;
   delete env.DWF_PLANNER_REASONING;

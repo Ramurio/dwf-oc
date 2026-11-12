@@ -3,13 +3,35 @@ import { test } from 'node:test';
 import { access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { assertExecutionStopped, captureOwnedExecution, assertOriginalAlive, createSandbox,
-  originalStillWorking, plannerResult, readJson, taggedProcesses,
+  originalStillWorking, plannerResult, processIdentity, readJson, taggedProcesses,
   waitFor, within } from './harness.mjs';
 import { verifyReport } from './verify-lifetime-mutation.mjs';
 
 // Native HTTP model/lifetime checks are executable in the same harness gate.
 import './controlled-http-provider.test.mjs';
 import './observe-model.test.mjs';
+
+test('ps перечисляет процессы без смешения BSD и UNIX опций', () => {
+  assert.deepEqual(taggedProcesses('absent-token-for-ps-regression'), []);
+});
+
+test('sandbox изолирует профиль и находит метку после многострочного argv', async t => {
+  const sandbox = await createSandbox();
+  t.after(() => sandbox.cleanup());
+  for (const key of ['HOME', 'OPENCODE_TEST_HOME', 'OPENCODE_CONFIG_DIR', 'XDG_CONFIG_HOME',
+    'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'XDG_STATE_HOME', 'XDG_RUNTIME_DIR', 'TMPDIR']) {
+    assert(sandbox.env[key].startsWith(sandbox.root + '/'), key);
+    await access(sandbox.env[key]);
+  }
+  assert.equal(sandbox.env.OPENCODE_CONFIG, '');
+  assert.equal(sandbox.env.OPENCODE_CONFIG_CONTENT, undefined);
+  assert.equal(sandbox.env.OPENCODE_DB, undefined);
+  const fixture = sandbox.spawn([process.execPath], ['-e', '\nsetInterval(() => {}, 1000)\n']);
+  const identity = await waitFor(() => taggedProcesses(sandbox.token).find(item => item.pid === fixture.child.pid),
+    3000, 'метка после многострочного argv');
+  assert.deepEqual(identity, processIdentity(fixture.child.pid));
+  assert(!taggedProcesses(sandbox.token + '-other').some(item => item.pid === fixture.child.pid));
+});
 
 test('reread требует owned backend и подтверждённое исчезновение именно его PID', async () => {
   const sandbox = await createSandbox();

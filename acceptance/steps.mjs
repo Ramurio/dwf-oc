@@ -66,14 +66,14 @@ async function configureControlled(world, finishes, reply) {
   world.controlled = true;
   const env = world.sandbox.env;
   const keep = new Set(['PATH', 'LANG', 'LC_ALL', 'TERM', 'COLORTERM', 'USER', 'LOGNAME', 'SHELL',
-    'DWF_STATE_DIR', 'DWF_ACCEPTANCE_TOKEN', 'DWF_ACCEPTANCE_CONTROL_DIR']);
+    'DWF_STATE_DIR', 'DWF_ACCEPTANCE_TOKEN', 'DWF_ACCEPTANCE_CONTROL_DIR', 'XDG_RUNTIME_DIR']);
   for (const name of Object.keys(env)) if (!keep.has(name)) delete env[name];
   const isolation = join(world.sandbox.root, 'opencode-isolation');
   for (const name of ['home', 'config', 'xdg-config', 'data', 'cache', 'state', 'tmp']) {
     await mkdir(join(isolation, name), { recursive: true, mode: 0o700 });
   }
   Object.assign(env, {
-    OPENCODE_TEST_HOME: join(isolation, 'home'), OPENCODE_CONFIG_DIR: join(isolation, 'config'),
+    HOME: join(isolation, 'home'), OPENCODE_TEST_HOME: join(isolation, 'home'), OPENCODE_CONFIG_DIR: join(isolation, 'config'),
     XDG_CONFIG_HOME: join(isolation, 'xdg-config'), XDG_DATA_HOME: join(isolation, 'data'),
     XDG_CACHE_HOME: join(isolation, 'cache'), XDG_STATE_HOME: join(isolation, 'state'), TMPDIR: join(isolation, 'tmp'),
     OPENCODE_DISABLE_PROJECT_CONFIG: 'true', OPENCODE_DISABLE_CLAUDE_CODE: 'true',
