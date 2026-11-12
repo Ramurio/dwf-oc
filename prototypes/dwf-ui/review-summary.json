@@ -1,0 +1,16 @@
+{
+  "variant": "lines-paired-arrows",
+  "status": "user-approved-for-merge",
+  "approvedOn": "2026-11-13",
+  "sourceDesignSnapshot": "3793520080b7661c0eb831bd45e17956f6b47ca3",
+  "implementationChecks": "CHECKS.md",
+  "critics": [],
+  "note": "The user selected Lines, approved close opposing arrows and requested this merge. Historical critic scores apply to earlier DWF revisions. Final routing and arrowhead fixes have implementation regression checks without new independent critic scores.",
+  "changes": [
+    "Actual opposing edges share paths 6px apart with 2.3px forward and 1.25px reverse strokes",
+    "Centered primitive and group side ports",
+    "Session continuity traces and call counts",
+    "Arrowheads paint above route and label masks",
+    "Multi-input caption spacing includes paired return labels"
+  ]
+}

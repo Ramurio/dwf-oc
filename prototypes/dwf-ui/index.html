@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>DWF · Lines · Paired arrows</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="./" aria-label="DWF home"><svg viewBox="0 0 28 24" aria-hidden="true"><path d="M2 4h9l6 8h9M2 20h9l6-8M2 12h24"/></svg>DWF<span>Lines</span></a><span class="demo-label">LOCAL DEMO <span>· Fictional sessions</span></span></header>
+  <div class="shell">
+    <aside class="sidebar">
+      <details id="run-menu" open><summary>Runs <span id="mobile-run"></span></summary><div class="side-label">RECENT RUNS <span>All projects</span></div><nav id="runs" aria-label="Recent runs, newest first"></nav></details>
+      <p class="sidebar-note">Observe here.<br><strong>Continue in OpenCode.</strong><span>No live connection. All demo data stays in this browser.</span></p>
+    </aside>
+    <main class="workspace">
+      <header class="run-heading"><div><p class="run-meta"><span id="project"></span><span id="run-id"></span></p><h1 id="run-title"></h1><p id="description"></p></div><button class="help-button" id="help-open" aria-label="How to read this map">?</button></header>
+      <section class="map-tools" aria-label="Map controls"><button id="current" class="current"></button><div class="zoom-controls"><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-reset" title="Readable size, 100 percent">100%</button><button id="zoom-in" aria-label="Zoom in">+</button><button id="fit">Fit map</button></div></section>
+      <div class="map-viewport" id="map-viewport" tabindex="0" aria-label="Workflow map. Scroll or drag the background to pan. Use the zoom controls to resize."><div class="canvas" id="canvas"><svg id="map" role="group" aria-labelledby="map-title map-description"></svg></div></div>
+      <footer class="map-footer"><div class="legend" aria-label="Route key"><span><i class="line"></i>Control</span><span><i class="line result"></i>Results / changes</span><span><i class="active-dot"></i>Working now</span></div><span id="map-hint"></span></footer>
+    </main>
+  </div>
+  <dialog id="inspector" aria-labelledby="detail-title"><div id="detail-content"></div></dialog>
+  <dialog id="help" aria-labelledby="help-title"><div class="help-top"><span class="eyebrow">LINES / READING THE MAP</span><button id="help-close" class="close" aria-label="Close map guide">×</button></div><h2 id="help-title">Follow the work.<br>Keep the context.</h2><p>Green arrows pass work forward. Purple arrows carry results or request changes. Two close lines connect blocks that communicate in both directions.</p><div class="guide-example"><i class="line"></i><strong>Control</strong><span>Passes work forward</span><i class="line result"></i><strong>Result</strong><span>Returns findings</span><i class="line reentry"></i><strong>Reentry</strong><span>Requests another invocation</span></div><p>Each named row in a parallel group is an independent participant. The number shows all started calls. Joined dots show consecutive calls in the same session; separate dots show changed sessions. Select a row for the full history.</p><p>Direct replies share the outgoing route in the opposite direction. Longer cycles retain their actual endpoints. Crossings without a junction do not connect. Arrowheads show the destination.</p><p>Select a stop or participant to inspect its calls. <strong>History never changes current execution.</strong> Actual session IDs establish whether context continued; a fresh-context policy is not itself a session ID.</p><p class="fine">This is an offline design prototype, not a scheduler or editor. Every ID is fictional. Live DWF and OpenCode integration are future work.</p></dialog>
+  <div id="announcement" class="sr-only" role="status" aria-live="polite"></div>
+  <noscript>This interactive, fictional map needs JavaScript. Serve this folder locally as described in README.md.</noscript>
+  <script type="module" src="app.mjs"></script>
+</body>
+</html>
