@@ -28,7 +28,7 @@ registerHooks({
         export const git = () => {};
         export const verificationWorkspace = (_root, _id, workspace) => workspace;
         export const writeReviewDiff = () => {};
-        export const mergeWorkspace = () => globalThis.dwfControlIO.merge();
+        export const mergeWorkspace = (_workspace, _revision, title) => globalThis.dwfControlIO.merge(title);
       ` };
     }
     return next(url, context);
@@ -172,13 +172,32 @@ test('read-only approval retains the revision actually observed by its participa
 
 test('finalization is durable before Git integration and rejects later controls', async t => {
   const f = await fixture(t, { merge: true });
-  io.merge = () => {
+  io.merge = title => {
     assert.equal(f.state().finalizing, true);
+    assert.equal(title, 'DWF chore: Controlled scheduling');
     return 'commit';
   };
   await f.run();
   assert.equal(f.state().status, 'succeeded');
   assert.throws(() => f.command('stop'), /завершает/);
+});
+
+test('a final orchestrator preserves the approved verifier commit title during controller recovery', async t => {
+  const definition = { task: 'Preserve the admission input', merge: true, entry: 'review',
+    nodes: { review: { role: 'reviewer' }, verify: { role: 'verifier' }, finish: { role: 'orchestrator' } },
+    transitions: { review: { approve: 'verify', changes: null },
+      verify: { approve: 'finish', changes: null }, finish: { done: null } } };
+  const title = 'DWF fix: preserve the admission input';
+  const f = await fixture(t, { definition, visits: [
+    { node: 'review', revision: 'original', verdict: { outcome: 'approve', summary: 'Reviewed' } },
+    { node: 'verify', revision: 'original', verdict: { outcome: 'approve', summary: title + '\n\nRetries passed.' } },
+    { node: 'finish', revision: 'original', verdict: { outcome: 'done', summary: 'Completed verification.' } },
+  ] });
+  io.merge = observed => { assert.equal(observed, title); return 'commit'; };
+  await f.run();
+  assert.equal(f.state().status, 'succeeded', f.state().error);
+  assert.equal(f.state().result.summary, 'Completed verification.');
+  assert.equal(f.admitted.length, 0);
 });
 
 test('steering accepted during snapshot survives a subsequent invalid answer', async t => {

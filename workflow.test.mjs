@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as pause } from 'node:timers/promises';
-import { validateWorkflow, parseVerdict, rolePermissions, rolePrompt, roleSystemPrompt, roleAgents, roleTools, outcomes, participantSettings, participantAgent, checkApprovals } from './workflow-definition.mjs';
+import { validateWorkflow, parseVerdict, rolePermissions, rolePrompt, roleSystemPrompt, roleAgents, roleTools, outcomes, participantSettings, participantAgent, checkApprovals, workflowCommitTitle } from './workflow-definition.mjs';
 import { createWorkflow, getWorkflow, claimWorkflow, updateWorkflow, workflowHasOwner, savePreset, presets, queueWorkflowCommand, withWorkflowAction } from './run-store.mjs';
 import { git, prepareWorkspace, tree, mergeWorkspace, writeReviewDiff, snapshot, verificationWorkspace } from './workflow-git.mjs';
 import { DatabaseSync } from 'node:sqlite';
@@ -53,6 +53,39 @@ test('вердикт читается структурированно, отсу
   assert.throws(() => parseVerdict('Всё отлично!', 'reviewer'));
   assert.throws(() => parseVerdict('{"outcome":"done","summary":"Готово"}', 'reviewer'));
   assert.throws(() => parseVerdict('{"outcome":"approve","summary":""}', 'verifier'));
+});
+
+test('commit titles use the current required verifier through later summaries and grouped visits', () => {
+  const definition = sampleWorkflow('Preserve the saved admission input\nDetailed acceptance criteria');
+  definition.nodes.optional = { role: 'verifier', required: false };
+  const state = { definition, visits: [
+    { node: 'verify', revision: 'old', verdict: { outcome: 'approve', summary: 'DWF fix: old input handling' } },
+    { node: 'checks', children: [
+      { node: 'verify', revision: 'current', verdict: { outcome: 'approve', summary: 'DWF fix: preserve the saved input\n\nRetry checks passed.' } },
+    ] },
+    { node: 'optional', revision: 'current', verdict: { outcome: 'approve', summary: 'DWF chore: optional verification' } },
+    { node: 'summarize', revision: 'current', verdict: { outcome: 'done', summary: 'DWF docs: unrelated report title' } },
+  ] };
+  assert.equal(workflowCommitTitle(state, 'current'), 'DWF fix: preserve the saved input');
+  for (const type of ['feat', 'fix', 'refactor', 'perf', 'docs', 'test', 'build', 'ci', 'style', 'chore', 'revert']) {
+    const title = `DWF ${type}(admission)!: preserve the saved input`;
+    state.visits[1].children[0].verdict.summary = title + '\n\nEvidence';
+    assert.equal(workflowCommitTitle(state, 'current'), title);
+  }
+  assert.equal(workflowCommitTitle(state, 'different'), 'DWF chore: Preserve the saved admission input');
+});
+
+test('legacy and malformed title lines fall back to a bounded single line from the task', () => {
+  const definition = sampleWorkflow('  Repair \u0000saved inputs\nAcceptance details');
+  const visit = { node: 'verify', revision: 'current', verdict: { outcome: 'approve' } };
+  const state = { definition, visits: [visit] };
+  for (const summary of [undefined, 'Tests passed.', 'DWF verified workflow', 'DWF fix:',
+    'DWF unknown: change inputs', 'DWF fix: unsafe\u0000input']) {
+    visit.verdict.summary = summary;
+    assert.equal(workflowCommitTitle(state, 'current'), 'DWF chore: Repair saved inputs');
+  }
+  state.definition.task = '😀'.repeat(110);
+  assert.equal(workflowCommitTitle(state, 'current'), 'DWF chore: ' + '😀'.repeat(100));
 });
 
 test('fenced results obey the same final and unambiguous boundary as plain JSON', () => {
@@ -283,6 +316,9 @@ test('системные обязанности отделены от поруч
       assert(!rolePrompt(definition, nodeId, undefined, 'tree', [], separateSystem).includes('Ты участник DWF'));
     }
   }
+  const verifier = rolePrompt(definition, 'verify', undefined, 'tree', [], true);
+  assert(verifier.includes('first line of your summary becomes its title'));
+  assert(roleSystemPrompt('verifier').includes('DWF <type>: <description>'));
 });
 
 test('ролевые промпты задают критерии завершения и доказательства результата', () => {
@@ -604,10 +640,13 @@ test('проверенное дерево изолировано от исход
   const approved = tree(workspace.path);
   assert.equal(git(workspace.path, ['status', '--porcelain']), before);
   assert.equal(git(source, ['status', '--porcelain']), '');
-  const commit = mergeWorkspace(workspace, approved);
+  const title = 'DWF feat: add the requested feature';
+  const commit = mergeWorkspace(workspace, approved, title);
   assert.equal(await readFile(join(source, 'feature.txt'), 'utf8'), 'feature\n');
   assert.equal(git(source, ['rev-parse', 'HEAD^{tree}']), approved);
-  assert.equal(mergeWorkspace(workspace, approved), commit);
+  assert.equal(git(source, ['log', '-1', '--format=%s']), title);
+  assert.equal(mergeWorkspace(workspace, approved, 'DWF fix: a later title'), commit);
+  assert.equal(git(source, ['log', '-1', '--format=%s']), title);
 });
 
 test('изменения после проверки и продвижение исходной ветки блокируют merge', async t => {

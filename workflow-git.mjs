@@ -100,7 +100,7 @@ export function writeReviewDiff(workspace, revision, file) {
   } finally { rmSync(temporary, { force: true }); }
 }
 
-export function mergeWorkspace(workspace, expectedTree) {
+export function mergeWorkspace(workspace, expectedTree, title) {
   if (git(workspace.path, ['symbolic-ref', '--short', 'HEAD']) !== workspace.candidate ||
     tree(workspace.path) !== expectedTree) throw publicError('Проверенное рабочее дерево изменилось до интеграции.');
   if (git(workspace.source, ['symbolic-ref', '--short', 'HEAD']) !== workspace.branch ||
@@ -111,8 +111,11 @@ export function mergeWorkspace(workspace, expectedTree) {
   if (sourceHead === candidateHead && git(workspace.source, ['rev-parse', 'HEAD^{tree}']) === expectedTree) return sourceHead;
   if (sourceHead !== workspace.base) throw publicError('Исходная ветка продвинулась после запуска workflow. Нужна повторная проверка интеграции.');
   if (git(workspace.path, ['status', '--porcelain'])) {
+    if (typeof title !== 'string' || !title.trim() || /[\u0000-\u001f\u007f]/u.test(title)) {
+      throw publicError('Для нового коммита нужен непустой однострочный заголовок.');
+    }
     git(workspace.path, ['add', '--all', '--', '.']);
-    git(workspace.path, ['commit', '-m', 'DWF verified workflow']);
+    git(workspace.path, ['commit', '-m', title]);
   }
   if (git(workspace.path, ['rev-parse', 'HEAD^{tree}']) !== expectedTree || tree(workspace.path) !== expectedTree) {
     throw publicError('Коммит отличается от проверенной версии. Интеграция остановлена.');

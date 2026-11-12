@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout as pause } from 'node:timers/promises';
 import { admit, checkRoleAgents, connect, readExecution, stopSessions, captureStopSessions, interruptSessions } from './opencode-runtime.mjs';
 import { claimWorkflow, getWorkflow, updateWorkflow, workflowHasOwner, publicError, withWorkflowAction } from './run-store.mjs';
-import { parseVerdict, rolePermissions, rolePrompt, roleAgents, checkApprovals,
+import { parseVerdict, rolePermissions, rolePrompt, roleAgents, checkApprovals, workflowCommitTitle,
   participantVisits, validateItems } from './workflow-definition.mjs';
 import { researchGraph, researchResult, scientistPhase, validateScientistVerdict } from './research-workflow.mjs';
 import { mergeWorkspace, snapshot, writeReviewDiff, verificationWorkspace } from './workflow-git.mjs';
@@ -208,7 +208,8 @@ export async function runWorkflow(root, id) {
             const revision = snapshot(state.workspace);
             checkApprovals(state, revision);
             if (state.definition.merge) {
-              state.result = { summary: visit.verdict.summary, commit: mergeWorkspace(state.workspace, revision) };
+              state.result = { summary: visit.verdict.summary,
+                commit: mergeWorkspace(state.workspace, revision, workflowCommitTitle(state, revision)) };
             } else state.result = report ?? visit.verdict;
             state.status = 'succeeded';
           });

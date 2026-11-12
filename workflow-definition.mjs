@@ -227,6 +227,19 @@ export function checkApprovals(state, revision) {
   }
 }
 
+export function workflowCommitTitle(state, revision) {
+  const verifier = participantVisits(state.visits).findLast(visit =>
+    state.definition.nodes[visit.node]?.role === 'verifier' &&
+    state.definition.nodes[visit.node].required !== false &&
+    visit.revision === revision && visit.verdict?.outcome === 'approve');
+  const title = verifier?.verdict.summary?.trim().split(/[\r\n]/, 1)[0];
+  if (/^DWF (feat|fix|refactor|perf|docs|test|build|ci|style|chore|revert)(\([^()]+\))?!?: \S.*$/u.test(title) &&
+    !/[\u0000-\u001f\u007f]/u.test(title)) return title;
+  // Older saved verdicts have no commit title. Keep them resumable using the task.
+  const task = state.definition.task.trim().split(/[\r\n]/, 1)[0].replace(/[\u0000-\u0020\u007f]+/gu, ' ').trim();
+  return `DWF chore: ${Array.from(task).slice(0, 100).join('')}`;
+}
+
 const commonInstructions = [
   'Execute your configured role. DWF runs the other workflow participants and passes their results to you.',
   'Work within the supplied project workspace. Read applicable AGENTS.md files inside it and any inherited project instructions supplied with the task. Parent directories contain DWF runtime data and are outside the project.',
@@ -260,6 +273,9 @@ const roleInstructions = {
     'Base your conclusion on your own checks. Return changes for unmet requirements. Include reproduction steps and the expected and actual results.',
     'Return approve when the checks required by the task succeed. If a necessary check cannot be performed, return blocked.',
     'In summary, state the checks performed, their results and remaining limitations.',
+    'When approving a code change for Git integration, begin summary with a concise commit title in the form "DWF <type>: <description>". Describe the complete change being verified with a specific imperative description naming the changed behavior or component.',
+    'Use feat for a new feature, fix for a bug fix, refactor for restructuring that preserves behavior, perf for a performance improvement, docs for documentation, test for tests, build for build or dependency changes, ci for automation, style for formatting, chore for other maintenance, and revert for a rollback.',
+    'An optional scope and ! for a breaking change follow Conventional Commits, for example "DWF fix(admission): preserve the saved input on retry". Put verification evidence and limitations after a blank line.',
   ].join('\n'),
   orchestrator: [
     'Summarize the history of completed stages. Preserve project files.',
@@ -310,6 +326,8 @@ export function rolePrompt(definition, nodeId, previous, revision, visits = [], 
     node.instructions ?? '',
     node.role === 'scientist' ? scientistPhase(researchGraph(definition), visits) : '',
     node.role === 'reviewer' ? `Workflow verification context: ${verification}` : '',
+    node.role === 'verifier' && definition.merge
+      ? 'This workflow will create a Git commit. On approve, the first line of your summary becomes its title. Use DWF <type>: <description>, then a blank line and your verification report.' : '',
     workspace ? `Project workspace: ${workspace.path}` : '',
     workspace?.instructions?.length ? `Inherited project instructions captured at workflow start (outermost first):\n${JSON.stringify(workspace.instructions)}` : '',
     `Поручение пользователя:\n${definition.task}`,
