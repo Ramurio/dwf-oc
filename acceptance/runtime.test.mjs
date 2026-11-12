@@ -13,10 +13,11 @@ import { createSandbox, cliJson, transcript, waitFor, writeJson, taggedProcesses
 import { createControlledHttpProvider, nativeProviderConfig } from './controlled-http-provider.mjs';
 import { claimWorkflow, createWorkflow, getWorkflow, updateWorkflow } from '../run-store.mjs';
 import { prepareGroup } from '../workflow-groups.mjs';
-import { captureStopSessions, outcomeFromMessages, readExecution, stopSessions } from '../opencode-runtime.mjs';
+import { captureStopSessions, checkModel, outcomeFromMessages, readExecution, stopSessions } from '../opencode-runtime.mjs';
 import { inspectTester } from './tester.mjs';
 import { validateWorkflow, participantSettings, validateItems } from '../workflow-definition.mjs';
 import { researchGraph, validateScientistVerdict } from '../research-workflow.mjs';
+import roleToolsPlugin from '../opencode-tools.mjs';
 
 const cli = [process.execPath, fileURLToPath(new URL('../dwf.mjs', import.meta.url))];
 const verdict = (outcome = 'approve') => JSON.stringify({ outcome, summary: `Observed ${outcome}` });
@@ -112,6 +113,94 @@ async function fixture(t, definition, reply, directory = false, overrides = {}) 
     }, 30000, 'workflow completion'),
   };
 }
+
+test('different DWF state roots use the same native OpenCode profile and service', { timeout: 60000 }, async t => {
+  const definition = { task: 'Use the shared native profile', workspace: 'directory', entry: 'verify',
+    nodes: { verify: { role: 'verifier', tools: [], skills: [] } },
+    transitions: { verify: { approve: null, changes: null } } };
+  const sandbox = await fixture(t, definition, () => verdict(), true);
+  const first = getWorkflow(sandbox.state, sandbox.runId);
+  const secondRoot = join(sandbox.root, 'another-state');
+  await mkdir(secondRoot);
+  sandbox.env.DWF_STATE_DIR = secondRoot;
+  let started;
+  try { started = await sandbox.command(['start', '--file', join(sandbox.root, 'workflow.json')]); }
+  finally { sandbox.env.DWF_STATE_DIR = sandbox.state; }
+  const second = getWorkflow(secondRoot, started.runId);
+  assert.deepEqual(second.opencode, first.opencode);
+  assert.equal(first.opencode.registration, join(sandbox.env.XDG_STATE_HOME, 'opencode/service.json'));
+  assert.equal(first.opencode.configDirectory, sandbox.env.OPENCODE_CONFIG_DIR);
+  assert.notEqual(first.visits[0].sessionId, second.visits[0].sessionId);
+  await sandbox.release();
+  assert.equal((await sandbox.finish()).status, 'succeeded');
+  const final = await waitFor(() => {
+    const state = getWorkflow(secondRoot, started.runId);
+    return state.status !== 'running' && state;
+  }, 30000, 'second workflow on the shared native service');
+  assert.equal(final.status, 'succeeded', final.error);
+});
+
+test('model preflight distinguishes missing, disabled and unsupported reasoning without substitution', async () => {
+  const selected = { provider: 'openai', modelId: 'gpt-6.1-sol-ultrafast' };
+  let data = [];
+  const client = { model: { list: async () => ({ data }) } };
+  await assert.rejects(checkModel(client, '/project', selected, 'xhigh'), /openai\/gpt-6.1-sol-ultrafast.*opencode models/);
+  data = [{ providerID: selected.provider, id: selected.modelId, enabled: false, variants: [] }];
+  await assert.rejects(checkModel(client, '/project', selected, 'xhigh'), /отключена.*opencode auth list/);
+  data[0].enabled = true;
+  data[0].variants = [{ id: 'high' }];
+  await assert.rejects(checkModel(client, '/project', selected, 'xhigh'), /reasoning xhigh.*high/);
+  data[0].variants.push({ id: 'xhigh' });
+  assert.deepEqual(await checkModel(client, '/project', selected, 'xhigh'),
+    { providerID: selected.provider, id: selected.modelId, variant: 'xhigh' });
+});
+
+test('the shared profile keeps interactive tools and filters aliases only in DWF sessions', async () => {
+  let hook;
+  await roleToolsPlugin.setup({ session: { hook: async (name, callback) => {
+    assert.equal(name, 'context');
+    hook = callback;
+  } } });
+  const interactive = { agent: 'build', tools: { edit: {}, opencode_worktree_remove: {} } };
+  hook(interactive);
+  assert.deepEqual(Object.keys(interactive.tools), ['edit', 'opencode_worktree_remove']);
+  const dwf = { agent: 'dwf-worker-0123456789abcdef', tools: { edit: {}, opencode_worktree_remove: {} } };
+  hook(dwf);
+  assert.deepEqual(Object.keys(dwf.tools), ['edit']);
+});
+
+test('a saved planner from the previous DWF profile resumes in its original OpenCode database',
+  { timeout: 60000 }, async t => {
+    const sandbox = await createSandbox();
+    const provider = await createControlledHttpProvider({ directory: sandbox.control, token: sandbox.token,
+      reply: () => 'Legacy planner resumed.' });
+    t.after(async () => { await provider.close(); await sandbox.cleanup(); });
+    const config = join(sandbox.root, 'provider.json');
+    await writeJson(config, nativeProviderConfig(provider.baseURL));
+    Object.assign(sandbox.env, { OPENCODE_CONFIG: config, OPENCODE_DISABLE_MODELS_FETCH: 'true' });
+    const bootstrap = join(sandbox.root, 'legacy.mjs');
+    await writeFile(bootstrap, `
+      import { randomUUID } from 'node:crypto';
+      import { connect, checkModel, sessionRequest } from ${JSON.stringify(new URL('../opencode-runtime.mjs', import.meta.url).href)};
+      import { createRun } from ${JSON.stringify(new URL('../run-store.mjs', import.meta.url).href)};
+      const root = process.env.DWF_STATE_DIR;
+      const client = await connect(root, undefined, { profile: 'legacy' });
+      const model = await checkModel(client, process.cwd(), { provider: 'dwf-acceptance', modelId: 'planner' }, 'high');
+      const id = randomUUID();
+      createRun(root, { id, sessionId: 'ses_' + randomUUID(), inputId: 'msg_' + randomUUID(),
+        request: sessionRequest(process.cwd(), model, id, 'Resume this saved planner.') });
+      console.log(JSON.stringify({ runId: id }));
+    `);
+    const { runId } = await cliJson(sandbox.spawn([process.execPath, bootstrap]), 20000);
+    assert.equal((await cliJson(sandbox.spawn(cli, ['inspect', runId]), 20000)).status, 'running');
+    await writeJson(join(sandbox.control, 'release.json'), { token: sandbox.token, all: true });
+    const final = await waitFor(async () => {
+      const result = await cliJson(sandbox.spawn(cli, ['inspect', runId]), 20000);
+      return result.status !== 'running' && result;
+    }, 20000, 'legacy planner completion');
+    assert.equal(final.status, 'succeeded', final.error);
+    assert.equal(final.result, 'Legacy planner resumed.');
+  });
 
 for (const approve of [true, false]) {
   test(`research-mid returns the exact report on ${approve ? 'approval' : 'exhaustion of its shared round limit'}`,
@@ -464,7 +553,7 @@ test('native completion during an activity request cannot return an older approv
     };
     return verdict(replies === 2 ? 'approve' : 'changes');
   }, true);
-  const endpoint = await Service.discover({ file: join(sandbox.state, 'opencode/state/opencode/service.json') });
+  const endpoint = await Service.discover({ file: getWorkflow(sandbox.state, sandbox.runId).opencode.registration });
   const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) });
   const state = getWorkflow(sandbox.state, sandbox.runId);
   const visit = state.visits[0];
@@ -543,7 +632,7 @@ test('stop catches a resistant shell created after the initial process snapshot'
     nodes: { verify: { role: 'verifier', tools: [], skills: [] } },
     transitions: { verify: { approve: null, changes: null } } };
   const sandbox = await fixture(t, definition, () => verdict(), true);
-  const endpoint = await Service.discover({ file: join(sandbox.state, 'opencode/state/opencode/service.json') });
+  const endpoint = await Service.discover({ file: getWorkflow(sandbox.state, sandbox.runId).opencode.registration });
   const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) });
   const state = getWorkflow(sandbox.state, sandbox.runId);
   await captureStopSessions(client, state);

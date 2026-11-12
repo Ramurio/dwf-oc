@@ -74,7 +74,7 @@ async function start(workflowFile, supplied) {
     const working = prepareWorkspace(root, workspace, id, workflow.workspace);
     const workflowModel = researchGraph(workflow) ? participants[workflow.entry].model : model;
     createWorkflow(root, { id, definition: workflow, model: workflowModel, workspace: working, roleAgents,
-      participants,
+      participants, opencode: client.dwfProfile,
       rolePermissions: Object.fromEntries(Object.keys(roleAgents).map(role => [role, rolePermissions(role)])),
       status: 'running', sessions: {}, visits: [] });
     await ensureWorkflowRunner(root, id);
@@ -82,7 +82,7 @@ async function start(workflowFile, supplied) {
     return;
   }
   const run = { id, sessionId: `ses_${randomUUID()}`, inputId: `msg_${randomUUID()}`,
-    request: sessionRequest(workspace, model, id, workflow.planner.task) };
+    request: { ...sessionRequest(workspace, model, id, workflow.planner.task), opencode: client.dwfProfile } };
   await checkRoleAgents(client, workspace, { planner: run.request.session.agent });
   createRun(root, run);
   await admit(client, run);
@@ -104,7 +104,7 @@ async function inspect(runId) {
   if (run.status === 'running') {
     let outcome;
     try {
-      const client = await connect(root);
+      const client = await connect(root, undefined, { profile: run.request.opencode ?? 'legacy' });
       if (!run.admitted) {
         await admit(client, run);
       }

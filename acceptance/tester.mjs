@@ -8,6 +8,7 @@ import { setTimeout as pause } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
 import { OpenCode, ClientError, isSessionNotFoundError } from '@opencode/client';
 import { Service } from '@opencode/client/service';
+import { connect } from '../opencode-runtime.mjs';
 
 const projectDirectory = fileURLToPath(new URL('../', import.meta.url));
 const executable = join(projectDirectory, 'node_modules/.bin/opencode');
@@ -76,12 +77,11 @@ function environment(profile, stateDirectory) {
     PATH: join(projectDirectory, 'node_modules/.bin') + delimiter + (process.env.PATH ?? '') };
 }
 
-export async function authorizeTester(client, stateDirectory) {
+export async function authorizeTester(client) {
   if ((await client.credential.list()).length !== 0) return;
   try {
     const credentials = JSON.parse(execFileSync(executable, ['auth', 'export', 'openai', '--standalone'],
-      { env: { ...process.env, ...environment(join(stateDirectory, 'opencode'), stateDirectory) },
-        encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 1024 * 1024 }));
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 1024 * 1024 }));
     for (const credential of credentials.filter(item => item.active)) {
       await client.credential.create({ integrationID: credential.integrationID,
         label: credential.label, value: credential.value, activate: true });
@@ -89,7 +89,7 @@ export async function authorizeTester(client, stateDirectory) {
   } catch { throw new Error('Не удалось подключить существующий вход OpenCode к профилю тестера.'); }
 }
 
-export async function connectTester(root, stateDirectory, prepare = false, launch = {}) {
+async function connectLegacyTester(root, stateDirectory, prepare, launch) {
   const profile = join(root, 'opencode');
   const configDirectory = join(profile, 'config');
   await mkdir(configDirectory, { recursive: true, mode: 0o700 });
@@ -111,7 +111,19 @@ export async function connectTester(root, stateDirectory, prepare = false, launc
     onStart(reason) { if (reason === 'version-mismatch') throw new Error('Версия OpenCode тестера изменилась.'); } });
   const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) });
   // Transfer through the native credential API without writing secrets to the test journal.
-  if (launch.authorize !== false) await authorizeTester(client, launch.credentialStateDirectory ?? stateDirectory);
+  if (launch.authorize !== false) await authorizeTester(client);
+  return client;
+}
+
+export async function connectTester(root, stateDirectory, prepare = false, launch = {}) {
+  if (launch.profile === 'legacy') return connectLegacyTester(root, stateDirectory, prepare, launch);
+  const client = await connect(stateDirectory, undefined, launch);
+  const target = join(client.dwfProfile.configDirectory, 'skills', 'dwf-oc');
+  try { await access(join(target, 'SKILL.md')); }
+  catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    await cp(launch.skillDirectory ?? join(homedir(), '.codex/skills/dwf-oc'), target, { recursive: true });
+  }
   return client;
 }
 
@@ -124,13 +136,17 @@ export async function admitTester(client, attempt) {
       session = await client.session.create({ id: attempt.sessionId, title: `DWF tester ${attempt.id}`,
         agent: 'build', model: attempt.model, location: { directory: attempt.workspace },
         metadata: { testerAttemptId: attempt.id },
-        permissions: [{ action: '*', resource: '*', effect: 'allow' }] });
+        permissions: [{ action: '*', resource: '*', effect: 'allow' },
+          { action: 'skill', resource: '*', effect: 'deny' },
+          { action: 'skill', resource: 'dwf-oc', effect: 'allow' }] });
     } catch (createError) {
       session = await client.session.get({ sessionID: attempt.sessionId }).catch(() => { throw createError; });
     }
   }
   if (session.metadata?.testerAttemptId !== attempt.id) throw new Error('Сессия принадлежит другой пробе.');
-  await client.session.prompt({ sessionID: attempt.sessionId, id: attempt.inputId, text: attempt.prompt });
+  const state = attempt.stateDirectory;
+  const context = state ? `\n\nКаталог состояния этой пробы — ${state}. Передавай его через DWF_STATE_DIR при каждом вызове dwf.` : '';
+  await client.session.prompt({ sessionID: attempt.sessionId, id: attempt.inputId, text: attempt.prompt + context });
 }
 
 export async function checkTester(client, attempt) {
@@ -235,7 +251,8 @@ export async function inspectTester(client, attempt) {
 }
 
 async function observe(attempt, watch) {
-  let client = await connectTester(attempt.root, attempt.stateDirectory);
+  const launch = { profile: attempt.opencode ?? 'legacy' };
+  let client = await connectTester(attempt.root, attempt.stateDirectory, false, launch);
   await admitTester(client, attempt);
   let previous;
   while (true) {
@@ -245,7 +262,7 @@ async function observe(attempt, watch) {
       if (!watch || !(error instanceof ClientError) || error.reason !== 'Transport') throw error;
       process.stderr.write('Наблюдение временно недоступно; переподключаюсь к той же сессии.\n');
       await pause(2000);
-      client = await connectTester(attempt.root, attempt.stateDirectory);
+      client = await connectTester(attempt.root, attempt.stateDirectory, false, launch);
       continue;
     }
     const output = JSON.stringify(state);
@@ -273,6 +290,8 @@ async function main() {
     process.stdout.write(JSON.stringify({ attempt: attempt.directory, sessionId: attempt.sessionId,
       workspace: attempt.workspace, base: attempt.base }) + '\n');
     const client = await connectTester(attempt.root, attempt.stateDirectory, true);
+    attempt.opencode = client.dwfProfile;
+    await save(join(attempt.directory, 'attempt.json'), attempt);
     await checkTester(client, attempt);
     await admitTester(client, attempt);
     const state = await observe(attempt, true);

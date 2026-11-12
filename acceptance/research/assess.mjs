@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as pause } from 'node:timers/promises';
@@ -35,8 +34,14 @@ export async function runResearchActor(root, { workspace, title, system, prompt,
   const started = Date.now();
   try {
     const client = await connect(directory, { [participant.id]: participant },
-      { env: { DWF_ACCEPTANCE_CONTROL_DIR: directory, DWF_ACCEPTANCE_TOKEN: randomUUID() } });
-    await authorizeTester(client, join(homedir(), '.dwf'));
+      { env: { DWF_ACCEPTANCE_CONTROL_DIR: directory, DWF_ACCEPTANCE_TOKEN: randomUUID(),
+        OPENCODE_CONFIG_DIR: join(directory, 'opencode/config'),
+        OPENCODE_DB: join(directory, 'opencode/opencode.sqlite'),
+        XDG_CONFIG_HOME: join(directory, 'opencode/xdg-config'),
+        XDG_DATA_HOME: join(directory, 'opencode/data'),
+        XDG_CACHE_HOME: join(directory, 'opencode/cache'),
+        XDG_STATE_HOME: join(directory, 'opencode/state') } });
+    await authorizeTester(client);
     const model = await checkModel(client, workspace, researchModel, 'high');
     await checkRoleAgents(client, workspace, { [role ?? 'assessor']: participant.id });
     const run = { id, sessionId, inputId: 'msg_' + randomUUID(), request: {

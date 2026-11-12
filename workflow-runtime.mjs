@@ -144,7 +144,7 @@ export async function runWorkflow(root, id) {
     try {
       save(false);
       if (!client) {
-        try { client = await connect(root, state.participants); }
+        try { client = await connect(root, state.participants, { profile: state.opencode ?? 'legacy' }); }
         catch (error) {
           if (error.publicMessage) throw error;
           state.service = 'unavailable';

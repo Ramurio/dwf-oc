@@ -11,12 +11,12 @@ import { DatabaseSync } from 'node:sqlite';
 import { Service } from '@opencode/client/service';
 import { OpenCode } from '@opencode/client';
 import { createModelProxy, writeSandboxProfile } from './isolation.mjs';
-import { canonical } from './tester.mjs';
+import { authorizeTester, canonical } from './tester.mjs';
 
 const projectDirectory = fileURLToPath(new URL('../', import.meta.url));
 const model = { providerID: 'openai', id: 'gpt-6.1-sol-ultrafast', variant: 'high' };
 const runtimeFiles = ['dwf.mjs', 'workflow-definition.mjs', 'workflow-runtime.mjs', 'workflow-git.mjs',
-  'run-store.mjs', 'opencode-runtime.mjs', 'role-skills.mjs', 'skills', 'package.json', 'package-lock.json',
+  'run-store.mjs', 'opencode-runtime.mjs', 'opencode-tools.mjs', 'role-skills.mjs', 'skills', 'package.json', 'package-lock.json',
   'acceptance/tester.mjs', 'workflow-groups.mjs', 'research-workflow.mjs', 'acceptance/model-observer'];
 
 function git(directory, args) {
@@ -80,12 +80,14 @@ export async function prepareBenchmark(settings) {
   return attempt;
 }
 
-async function observeModel(attempt, env) {
+async function observeModel(attempt, env, shared) {
   env.DWF_ACCEPTANCE_CONTROL_DIR = join(attempt.directory, 'evidence');
   env.DWF_ACCEPTANCE_TOKEN = randomUUID();
   await mkdir(env.DWF_ACCEPTANCE_CONTROL_DIR, { mode: 0o700 });
-  for (const profile of [attempt.root, attempt.stateDirectory]) {
-    const plugins = join(profile, 'opencode/config/plugins');
+  const directories = shared ? [env.OPENCODE_CONFIG_DIR] :
+    [join(attempt.root, 'opencode/config'), join(attempt.stateDirectory, 'opencode/config')];
+  for (const directory of directories) {
+    const plugins = join(directory, 'plugins');
     await mkdir(plugins, { recursive: true, mode: 0o700 });
     await symlink(join(attempt.runtime, 'acceptance/model-observer'), join(plugins, 'dwf-model-observer'));
   }
@@ -101,8 +103,15 @@ async function freePort() {
 
 export function benchmarkEnvironment(attempt, proxy, port, extra = {}) {
   const env = Object.fromEntries(Object.keys(process.env).map(key => [key, '']));
+  const profile = join(attempt.directory, 'opencode');
   const expand = value => value.replaceAll('{{attempt}}', attempt.directory).replaceAll('{{project}}', attempt.workspace);
   Object.assign(env, { HOME: join(attempt.directory, 'home'), TMPDIR: join(attempt.directory, 'tmp'),
+    OPENCODE_CONFIG_DIR: join(profile, 'config'),
+    OPENCODE_DB: join(profile, 'opencode.sqlite'),
+    XDG_CONFIG_HOME: join(profile, 'xdg-config'),
+    XDG_DATA_HOME: join(profile, 'data'),
+    XDG_CACHE_HOME: join(profile, 'cache'),
+    XDG_STATE_HOME: join(profile, 'state'),
     PATH: join(attempt.directory, 'bin') + ':/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin',
     LANG: 'en_US.UTF-8', USER: 'dwf-evaluation', HTTP_PROXY: proxy, HTTPS_PROXY: proxy,
     http_proxy: proxy, https_proxy: proxy, NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost',
@@ -186,18 +195,20 @@ export async function runBenchmark(settings) {
   await writeFile(sentinel, 'private reference boundary', { mode: 0o600 });
   const unrelated = createServer(socket => socket.end('must be inaccessible'));
   await new Promise(resolve => unrelated.listen(0, '127.0.0.1', resolve));
-  const registrations = [join(attempt.stateDirectory, 'opencode/state/opencode/service.json'),
-    join(attempt.root, 'opencode/state/opencode/service.json')];
+  let registrations = [];
   try {
-    if (settings.observeModel) await observeModel(attempt, env);
+    const runtime = await import(pathToFileURL(join(attempt.runtime, 'opencode-runtime.mjs')));
+    const shared = typeof runtime.openCodeProfile === 'function';
+    registrations = shared ? [join(env.XDG_STATE_HOME, 'opencode/service.json')] :
+      [join(attempt.stateDirectory, 'opencode/state/opencode/service.json'), join(attempt.root, 'opencode/state/opencode/service.json')];
+    if (settings.observeModel) await observeModel(attempt, env, shared);
     await writeSandboxProfile(profile, { writable: [attempt.directory],
       readable: [join(projectDirectory, 'node_modules'), ...settings.readable ?? []], ports: [...ports, proxy.port] });
     await checkBoundary(attempt, profile, env, [sentinel, ...settings.hidden ?? []], unrelated.address().port);
     await save(join(attempt.directory, 'boundary.json'), { passed: true, oneCommit: true,
       filesystem: true, unrelatedLocalhost: true, sourceNetwork: 'denied by kernel and model proxy', checkedAt: Date.now() });
-    const runtime = await import(pathToFileURL(join(attempt.runtime, 'opencode-runtime.mjs')));
     const tester = await import(pathToFileURL(join(attempt.runtime, 'acceptance/tester.mjs')));
-    // Both services inherit one kernel sandbox, allowing signals only within this attempt.
+    // The tester and DWF share one service inside this attempt's kernel sandbox.
     const bootstrap = `
       const runtime = await import(process.argv[1]);
       const tester = await import(process.argv[2]);
@@ -217,12 +228,13 @@ export async function runBenchmark(settings) {
       if (!endpoint) throw new Error('An isolated service did not start.');
       clients.push(OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) }));
     }
-    const [client, testerClient] = clients;
-    const credentials = settings.credentialStateDirectory ?? join(homedir(), '.dwf');
-    await tester.authorizeTester(client, credentials);
+    const [client, testerClient = client] = clients;
+    if (shared) attempt.opencode = runtime.openCodeProfile(env);
+    await save(join(attempt.directory, 'attempt.json'), attempt);
+    await authorizeTester(client);
     await runtime.checkModel(client, attempt.workspace,
       { provider: attempt.model.providerID, modelId: attempt.model.id }, attempt.model.variant);
-    await tester.authorizeTester(testerClient, credentials);
+    if (testerClient !== client) await authorizeTester(testerClient);
     await tester.checkTester(testerClient, attempt);
     if (settings.preset) {
       const presetFile = join(attempt.directory, 'preset.json');

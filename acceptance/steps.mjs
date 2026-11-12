@@ -205,7 +205,7 @@ Given('подготовлен workflow ролей с независимыми п
   });
   const skillSources = [
     join(this.sandbox.workspace, '.opencode', 'skills', 'dwf-forbidden-project'),
-    join(this.sandbox.state, 'opencode', 'config', 'skills', 'dwf-forbidden-global'),
+    join(this.sandbox.env.OPENCODE_CONFIG_DIR, 'skills', 'dwf-forbidden-global'),
     join(this.sandbox.root, 'explicit-skills', 'dwf-forbidden-explicit'),
   ];
   for (const directory of skillSources) {
@@ -285,16 +285,10 @@ When('наблюдатель получает прогресс и перепод
 });
 
 Given('общий сервис OpenCode уже работает без ролевых промптов DWF', async function () {
-  const directory = join(this.sandbox.state, 'opencode');
-  const state = join(directory, 'state');
+  const state = this.sandbox.env.XDG_STATE_HOME;
   const endpoint = await Service.ensure({ file: join(state, 'opencode', 'service.json'), version: '2.2.5',
     command: [modulePath('../node_modules/.bin/opencode'), 'serve', '--service', '--hostname', '127.0.0.1', '--port', '0'],
-    env: { ...this.sandbox.env, OPENCODE_CONFIG_DIR: join(directory, 'config'),
-      XDG_CONFIG_HOME: join(directory, 'xdg-config'), XDG_DATA_HOME: join(directory, 'data'),
-      XDG_CACHE_HOME: join(directory, 'cache'), XDG_STATE_HOME: state,
-      OPENCODE_DB: join(directory, 'opencode.sqlite'), OPENCODE_CONFIG: '',
-      OPENCODE_DISABLE_FILEWATCHER: 'false',
-      OPENCODE_CONFIG_CONTENT: JSON.stringify(nativeProviderConfig(this.controlledModel.baseURL)) } });
+    env: { ...this.sandbox.env, OPENCODE_DISABLE_FILEWATCHER: 'false' } });
   const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) });
   const agents = await client.agent.list({ location: { directory: this.sandbox.workspace } });
   assert(!agents.data.some(agent => agent.id.startsWith('dwf-')));
@@ -306,14 +300,16 @@ Given('общий сервис OpenCode уже работает без роле�
 
 async function assertSkillCatalog(world) {
   const endpoint = await Service.discover({
-    file: join(world.sandbox.state, 'opencode', 'state', 'opencode', 'service.json'),
+    file: join(world.sandbox.env.XDG_STATE_HOME, 'opencode', 'service.json'),
   });
   assert(endpoint, 'Сервис OpenCode должен быть доступен');
   const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) });
   const run = await inspect(world);
   const skills = await client.skill.list({ location: { directory: run.workspace } });
-  assert.deepEqual(skills.data.map(skill => skill.id).sort(), bundledSkills.map(skill => skill.id).sort(),
-    'В общем каталоге должны остаться только скиллы DWF');
+  const skillIds = skills.data.map(skill => skill.id);
+  for (const skill of bundledSkills) assert(skillIds.includes(skill.id));
+  assert(skillIds.includes('opencode'), 'Общий профиль сохраняет встроенные скиллы OpenCode');
+  assert(skillIds.some(id => id.startsWith('dwf-forbidden-')), 'Скиллы пользователя остаются в общем каталоге');
   assert.equal(world.reviewMaterials.length, 3);
   assert.equal(new Set(world.reviewMaterials.map(review => review.path)).size, 3);
   assert.equal(new Set(world.reviewMaterials.map(review => review.revision)).size, 3);
@@ -347,7 +343,7 @@ Then('три роли завершают работу и DWF подтвержд�
     env: this.sandbox.env, encoding: 'utf8' }).trim();
   assert.equal(final.result.commit, commit);
   if (this.existingService) {
-    const service = await readJson(join(this.sandbox.state, 'opencode', 'state', 'opencode', 'service.json'));
+    const service = await readJson(join(this.sandbox.env.XDG_STATE_HOME, 'opencode', 'service.json'));
     assert.equal(service.pid, this.existingService.pid, 'Установка ролевых промптов не должна перезапускать сервис');
     assert.equal(service.id, this.existingService.id);
   }
@@ -426,6 +422,14 @@ Given('подготовлен workflow с одним планнером OpenCode
   assert.notEqual(this.model.provider, 'dwf-acceptance', 'Нужна настоящая модель');
   this.sandbox.env.DWF_STATE_DIR = state;
   this.sandbox.env.DWF_PLANNER_MODEL = process.env.DWF_PLANNER_MODEL;
+  Object.assign(this.sandbox.env, {
+    OPENCODE_CONFIG_DIR: join(state, 'opencode/config'),
+    OPENCODE_DB: join(state, 'opencode/opencode.sqlite'),
+    XDG_CONFIG_HOME: join(state, 'opencode/xdg-config'),
+    XDG_DATA_HOME: join(state, 'opencode/data'),
+    XDG_CACHE_HOME: join(state, 'opencode/cache'),
+    XDG_STATE_HOME: join(state, 'opencode/state'),
+  });
   const existing = await Service.discover({ file: join(state, 'opencode', 'state', 'opencode', 'service.json') });
   assert(!existing, 'TECHNICAL_BLOCKER: остановите сервис выделенного real-профиля перед прогоном');
   const plugins = join(state, 'opencode', 'config', 'plugins');
@@ -643,7 +647,7 @@ Then('другой клиент получает точный результат
 });
 
 When('публичный API OpenCode подтверждает сохранение законченного ответа', async function () {
-  const endpoint = await Service.discover({ file: join(this.sandbox.state, 'opencode', 'state', 'opencode', 'service.json') });
+  const endpoint = await Service.discover({ file: join(this.sandbox.env.XDG_STATE_HOME, 'opencode', 'service.json') });
   assert(endpoint, 'Нужен существующий сервис OpenCode');
   const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) });
   await waitFor(async () => {

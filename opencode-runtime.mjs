@@ -2,7 +2,8 @@ import { execFileSync } from 'node:child_process';
 import { readFile, readdir, mkdir, open, link, unlink, rename } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { setTimeout as pause } from 'node:timers/promises';
-import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { OpenCode, isSessionNotFoundError } from '@opencode/client';
 import { Service } from '@opencode/client/service';
@@ -104,7 +105,9 @@ export async function checkRoleAgents(client, workspace, agents) {
   const deadline = Date.now() + 15000;
   while (true) {
     const available = await client.agent.list({ location: { directory: workspace } });
-    const ready = Object.values(agents).every(id => available.data.some(agent => agent.id === id && agent.system));
+    const pluginReady = !client.dwfProfile || (await client.plugin.list({ location: { directory: workspace } }))
+      .data.some(plugin => plugin.id === 'dwf.role-tools' && plugin.state.status === 'active');
+    const ready = pluginReady && Object.values(agents).every(id => available.data.some(agent => agent.id === id && agent.system));
     if (ready) {
       const expected = Object.entries(agents).flatMap(([role, id]) =>
         id === (role === 'planner' ? plannerId : roleAgents[role]) ? roleSkills[role] ?? [] : []);
@@ -113,12 +116,12 @@ export async function checkRoleAgents(client, workspace, agents) {
       if (expected.every(item => skills.data.some(skill =>
         skill.id === item.id && skill.content.trim() === item.body))) return;
     }
-    if (Date.now() >= deadline) throw publicError('OpenCode не загрузил промпты или скиллы DWF. Если сервис запущен старой версией DWF, перезапусти его после завершения активных запусков.');
+    if (Date.now() >= deadline) throw publicError('OpenCode не загрузил промпты, скиллы или инструменты DWF. Проверь плагины и файловый наблюдатель общего профиля.');
     await pause(100);
   }
 }
 
-export async function connect(root, participants, launch = {}) {
+async function connectLegacy(root, participants, launch) {
   const directory = join(root, 'opencode');
   const state = join(directory, 'state');
   const registration = join(state, 'opencode', 'service.json');
@@ -136,8 +139,6 @@ export async function connect(root, participants, launch = {}) {
         mcp: { servers: {} }, agents: { ...config.agents, 'dwf-planner': planner } }) };
     const port = env.DWF_OPENCODE_PORT ?? process.env.DWF_OPENCODE_PORT ?? '0';
     if (!/^\d+$/.test(port) || Number(port) > 65535) throw publicError('Неверный внутренний порт сервиса.');
-    const version = execFileSync(executable, ['--version'], { encoding: 'utf8', timeout: 30_000 }).trim();
-    if (version !== `opencode v${OPENCODE_VERSION}`) throw publicError('Установленная версия OpenCode несовместима с DWF.');
     // Refuse replacement even if a live service reports a different version than its registration.
     const endpoint = await Service.ensure({ file: registration, version: OPENCODE_VERSION,
       command: [...launch.commandPrefix ?? [], executable, 'serve', '--service', '--hostname', '127.0.0.1', '--port', port], env,
@@ -149,12 +150,85 @@ export async function connect(root, participants, launch = {}) {
   });
 }
 
+export function openCodeProfile(env = process.env) {
+  const home = env.HOME || homedir();
+  const paths = {
+    HOME: home,
+    XDG_CONFIG_HOME: env.XDG_CONFIG_HOME || join(home, '.config'),
+    XDG_DATA_HOME: env.XDG_DATA_HOME || join(home, '.local', 'share'),
+    XDG_CACHE_HOME: env.XDG_CACHE_HOME || join(home, '.cache'),
+    XDG_STATE_HOME: env.XDG_STATE_HOME || join(home, '.local', 'state'),
+  };
+  paths.OPENCODE_CONFIG_DIR = env.OPENCODE_CONFIG_DIR || join(paths.XDG_CONFIG_HOME, 'opencode');
+  for (const key of ['OPENCODE_DB', 'OPENCODE_CONFIG', 'OPENCODE_TEST_HOME']) {
+    if (env[key]) paths[key] = env[key];
+  }
+  return { registration: join(paths.XDG_STATE_HOME, 'opencode', 'service.json'),
+    configDirectory: paths.OPENCODE_CONFIG_DIR, env: paths };
+}
+
+async function sharedAgents(directory, participants = {}) {
+  const agents = { [plannerId]: planner,
+    ...Object.fromEntries(Object.entries(roleAgents).map(([role, id]) => [id,
+      { mode: 'primary', system: roleSystemPrompt(role), permissions: rolePermissions(role) }])),
+    ...Object.fromEntries(Object.values(participants).map(item => [item.id, item.agent])) };
+  const agentDirectory = join(directory, 'agents');
+  await mkdir(agentDirectory, { recursive: true, mode: 0o700 });
+  for (const [id, { system, ...agent }] of Object.entries(agents)) {
+    // Native agent files avoid changing the user's providers, plugins and policies.
+    await writeOnce(join(agentDirectory, `${id}.md`),
+      `---\n${JSON.stringify({ ...agent, hidden: true })}\n---\n${system}\n`);
+  }
+  for (const skill of bundledSkills) {
+    const target = join(directory, 'skills', skill.id);
+    await mkdir(target, { recursive: true, mode: 0o700 });
+    await writeOnce(join(target, 'SKILL.md'), skill.content);
+  }
+  const plugins = join(directory, 'plugins');
+  await mkdir(plugins, { recursive: true, mode: 0o700 });
+  const filename = join(plugins, 'dwf-tools.js');
+  const content = await readFile(new URL('./opencode-tools.mjs', import.meta.url), 'utf8');
+  const previous = await readFile(filename, 'utf8').catch(error => {
+    if (error.code !== 'ENOENT') throw error;
+  });
+  if (content !== previous) {
+    const temporary = `${filename}.${randomUUID()}.tmp`;
+    await writeOnce(temporary, content);
+    await rename(temporary, filename);
+  }
+}
+
+export async function connect(root, participants, launch = {}) {
+  const version = execFileSync(executable, ['--version'], { encoding: 'utf8', timeout: 30_000 }).trim();
+  if (version !== `opencode v${OPENCODE_VERSION}`) throw publicError('Установленная версия OpenCode несовместима с DWF.');
+  // Older runs keep their original database and sessions until they finish.
+  if (launch.profile === 'legacy') return connectLegacy(root, participants, launch);
+  const profile = launch.profile ?? openCodeProfile({ ...process.env, ...launch.env });
+  const lock = join(dirname(profile.registration), 'dwf');
+  await mkdir(lock, { recursive: true, mode: 0o700 });
+  return withServiceLock(lock, async () => {
+    await sharedAgents(profile.configDirectory, participants);
+    const port = launch.env?.DWF_OPENCODE_PORT ?? process.env.DWF_OPENCODE_PORT ?? '0';
+    if (!/^\d+$/.test(port) || Number(port) > 65535) throw publicError('Неверный внутренний порт сервиса.');
+    const endpoint = await Service.ensure({ file: profile.registration, version: OPENCODE_VERSION,
+      command: [...launch.commandPrefix ?? [], executable, 'serve', '--service', '--hostname', '127.0.0.1', '--port', port],
+      env: { ...launch.env, ...profile.env, OPENCODE_DISABLE_AUTOUPDATE: 'true' },
+      onStart(reason) {
+        if (reason === 'version-mismatch') throw publicError('Версия общего сервиса OpenCode отличается. Требуется явное обновление.');
+      } });
+    return Object.assign(OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) }),
+      { dwfProfile: profile });
+  });
+}
+
 export async function checkModel(client, workspace, selected, reasoning) {
   const models = await client.model.list({ location: { directory: workspace } });
-  const model = models.data.find(item => item.providerID === selected.provider && item.id === selected.modelId && item.enabled);
-  if (!model) throw publicError('Выбранная модель отсутствует в каталоге OpenCode или недоступна.');
+  const name = `${selected.provider}/${selected.modelId}`;
+  const model = models.data.find(item => item.providerID === selected.provider && item.id === selected.modelId);
+  if (!model) throw publicError(`Модель ${name} отсутствует в общем каталоге OpenCode. Проверь opencode models и opencode auth list.`);
+  if (!model.enabled) throw publicError(`Модель ${name} отключена в общем профиле OpenCode. Проверь opencode auth list.`);
   if (reasoning !== undefined && !model.variants.some(item => item.id === reasoning)) {
-    throw publicError('Выбранная модель не поддерживает DWF_PLANNER_REASONING; уровень не был изменён автоматически.');
+    throw publicError(`Модель ${name} не поддерживает reasoning ${reasoning}. Доступны ${model.variants.map(item => item.id).join(', ')}.`);
   }
   return { providerID: selected.provider, id: selected.modelId,
     ...(reasoning === undefined ? {} : { variant: reasoning }) };

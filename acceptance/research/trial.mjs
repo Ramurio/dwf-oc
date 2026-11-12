@@ -127,8 +127,9 @@ export async function summarizeTrial(directory, caseId) {
   const checked = checkResearchRun(workflow, caseTask(caseId));
   const wire = await modelEvidence(join(directory, 'evidence/provider.jsonl'),
     [attempt.sessionId, ...checked.sessions]);
-  const tools = { ...sessionTools(join(directory, 'opencode'), [attempt.sessionId]),
-    ...sessionTools(join(attempt.stateDirectory, 'opencode'), checked.sessions) };
+  const tools = attempt.opencode ? sessionTools(join(directory, 'opencode'), [attempt.sessionId, ...checked.sessions]) :
+    { ...sessionTools(join(directory, 'opencode'), [attempt.sessionId]),
+      ...sessionTools(join(attempt.stateDirectory, 'opencode'), checked.sessions) };
   const toolCounts = {};
   for (const call of Object.values(tools).flat()) toolCounts[call.name] = (toolCounts[call.name] ?? 0) + 1;
   const finished = (await stat(join(directory, 'assessment.json'))).mtimeMs;

@@ -9,7 +9,8 @@
 Потребуются Git, npm и Node.js в PATH. Рекомендуется Node **24 LTS** из
 [официальной установки](https://nodejs.org/en/download). DWF поддерживает диапазон
 `^22.19.0 || ^24.0.0 || >=26`. При использовании менеджера Node настрой его
-инициализацию и версию по умолчанию для новых терминалов.
+инициализацию и версию по умолчанию для новых терминалов и login-shell.
+При использовании nvm проверь его загрузку также в неинтерактивном `bash -lc`.
 
 Получи доступ к приватным репозиториям
 [Ramurio/dwf-oc](https://github.com/Ramurio/dwf-oc) и
@@ -91,6 +92,7 @@ command -v node npm dwf opencode
 dwf schema
 opencode --version
 bash -lc 'cd /; command -v node npm dwf opencode; dwf schema; opencode --version'
+env -i HOME="$HOME" USER="$USER" PATH=/usr/bin:/bin bash -lc 'node --version; dwf schema; opencode --version'
 ```
 
 Ожидаются `dwf` и `opencode` из `~/.local/bin` и `opencode v2.2.5`.
@@ -103,7 +105,7 @@ bash -lc 'cd /; command -v node npm dwf opencode; dwf schema; opencode --version
 [Ramurio/ramu-skills](https://github.com/Ramurio/ramu-skills/tree/main/skills/dwf-oc).
 Он составляет workflow и управляет запуском через CLI.
 Скиллы участников `code-work`, `code-review`, `code-verify` и другие уже поставляются
-с DWF. DWF подключает их автоматически в собственном профиле.
+с DWF. DWF подключает их автоматически в общем профиле OpenCode.
 
 Для ведущего агента в OpenCode 2.2.5 скопируй весь каталог управляющего скилла.
 В нём должна сохраниться инструкция `references/cli.md`.
@@ -116,59 +118,38 @@ cp -R "$HOME/src/ramu-skills/skills/dwf-oc" "$OC_CONFIG_DIR/skills/dwf-oc"
 cp "$HOME/src/ramu-skills/LICENSE" "$OC_CONFIG_DIR/skills/dwf-oc/LICENSE"
 ```
 
-Открой пользовательский `opencode.json` или `opencode.jsonc` в этом каталоге.
-Команда `opencode debug config` показывает используемые файлы.
-Добавь следующие настройки, сохранив остальные поля, пути и плагины.
-Для перечисленных плагинов оставь указанные записи.
-Подставь свой абсолютный путь в `skills`. JSON сохраняет `~` и `$HOME` буквально.
-
-```json
-{
-  "skills": ["/home/USER/.config/opencode/skills"],
-  "plugins": ["-opencode.skill", "-opencode.config.compatibility", "opencode.config.skill", "opencode.tool.skill"]
-}
-```
-
-Этот набор включает нативные скиллы OpenCode 2.2.5 и отключает старую совместимость.
-Если существующая установка зависит от старой конфигурации, сохрани её и выбери
-отдельный профиль ведущего агента. Подробнее о профилях написано ниже.
-
-Выполни `opencode reload`. Затем проверь `opencode api skill.list`.
+OpenCode 2.2.5 автоматически читает каталог `skills` пользовательского профиля.
+Проверь `opencode api skill.list`.
 В `data` должен появиться `id: "dwf-oc"`. При первом чтении дай конфигурации
 загрузиться и повтори команду. В новой сессии попроси агента загрузить `dwf-oc`
 и прочитать `references/cli.md`.
 
-Обычный `opencode` открывает личный профиль ведущего агента.
-При необходимости войди в него через `opencode auth login openai`.
 Для другого агента используй его поддерживаемый каталог скиллов.
 
 ## 5. Авторизовать участников DWF
 
-Вход выполняет пользователь в интерактивном терминале.
-По умолчанию состояние DWF хранится в `~/.dwf` вне целевого проекта.
-Создай сервис или подключись к существующему.
+Пользователь и участники DWF используют один сервис OpenCode и один вход.
+Уже подключённый аккаунт доступен DWF сразу. Для первого входа через ChatGPT
+выполни команду в обычном терминале.
 
 ```sh
-export DWF_STATE_DIR="${DWF_STATE_DIR:-$HOME/.dwf}"
-cd "$HOME/src/dwf-oc"
-(
-  unset OPENCODE_CONFIG OPENCODE_CONFIG_CONTENT
-  node --input-type=module -e 'import {connect} from "./opencode-runtime.mjs"; await connect(process.env.DWF_STATE_DIR)'
-)
-OPENCODE_CONFIG_DIR="$DWF_STATE_DIR/opencode/config" \
-XDG_STATE_HOME="$DWF_STATE_DIR/opencode/state" \
-opencode auth login openai
-
-OPENCODE_CONFIG_DIR="$DWF_STATE_DIR/opencode/config" \
-XDG_STATE_HOME="$DWF_STATE_DIR/opencode/state" \
+opencode auth login openai --method chatgpt-browser
 opencode auth list
+opencode models
 ```
 
 Следуй подсказкам OpenCode и браузера своим аккаунтом.
 Сообщи агенту только о завершении входа. `auth list` должен показывать подключённый
-OpenAI в профиле DWF. Авторизация личного профиля ведущего агента выполняется отдельно.
-Состояние и вход сохраняются после перезагрузки. DWF подключит сервис при следующем
-обращении.
+OpenAI. В OpenCode 2.2.5 метод `chatgpt-browser` называется `Codex browser (legacy)`.
+Он предоставляет каталог Codex с вариантами Sol Fast и Ultrafast. У метода
+`Sign in with ChatGPT` в этой версии другой каталог с ограниченным списком моделей.
+[Реализация входа Codex](https://github.com/anomalyco/opencode/blob/v2.2.5/packages/core/src/plugin/provider/openai.ts)
+и [каталог token-sharing](https://github.com/anomalyco/opencode/blob/v2.2.5/packages/core/src/plugin/provider/chatgpt.ts).
+
+Выбирай в workflow точное имя из `opencode models`. DWF проверяет доступность
+модели и reasoning перед запуском. Для другого способа входа используй
+`opencode auth login openai` и подсказки OpenCode.
+Вход сохраняется после перезагрузки. DWF подключит общий сервис при следующем обращении.
 
 ## 6. Проверить первый запуск
 
@@ -218,7 +199,8 @@ dwf inspect <runId> --watch
 ### Пути и версии
 
 `npm ci` устанавливает зависимости локально. Регистрация команд выполняется на
-шаге 3. DWF использует собственный OpenCode **2.2.5** и проверяет точную версию.
+шаге 3. Пользователь и DWF используют OpenCode **2.2.5** из одной установки.
+DWF проверяет точную версию.
 Сохраняй её при обновлениях. Команда `opencode upgrade` изменяет закреплённый бинарник.
 
 Если команда пропала после входа, проверь login-файл и инициализацию Node.
@@ -229,19 +211,18 @@ dwf inspect <runId> --watch
 
 ### Профили и сохранность настроек
 
-Для отдельного профиля ведущего агента задай свои абсолютные `OPENCODE_CONFIG_DIR`,
-`XDG_STATE_HOME` и `OPENCODE_DB` перед запуском OpenCode. Повтори шаг 4 в этом
-профиле. Эти переменные должны использоваться и в следующих терминалах.
+Обычный профиль использует `~/.config/opencode`, `~/.local/share/opencode`
+и `~/.local/state/opencode`. DWF добавляет versioned-файлы агентов и скиллов,
+а также `plugins/dwf-tools.js` для соблюдения возможностей ролей внутри
+DWF-сессий. Пользовательские настройки провайдеров и плагинов сохраняются.
 
-Другой `DWF_STATE_DIR` должен быть абсолютным. Сохрани его `export` в shell-файле.
-Существующий корень содержит запуски, пресеты, конфигурацию и авторизацию.
-При первой настройке DWF может сохранить переданные `OPENCODE_CONFIG` и
-`OPENCODE_CONFIG_CONTENT`. Шаг 5 использует стандартную начальную конфигурацию
-или ранее сохранённую конфигурацию DWF. Собственную конфигурацию передавай осознанно
-при создании нового корня.
+`OPENCODE_CONFIG_DIR`, `XDG_*` и `OPENCODE_DB` выбирают профиль OpenCode для обеих
+команд. Используй одинаковое окружение для `opencode` и `dwf`.
+Другой `DWF_STATE_DIR` должен быть абсолютным. Он содержит запуски, пресеты
+и рабочие деревья. Смена этого каталога сохраняет общий вход и каталог моделей.
+Старые запуски продолжают использовать свою сохранённую базу до завершения.
 
-Ошибка несовместимой конфигурации защищает рабочий профиль. Верни исходное
-окружение либо выбери отдельный корень. Авторизацию проверяй через `auth list`.
+Авторизацию проверяй через `opencode auth list`.
 Команда `auth export` выводит секреты. Храни учётные данные вне публикуемых файлов.
 
 ### Повторные установки и обновления
@@ -257,7 +238,8 @@ workflow и сессий этой установки. При обновлени�
 
 `Repository not found` при clone часто означает отсутствие доступа к приватному
 репозиторию. При ошибке postinstall проверь Node, сеть и optional dependencies.
-При недоступной модели проверь авторизацию и каталог моделей профиля DWF.
+При недоступной модели проверь `opencode auth list` и `opencode models`
+в том же окружении, где запускается DWF.
 В новых графах задавай обычную модель явно. Текущий fallback обычных ролей DWF
 использует `gpt-6.1-sol-ultrafast`.
 [Настройки CLI и моделей](workflow.md#настройки-и-хранение).
