@@ -661,6 +661,38 @@ test('stop catches a resistant shell created after the initial process snapshot'
   }, 1000, 'native shell reaped');
 });
 
+test('native orchestrator receives a blocker, dispatches a correction and completes after checks', { timeout: 60000 }, async t => {
+  const definition = { task: 'Resolve the implementation question through the workflow graph', entry: 'manager',
+    nodes: { manager: { role: 'orchestrator', tools: [], skills: [], instructions: 'NATIVE_MANAGER' },
+      work: { role: 'worker', tools: [], skills: [], instructions: 'NATIVE_WORK' },
+      review: { role: 'reviewer', tools: [], skills: [], instructions: 'NATIVE_REVIEW' },
+      verify: { role: 'verifier', tools: [], skills: [], instructions: 'NATIVE_VERIFY' } },
+    transitions: { manager: { implement: 'work', recheck: 'review', done: null },
+      work: { done: 'review', blocked: 'manager' }, review: { approve: 'verify', changes: 'work' },
+      verify: { approve: 'manager', changes: 'work' } } };
+  let decisions = 0;
+  let attempts = 0;
+  const sandbox = await fixture(t, definition, ({ prompt }) => {
+    if (prompt.startsWith('NATIVE_MANAGER')) {
+      decisions++;
+      if (decisions === 2) assert.match(prompt, /Need an interface decision/);
+      return JSON.stringify({ outcome: decisions < 3 ? 'implement' : 'done', summary: 'Keep the current interface' });
+    }
+    if (prompt.startsWith('NATIVE_WORK')) {
+      if (attempts++) assert.match(prompt, /Keep the current interface/);
+      return JSON.stringify({ outcome: attempts === 1 ? 'blocked' : 'done', summary: 'Need an interface decision' });
+    }
+    return verdict('approve');
+  });
+  await sandbox.release();
+  const result = await sandbox.finish();
+  assert.equal(result.status, 'succeeded', result.error);
+  assert.deepEqual(result.visits.map(visit => visit.node), ['manager', 'work', 'manager', 'work', 'review', 'verify', 'manager']);
+  assert.equal(result.visits[1].verdict.outcome, 'blocked');
+  assert.equal(result.visits[1].sessionId, result.visits[3].sessionId);
+  assert.equal(result.visits[0].sessionId, result.visits[6].sessionId);
+});
+
 test('fixed groups run concurrently and recover without repeating completed members', { timeout: 60000 }, async t => {
   const definition = { task: 'Collect two independent reviews', workspace: 'directory', entry: 'reviews',
     nodes: { left: { role: 'reviewer', tools: [], skills: [], instructions: 'member=left' },

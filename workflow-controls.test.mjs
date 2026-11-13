@@ -13,6 +13,7 @@ registerHooks({
   load(url, context, next) {
     if (url === new URL('./opencode-runtime.mjs', import.meta.url).href) {
       return { format: 'module', shortCircuit: true, source: `
+        export const OPENCODE_VERSION = '2.2.5';
         export const connect = async () => globalThis.dwfControlIO.connect();
         export const checkRoleAgents = async () => {};
         export const admit = async (_client, request) => globalThis.dwfControlIO.admit(request);
@@ -36,6 +37,134 @@ registerHooks({
 });
 const { publicWorkflow, runWorkflow } = await import('./workflow-runtime.mjs');
 const { prepareGroup } = await import('./workflow-groups.mjs');
+
+function orchestration() {
+  const nodes = { manager: { role: 'orchestrator' } };
+  const transitions = { manager: { taskA: 'a_work', taskB: 'b_work', recheckB: 'b_review', done: null } };
+  for (const id of ['a', 'b']) {
+    nodes[`${id}_work`] = { role: 'worker' };
+    nodes[`${id}_review`] = { role: 'reviewer' };
+    nodes[`${id}_verify`] = { role: 'verifier' };
+    transitions[`${id}_work`] = { done: `${id}_review` };
+    transitions[`${id}_review`] = { approve: `${id}_verify`, changes: `${id}_work` };
+    transitions[`${id}_verify`] = { approve: 'manager', changes: `${id}_work` };
+  }
+  return { task: 'Implement two compatible tasks', entry: 'manager', nodes, transitions };
+}
+
+test('orchestrator routes two implementations, returns a compatibility fix and merges only after fresh checks', async t => {
+  const definition = orchestration();
+  const f = await fixture(t, { definition, merge: true });
+  let revision = 'base';
+  let workCount = 0;
+  let decisions = 0;
+  let merges = 0;
+  const reviewed = new Set();
+  io.snapshot = () => revision;
+  io.merge = () => { merges++; return 'combined-commit'; };
+  io.read = async request => {
+    const visit = f.state().visits.at(-1);
+    const role = definition.nodes[visit.node].role;
+    let outcome;
+    let summary = 'Checked';
+    if (role === 'worker') { revision = `tree-${++workCount}`; outcome = 'done'; }
+    else if (role === 'orchestrator') {
+      outcome = ['taskA', 'taskB', 'taskA', 'recheckB', 'done'][decisions++];
+      summary = outcome === 'taskA' && decisions === 3 ? 'Correct A to preserve the interface introduced by B' : 'Proceed';
+    } else if (visit.node === 'a_review' && !reviewed.has('a_review')) {
+      outcome = 'changes'; summary = 'Handle empty input'; reviewed.add('a_review');
+    } else outcome = 'approve';
+    if (visit.node === 'a_work' && workCount === 4) {
+      assert.match(request.request.text, /Correct A to preserve the interface introduced by B/);
+    }
+    return { outcome: { status: 'succeeded', result: JSON.stringify({ outcome, summary }) } };
+  };
+  await f.run();
+  const state = f.state();
+  assert.equal(state.status, 'succeeded', state.error);
+  assert.equal(merges, 1);
+  assert.deepEqual(state.visits.map(visit => visit.node), [
+    'manager', 'a_work', 'a_review', 'a_work', 'a_review', 'a_verify', 'manager',
+    'b_work', 'b_review', 'b_verify', 'manager', 'a_work', 'a_review', 'a_verify',
+    'manager', 'b_review', 'b_verify', 'manager',
+  ]);
+  for (const node of ['manager', 'a_work', 'b_review']) {
+    assert.equal(new Set(state.visits.filter(visit => visit.node === node).map(visit => visit.sessionId)).size, 1);
+  }
+  const { workflowView } = await import('./ui-data.mjs');
+  const view = workflowView(state, { root: f.root });
+  assert.equal(view.graph.nodes.length, 8);
+  for (const target of ['a_work', 'b_work', 'b_review']) {
+    assert(view.graph.edges.some(edge => edge.from === 'manager' && edge.to === target));
+  }
+  assert(view.graph.edges.some(edge => edge.from === 'a_verify' && edge.to === 'manager' && edge.reentry));
+});
+
+for (const decision of ['done', 'invented', 'blocked']) {
+  test(`orchestrator ${decision} cannot bypass outstanding checks or invent a route`, async t => {
+    const f = await fixture(t, { definition: orchestration(), merge: true });
+    let merges = 0;
+    io.merge = () => { merges++; };
+    io.read = async () => ({ outcome: { status: 'succeeded',
+      result: JSON.stringify({ outcome: decision, summary: 'Not ready' }) } });
+    await f.run();
+    assert.equal(f.state().status, 'failed');
+    assert.equal(f.admitted.length, 1);
+    assert.equal(merges, 0);
+  });
+}
+
+test('an explicit blocked route returns a worker question to orchestrator and preserves the session', async t => {
+  const definition = orchestration();
+  definition.transitions.a_work.blocked = 'manager';
+  const f = await fixture(t, { definition });
+  let decisions = 0;
+  io.read = async request => {
+    const node = f.state().visits.at(-1).node;
+    if (node === 'manager') {
+      if (decisions++) {
+        assert.match(request.request.text, /Need a decision on the shared interface/);
+        return { outcome: { status: 'succeeded', result: '{"outcome":"taskA","summary":"Use the existing public interface"}' } };
+      }
+      return { outcome: { status: 'succeeded', result: '{"outcome":"taskA","summary":"Implement A"}' } };
+    }
+    if (decisions === 2) {
+      assert.match(request.request.text, /Use the existing public interface/);
+      f.command('stop');
+    }
+    return { outcome: { status: 'succeeded', result: '{"outcome":"blocked","summary":"Need a decision on the shared interface"}' } };
+  };
+  await f.run();
+  const visits = f.state().visits;
+  assert.deepEqual(visits.map(visit => visit.node), ['manager', 'a_work', 'manager', 'a_work']);
+  assert.equal(visits[1].sessionId, visits[3].sessionId);
+  assert.equal(f.state().status, 'cancelled');
+});
+
+test('saved orchestrator route resumes without repeating the decision and stop wins over dispatch', async t => {
+  const definition = orchestration();
+  const saved = { node: 'manager', sessionId: 'saved-manager', inputId: 'saved-decision', admitted: true,
+    revision: 'original', verdict: { outcome: 'taskB', summary: 'Implement B first' } };
+  const f = await fixture(t, { definition, visits: [saved] });
+  io.read = async request => {
+    assert.equal(f.state().visits.at(-1).node, 'b_work');
+    assert.match(request.request.text, /Implement B first/);
+    f.command('stop');
+    return { outcome: { status: 'succeeded', result: '{"outcome":"done","summary":"Done"}' } };
+  };
+  await f.run();
+  assert.equal(f.admitted.length, 1);
+  assert.equal(f.state().status, 'cancelled');
+  const stopped = await fixture(t, { definition });
+  io.read = async () => {
+    stopped.command('stop');
+    return { outcome: { status: 'succeeded', result: '{"outcome":"taskA","summary":"Start A"}' } };
+  };
+  await stopped.run();
+  assert.equal(stopped.admitted.length, 1);
+  assert.deepEqual(stopped.state().visits.map(visit => visit.node), ['manager']);
+  assert.equal(stopped.state().status, 'cancelled');
+});
 
 async function fixture(t, options = {}) {
   const root = await mkdtemp(join(tmpdir(), 'dwf-control-test-'));

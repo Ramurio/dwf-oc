@@ -185,9 +185,15 @@ async function presetCommand(args) {
     json({ presets: presets(stateRoot()).map(item => item.name) });
     return;
   }
+  if (args.length === 2 && args[0] === 'show') {
+    const definition = presets(stateRoot()).find(item => item.name === args[1])?.definition;
+    if (!definition) throw publicError('Пресет не найден: ' + args[1]);
+    json(definition);
+    return;
+  }
   if (args.length !== 4 || args[0] !== 'save' || !['--file', '--from-run'].includes(args[2]) ||
     !args[1].trim() || args[1] !== args[1].trim() || /\p{Cc}/u.test(args[1])) {
-    throw publicError('Использование: dwf preset list | dwf preset save <имя> --file <workflow.json> | --from-run <run-id>.');
+    throw publicError('Использование: dwf preset list | dwf preset show <имя> | dwf preset save <имя> --file <workflow.json> | --from-run <run-id>.');
   }
   const root = stateRoot();
   const definition = validateWorkflow(args[2] === '--from-run' ? presetFromRun(root, args[3]) :
@@ -205,7 +211,7 @@ const usage = {
     'Без --watch возвращает один JSON. С --watch выводит JSON-события snapshot/update до завершения.',
     'Закрытие наблюдения оставляет workflow работающим.'],
   schema: ['dwf schema', 'Показывает формат workflow, роли и результаты переходов.'],
-  preset: ['dwf preset list', 'dwf preset save <имя> --file workflow.json',
+  preset: ['dwf preset list', 'dwf preset show <имя>', 'dwf preset save <имя> --file workflow.json',
     'dwf preset save <имя> --from-run <run-id>'],
   steer: ['dwf steer <run-id> <участник> --message-file <файл>', 'Передаёт уточнение участнику на границе ответа.'],
   stop: ['dwf stop <run-id>', 'Останавливает workflow и возвращает подтверждённое терминальное состояние.'],
@@ -224,6 +230,7 @@ try {
       '  dwf ui --start | --stop | --status',
       '  dwf schema',
       '  dwf preset list',
+      '  dwf preset show <имя>',
       '  dwf preset save <имя> --file workflow.json',
       '  dwf preset save <имя> --from-run <run-id>',
       '',
@@ -237,7 +244,7 @@ try {
     ].join('\n'));
   } else if (Object.hasOwn(usage, command) && args.length === 1 && ['--help', '-h'].includes(args[0])) {
     process.stdout.write(usage[command].join('\n') + '\n');
-  } else if (command === 'preset' && ['list', 'save'].includes(args[0]) && args.length === 2 && ['--help', '-h'].includes(args[1])) {
+  } else if (command === 'preset' && ['list', 'show', 'save'].includes(args[0]) && args.length === 2 && ['--help', '-h'].includes(args[1])) {
     process.stdout.write(usage.preset.join('\n') + '\n');
   } else if (command === 'ui') json(await uiCommand(stateRoot(), args));
   else if (command === 'start' && args.length === 2 && args[0] === '--file') await start(args[1]);
@@ -251,6 +258,10 @@ try {
     nodes: { execute: { role: 'worker' } }, transitions: { execute: { done: null } },
   },
     roles: outcomes, tools: roleTools,
+    orchestrator: { outcomes: 'done и именованные решения из transitions этого узла; blocked останавливает выполнение',
+      transitions: { implementTask: 'execute', done: null },
+      escalation: 'worker, reviewer и verifier могут иметь переход blocked к orchestrator; без него blocked останавливает запуск',
+      result: { outcome: 'implementTask', summary: 'Причина выбора и поручение адресату' } },
     settings: ['model', 'reasoning', 'tools', 'skills', 'memory'],
     groups: { fixed: { members: ['participantOne', 'participantTwo'], required: ['participantOne', 'participantTwo'] },
       map: { member: 'participant', itemsFrom: 'planningParticipant' },

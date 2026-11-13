@@ -7,7 +7,7 @@ import { setTimeout as pause } from 'node:timers/promises';
 import { admit, checkRoleAgents, connect, readExecution, stopSessions, captureStopSessions, interruptSessions } from './opencode-runtime.mjs';
 import { claimWorkflow, getWorkflow, updateWorkflow, workflowHasOwner, publicError, withWorkflowAction } from './run-store.mjs';
 import { parseVerdict, rolePermissions, rolePrompt, roleAgents, checkApprovals, workflowCommitTitle,
-  participantVisits, validateItems } from './workflow-definition.mjs';
+  participantVisits, validateItems, decisionOutcomes } from './workflow-definition.mjs';
 import { researchGraph, researchResult, scientistPhase, validateScientistVerdict } from './research-workflow.mjs';
 import { mergeWorkspace, snapshot, writeReviewDiff, verificationWorkspace } from './workflow-git.mjs';
 import { prepareGroup, groupVerdict, integrateGroup } from './workflow-groups.mjs';
@@ -111,7 +111,7 @@ function finishParticipant(state, visit, outcome) {
   if (outcome.status !== 'succeeded') throw publicError(outcome.error);
   let verdict;
   try {
-    verdict = parseVerdict(outcome.result, role);
+    verdict = parseVerdict(outcome.result, role, decisionOutcomes(state.definition, visit.node));
     if (role === 'scientist') {
       validateScientistVerdict(researchGraph(state.definition), state.visits.slice(0, -1),
         verdict, validateItems, message => { throw publicError(message); });
@@ -385,7 +385,8 @@ export async function runWorkflow(root, id) {
         visit.verdict = { outcome: 'blocked', summary: error.publicMessage };
       }
       if (visit.steering) state.controls.find(command => command.id === visit.steering).status = 'applied';
-      if (visit.verdict?.outcome === 'blocked' && !state.controls?.some(command => command.status === 'pending')) throw publicError(visit.verdict.summary);
+      if (visit.verdict?.outcome === 'blocked' && !state.definition.transitions[visit.node].blocked &&
+        !state.controls?.some(command => command.status === 'pending')) throw publicError(visit.verdict.summary);
       save(false);
     } catch (error) {
       if (error.code === 'DWF_OWNER_LOST') break;

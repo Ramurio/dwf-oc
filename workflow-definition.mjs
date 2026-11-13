@@ -81,10 +81,23 @@ export function validateWorkflow(value) {
   for (const id of Object.keys(entries)) {
     const expected = value.nodes[id] ? outcomes[value.nodes[id].role] : groupOutcomes;
     const routes = value.transitions[id];
-    if (!object(routes) || Object.keys(routes).some(key => !expected.includes(key))) reject('неверные переходы ' + id);
+    const manages = value.nodes[id]?.role === 'orchestrator';
+    const canEscalate = ['worker', 'reviewer', 'verifier'].includes(value.nodes[id]?.role);
+    if (!object(routes) || Object.keys(routes).some(key => manages
+      ? !identifier(key) || key === 'blocked' : !expected.includes(key) && !(canEscalate && key === 'blocked'))) reject('неверные переходы ' + id);
     for (const outcome of expected) {
       if (!Object.hasOwn(routes, outcome)) reject(`нужен переход ${id}.${outcome}`);
+    }
+    for (const outcome of Object.keys(routes)) {
       if (routes[outcome] !== null && (!identifier(routes[outcome]) || !Object.hasOwn(entries, routes[outcome]))) reject('неизвестный адресат перехода.');
+      if (manages && outcome !== 'done' && routes[outcome] === null) reject('Только done orchestrator может завершать workflow.');
+      if (outcome === 'blocked' && (routes[outcome] === null || value.nodes[routes[outcome]]?.role !== 'orchestrator')) {
+        reject('blocked может передавать препятствие только orchestrator.');
+      }
+    }
+    if (manages && Object.keys(routes).length > 1 && Object.values(value.groups ?? {}).some(group =>
+      group.member === id || group.members?.includes(id))) {
+      reject('Управляющий orchestrator должен быть отдельным узлом: группа не исполняет переходы участников.');
     }
   }
   if (Object.keys(value.transitions).some(id => !Object.hasOwn(entries, id))) reject('переход от неизвестного участника.');
@@ -151,7 +164,12 @@ function verdictObjects(text) {
   return objects;
 }
 
-export function parseVerdict(text, role) {
+export function decisionOutcomes(definition, nodeId) {
+  const role = definition.nodes[nodeId].role;
+  return role === 'orchestrator' ? Object.keys(definition.transitions[nodeId]) : outcomes[role];
+}
+
+export function parseVerdict(text, role, allowed = outcomes[role]) {
   const objects = verdictObjects(text);
   if (objects.length !== 1) {
     throw publicError('Участник вернул неверный JSON результата.');
@@ -165,7 +183,7 @@ export function parseVerdict(text, role) {
   if (normalizedObjects.length !== 1 || unfenced.slice(normalizedObjects[0].end).trim()) {
     throw publicError('Участник вернул неверный JSON результата.');
   }
-  if (!object(result) || ![...outcomes[role], 'blocked'].includes(result.outcome) ||
+  if (!object(result) || ![...allowed, 'blocked'].includes(result.outcome) ||
     typeof result.summary !== 'string' || !result.summary.trim()) {
     throw publicError('Результат участника требует допустимый outcome и непустой summary.');
   }
@@ -203,14 +221,15 @@ export function participantAgent(role, config) {
   return { id, agent };
 }
 
-export function checkApprovals(state, revision) {
+export function approvalProblems(state, revision) {
   const required = [];
+  const problems = [];
   for (const [id, node] of Object.entries(state.definition.nodes)) {
     if (!['reviewer', 'verifier'].includes(node.role) || node.required === false) continue;
     const maps = Object.entries(state.definition.groups ?? {}).filter(([, group]) => group.member === id);
     for (const [groupId] of maps) {
       const latest = state.visits.findLast(visit => visit.node === groupId);
-      if (!latest) throw publicError(`Для завершения нужны результаты ${groupId}.`);
+      if (!latest) { problems.push(`Для завершения нужны результаты ${groupId}.`); continue; }
       for (const child of latest.children) required.push({ id: child.participant, role: node.role,
         visit: participantVisits(state.visits).findLast(visit => visit.participant === child.participant) });
     }
@@ -219,12 +238,18 @@ export function checkApprovals(state, revision) {
   }
   for (const { id, visit } of required) {
     if (visit?.verdict?.outcome !== 'approve' || visit.revision !== revision) {
-      throw publicError(`Для завершения нужно одобрение ${id} текущей версии.`);
+      problems.push(`Для завершения нужно одобрение ${id} текущей версии.`);
     }
   }
   if (state.definition.merge && !['reviewer', 'verifier'].every(role => required.some(item => item.role === role))) {
-    throw publicError('Для merge нужны фактические одобрения reviewer и verifier.');
+    problems.push('Для merge нужны фактические одобрения reviewer и verifier.');
   }
+  return problems;
+}
+
+export function checkApprovals(state, revision) {
+  const problems = approvalProblems(state, revision);
+  if (problems.length) throw publicError(problems[0]);
 }
 
 export function workflowCommitTitle(state, revision) {
@@ -278,14 +303,15 @@ const roleInstructions = {
     'An optional scope and ! for a breaking change follow Conventional Commits, for example "DWF fix(admission): preserve the saved input on retry". Put verification evidence and limitations after a blank line.',
   ].join('\n'),
   orchestrator: [
-    'Summarize the history of completed stages. Preserve project files.',
-    'Cover the task result, findings, corrections and reviewers\' decisions for the current revision when those stages are present. Distinguish participants\' reports and your own observations. Identify missing information and unfinished work.',
-    'Return done when the summary is complete using the available history. This status records completion of the summary. Stage decisions determine the overall workflow result. DWF adds the actual integration result after this stage. Summarize the completed stages and leave that final integration status to DWF.',
-    'In summary, give the outcome and the material evidence supporting it.',
+    'Manage the assigned work through the supplied workflow graph. Choose an outcome from this node\'s configured transitions; DWF executes its target. In summary, give the reason and the target\'s assignment or correction.',
+    'Preserve project files. Delegate implementation and checks to the configured participants. DWF owns execution, session reuse and integration; do not launch nested workflows or perform Git integration yourself.',
+    'Return done when your assigned stage is complete. If done ends the workflow, the requested work must be complete and the supplied approval requirements satisfied. DWF checks the current revision again before completing or merging. Your decision is not evidence that integration happened.',
+    'When configured only with done, complete the assigned report or preparation using the supplied history; the configured target determines whether another stage follows. Return blocked when the available routes cannot resolve missing information or unfinished work.',
   ].join('\n'),
 };
 
 function resultInstructions(role) {
+  if (role === 'orchestrator') return 'Your final response must be JSON {"outcome":"configured transition name or blocked","summary":"decision reason and next assignment, or final report"}. Choose one outcome value from the supplied transitions, or blocked.';
   return `Your final response must be JSON {"outcome":"${outcomes[role].join('|')}|blocked","summary":"result or specific findings"}. Choose one outcome value.`;
 }
 
@@ -311,6 +337,7 @@ export function rolePrompt(definition, nodeId, previous, revision, visits = [], 
     ].filter(Boolean).join('\n\n');
   }
   const research = Object.hasOwn(researchRoles, node.role);
+  const routes = definition.transitions?.[nodeId] ?? { done: null };
   const nextId = definition.transitions?.[transitionSource]?.approve;
   const nextNode = nextId == null ? undefined : definition.nodes[nextId];
   const verification = nextNode?.role === 'verifier' && nextNode.required !== false
@@ -324,6 +351,13 @@ export function rolePrompt(definition, nodeId, previous, revision, visits = [], 
     separateSystem ? '' : research ? researchInstructions : commonInstructions,
     separateSystem ? '' : research ? researchRoles[node.role].system : roleInstructions[node.role],
     node.instructions ?? '',
+    node.role === 'orchestrator' ? `Workflow control context:\n${JSON.stringify({
+      transitions: routes,
+      ...(Object.keys(routes).length > 1 ? {
+        nodes: definition.nodes, groups: definition.groups ?? {}, routes: definition.transitions,
+      } : {}),
+      approvalProblems: approvalProblems({ definition, visits }, revision),
+    })}` : '',
     node.role === 'scientist' ? scientistPhase(researchGraph(definition), visits) : '',
     node.role === 'reviewer' ? `Workflow verification context: ${verification}` : '',
     node.role === 'verifier' && definition.merge

@@ -1,0 +1,125 @@
+{
+  "date": "2026-11-13",
+  "scenario": "Fresh external tester composes a single orchestrated workflow for two implementation tasks",
+  "seed": {
+    "files": {
+      "names.mjs": "export function normalizeName(value) { return value; }",
+      "greeting.mjs": "import { normalizeName } from './names.mjs';\nexport function greeting(value) { return 'Hello ' + normalizeName(value); }"
+    },
+    "requirements": [
+      "A: trim and collapse string whitespace; reject non-strings with TypeError",
+      "B: use A to return Hello, <name>! or Hello, stranger! for an empty normalized name",
+      "Separate behavioral tests; inspect compatibility of the combined result"
+    ]
+  },
+  "tester": {
+    "model": "openai/gpt-6.1-sol",
+    "reasoning": "high",
+    "speed": "normal",
+    "skill": "dwf-oc"
+  },
+  "participants": {
+    "orchestrator": {
+      "model": "gpt-6-astra",
+      "reasoning": "xhigh"
+    },
+    "a_worker": {
+      "model": "gpt-6.1-sol",
+      "reasoning": "high"
+    },
+    "a_reviewer": {
+      "model": "gpt-6-astra",
+      "reasoning": "xhigh"
+    },
+    "a_verifier": {
+      "model": "gpt-6.1-sol",
+      "reasoning": "xhigh"
+    },
+    "b_worker": {
+      "model": "gpt-6.1-sol",
+      "reasoning": "high"
+    },
+    "b_reviewer": {
+      "model": "gpt-6-astra",
+      "reasoning": "xhigh"
+    },
+    "b_verifier": {
+      "model": "gpt-6.1-sol",
+      "reasoning": "xhigh"
+    }
+  },
+  "status": "succeeded",
+  "sequence": [
+    {
+      "node": "orchestrator",
+      "outcome": "taskA"
+    },
+    {
+      "node": "a_worker",
+      "outcome": "done"
+    },
+    {
+      "node": "a_reviewer",
+      "outcome": "approve"
+    },
+    {
+      "node": "a_verifier",
+      "outcome": "approve"
+    },
+    {
+      "node": "orchestrator",
+      "outcome": "taskB"
+    },
+    {
+      "node": "b_worker",
+      "outcome": "done"
+    },
+    {
+      "node": "b_reviewer",
+      "outcome": "approve"
+    },
+    {
+      "node": "b_verifier",
+      "outcome": "approve"
+    },
+    {
+      "node": "orchestrator",
+      "outcome": "recheckA"
+    },
+    {
+      "node": "a_reviewer",
+      "outcome": "approve"
+    },
+    {
+      "node": "a_verifier",
+      "outcome": "approve"
+    },
+    {
+      "node": "orchestrator",
+      "outcome": "done"
+    }
+  ],
+  "verified": {
+    "currentRequiredApprovals": 4,
+    "managerSkillLoaded": "workflow-orchestration",
+    "mergeCommitMatchesSourceHead": true,
+    "sourceWorktreeClean": true,
+    "projectTests": 9,
+    "leadIndependentAssertions": 20,
+    "browser": {
+      "viewports": [
+        [
+          1440,
+          900
+        ],
+        [
+          390,
+          844
+        ]
+      ],
+      "allSevenParticipantsAndEndVisibleInGraph": true,
+      "runtimeExceptions": 0
+    }
+  },
+  "scope": "Ordinary transitions are sequential in one workflow worktree. Correction and blocker routing, stop precedence, saved decisions and stale approval rejection are covered by controlled controller/native tests. This trial does not establish parallel subworkflow execution."
+}

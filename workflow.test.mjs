@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as pause } from 'node:timers/promises';
-import { validateWorkflow, parseVerdict, rolePermissions, rolePrompt, roleSystemPrompt, roleAgents, roleTools, outcomes, participantSettings, participantAgent, checkApprovals, workflowCommitTitle } from './workflow-definition.mjs';
+import { validateWorkflow, parseVerdict, decisionOutcomes, rolePermissions, rolePrompt, roleSystemPrompt, roleAgents, roleTools, outcomes, participantSettings, participantAgent, checkApprovals, workflowCommitTitle } from './workflow-definition.mjs';
 import { createWorkflow, getWorkflow, claimWorkflow, updateWorkflow, workflowHasOwner, savePreset, presets, queueWorkflowCommand, withWorkflowAction } from './run-store.mjs';
 import { git, prepareWorkspace, tree, mergeWorkspace, writeReviewDiff, snapshot, verificationWorkspace } from './workflow-git.mjs';
 import { DatabaseSync } from 'node:sqlite';
@@ -326,7 +326,7 @@ test('ролевые промпты задают критерии заверше
     worker: ['Return done when the task is complete', 'how you addressed the feedback'],
     reviewer: ['Return changes', 'or approve', 'triggering conditions and consequences'],
     verifier: ['Return approve', 'your own checks', 'expected and actual results'],
-    orchestrator: ['Return done', 'missing information', 'participants\' reports and your own observations'],
+    orchestrator: ['Return done', 'missing information', 'configured transitions', 'approval requirements'],
   };
   for (const [role, fragments] of Object.entries(requirements)) {
     for (const fragment of fragments) assert(roleSystemPrompt(role).includes(fragment), `${role}: ${fragment}`);
@@ -362,7 +362,7 @@ test('каждая роль получает только собственные
   assert.deepEqual(roleSkills.worker.map(skill => skill.name), ['code-work']);
   assert.deepEqual(roleSkills.reviewer.map(skill => skill.name), ['code-review']);
   assert.deepEqual(roleSkills.verifier.map(skill => skill.name), ['code-verify']);
-  assert.deepEqual(roleSkills.orchestrator.map(skill => skill.name), ['workflow-summary']);
+  assert.deepEqual(roleSkills.orchestrator.map(skill => skill.name), ['workflow-orchestration']);
   assert.deepEqual(roleSkills.planner.map(skill => skill.name), ['task-planning']);
   const allowed = {
     worker: ['read', 'glob', 'grep', 'webfetch', 'websearch', 'shell', 'edit', 'write'],
@@ -423,7 +423,42 @@ test('публичный CLI показывает схему и сохраняе
   assert.throws(() => cli(['start', '--preset', 'feature', '--task-file', file]), /Пресет не найден/);
   assert.deepEqual(cli(['preset', 'save', 'mine', '--file', file]), { preset: 'mine' });
   assert.deepEqual(cli(['preset', 'list']).presets, ['mine']);
+  assert.deepEqual(cli(['preset', 'show', 'mine']), definition);
+  assert.throws(() => cli(['preset', 'show', 'missing']), /Пресет не найден/);
   assert.deepEqual(presets(join(root, 'state'))[0].definition, definition);
+});
+
+test('orchestrator decisions are restricted to its visible configured routes', () => {
+  const definition = sampleWorkflow('Coordinate a task');
+  definition.entry = 'summarize';
+  definition.transitions.summarize = { implementTask: 'implement', recheck: 'review', done: null };
+  definition.transitions.implement.blocked = 'summarize';
+  assert.deepEqual(validateWorkflow(definition), definition);
+  const allowed = decisionOutcomes(definition, 'summarize');
+  assert.equal(parseVerdict('{"outcome":"implementTask","summary":"Fix the interaction"}', 'orchestrator', allowed).outcome, 'implementTask');
+  assert.throws(() => parseVerdict('{"outcome":"invented","summary":"Skip checks"}', 'orchestrator', allowed));
+  for (const change of [
+    value => { value.transitions.summarize.skip = null; },
+    value => { value.transitions.summarize.blocked = 'implement'; },
+    value => { value.transitions.summarize.unknown = 'missing'; },
+    value => { value.transitions.implement.extra = 'review'; },
+    value => { value.transitions.implement.blocked = 'verify'; },
+    value => { value.transitions.implement.blocked = null; },
+    value => { value.groups = { batch: { members: ['summarize'] } };
+      value.transitions.batch = { done: 'summarize', changes: null, failed: null }; },
+  ]) {
+    const invalid = structuredClone(definition);
+    change(invalid);
+    assert.throws(() => validateWorkflow(invalid));
+  }
+  const prompt = rolePrompt(definition, 'summarize', undefined, 'current', [
+    { node: 'review', revision: 'old', verdict: { outcome: 'approve', summary: 'Old check' } },
+  ], true);
+  const context = JSON.parse(prompt.match(/Workflow control context:\n([^\n]+)/)[1]);
+  assert.deepEqual(context.transitions, definition.transitions.summarize);
+  assert.deepEqual(context.nodes, definition.nodes);
+  assert(context.approvalProblems.some(problem => problem.includes('review')));
+  assert(context.approvalProblems.some(problem => problem.includes('verify')));
 });
 
 test('пресет из запуска сохраняет группы и фактические настройки без истории сессий', async t => {
