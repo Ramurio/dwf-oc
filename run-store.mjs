@@ -185,7 +185,7 @@ export function queueWorkflowCommand(root, id, kind, node, text, revisionKind = 
     if (kind === 'steer' && (!knownParticipant ||
       typeof text !== 'string' || !text.trim())) throw publicError('Нужны известный участник и непустое уточнение.');
     const command = { id: randomUUID(), kind, status: 'pending', createdAt: Date.now(),
-      ...(kind === 'steer' ? { node, text } : {}) };
+      ...(kind === 'steer' ? { node, text, revisionKind } : {}) };
     if (kind === 'steer') recordTaskSteering(state, command, revisionKind);
     validateTaskState(state);
     state.controls ??= [];

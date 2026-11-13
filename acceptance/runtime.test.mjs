@@ -1,3 +1,4 @@
+import { currentContext, wireContext } from './context-delivery.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
@@ -22,7 +23,7 @@ import roleToolsPlugin from '../opencode-tools.mjs';
 import { eightTasks } from './context-fixture.mjs';
 
 const cli = [process.execPath, fileURLToPath(new URL('../dwf.mjs', import.meta.url))];
-const contextOf = prompt => JSON.parse(prompt.match(/Task\/context data:\n([^\n]+)/)[1]);
+const contextOf = currentContext;
 const verdict = (outcome = 'approve') => JSON.stringify({ outcome, summary: `Observed ${outcome}` });
 
 async function researchDefinition() {
@@ -108,7 +109,7 @@ async function fixture(t, definition, reply, directory = false, overrides = {}, 
   const fault = faultOptions && installAdmissionFault(sandbox, faultOptions.boundary, faultOptions.index);
   const start = sandbox.spawn(cli, ['start', '--file', file]);
   let run;
-  if (fault && fault.boundary !== 'observe') {
+  if (fault && fault.boundary !== 'observe' && !faultOptions.afterStart) {
     const marker = await waitFor(() => readJson(fault.marker), 20000, `native admission fault: ${fault.boundary}`);
     run = { runId: marker.id };
     if (fault.boundary !== 'lost_response') {
@@ -299,25 +300,27 @@ test('public CLI freezes per-node model, reasoning, tools, skills and memory', {
     transitions: { remember: { done: 'fresh' }, fresh: { done: 'verify' }, verify: { changes: 'remember', approve: null } } };
   const sandbox = await fixture(t, definition, ({ prompt, tools }) => {
     const names = tools.map(tool => tool.function.name).sort();
-    if (prompt.includes('participant=remember')) {
+    if (contextOf(prompt).node === 'remember') {
       assert.deepEqual(names, ['read', 'skill']);
       return verdict('done');
     }
     assert.deepEqual(names, []);
-    return prompt.includes('participant=fresh') ? verdict('done') : verdict(++reviews === 1 ? 'changes' : 'approve');
+    return contextOf(prompt).node === 'fresh' ? verdict('done') : verdict(++reviews === 1 ? 'changes' : 'approve');
   });
   await sandbox.release();
   const result = await sandbox.finish();
   assert.equal(result.status, 'succeeded', result.error);
   const calls = (await sandbox.events()).filter(item => item.type === 'received');
-  const remembered = calls.filter(item => item.prompt.includes('participant=remember'));
-  const fresh = calls.filter(item => item.prompt.includes('participant=fresh'));
+  const remembered = calls.filter(item => contextOf(item.prompt).node === 'remember');
+  const fresh = calls.filter(item => contextOf(item.prompt).node === 'fresh');
   assert.equal(remembered.length, 2);
   assert.equal(fresh.length, 2);
   assert.equal(remembered[0].providerSessionId, remembered[1].providerSessionId);
   assert.notEqual(fresh[0].providerSessionId, fresh[1].providerSessionId);
   assert(remembered.every(call => call.reasoning === 'high' && call.model.modelId === 'planner'));
   assert(fresh.every(call => call.reasoning === 'low' && call.model.modelId === 'alternate'));
+  assert.equal(result.visits.filter(v => v.node === 'remember')[1].delivery.mode, 'delta');
+  assert(result.visits.filter(v => v.node === 'fresh').every(v => v.delivery.mode === 'snapshot'));
   assert.deepEqual(result.participants.fresh.model, { providerID: 'dwf-acceptance', id: 'alternate', variant: 'low' });
 });
 
@@ -936,7 +939,10 @@ test('accepted map targets survive discarded preparation and native controller r
     result.visits.some(visit => visit.sessionId === event.providerSessionId));
   assert.equal(calls.length, 4);
   for (const item of items) {
-    const call = calls.find(event => event.prompt.includes(`Clarify ${item.id}`));
+    const call = calls.find(event => contextOf(event.prompt).participant === `jobs/${item.id}` &&
+      contextOf(event.prompt).assignment.steering?.text === `Clarify ${item.id}`);
+    assert(call, 'Find the addressed input, not a manager navigation entry mentioning the clarification');
+    assert.deepEqual(contextOf(call.prompt).assignment.item, item);
     assert(call.prompt.includes(JSON.stringify(item)));
   }
 });
@@ -1112,8 +1118,13 @@ for (const kind of ['single', 'fixed', 'map']) {
         const group = settled.visits[0];
         group.admitted = false;
         delete group.admissionStarted;
-        for (const child of group.children) delete child.admitted;
-        updateWorkflow(sandbox.state, settled, 'legacy-fixture', true);
+        for (const child of group.children) { delete child.admitted; delete child.delivery; }
+        // Seed a genuinely old representation, not an illegal production rewind
+        // of the now-monotonic delivery acknowledgement.
+        const db = new DatabaseSync(join(sandbox.state, 'dwf.sqlite'));
+        db.prepare('UPDATE workflows SET state = ?, owner = NULL, expires = 0 WHERE id = ?')
+          .run(JSON.stringify(settled), sandbox.runId);
+        db.close();
         assert.equal((await sandbox.command(['inspect', sandbox.runId])).runId, sandbox.runId);
         await sandbox.release();
         const result = await sandbox.finish();
@@ -1212,10 +1223,10 @@ test('public CLI routes eight complete task contexts and permits stable detail r
   const observed = [];
   const managerReads = new Set();
   const sandbox = await fixture(t, definition, ({ prompt, tools, toolResults, systemTexts }) => {
-    const context = JSON.parse(prompt.match(/Task\/context data:\n([^\n]+)/)[1]);
+    const context = currentContext(prompt);
     const names = tools.map(tool => tool.function?.name);
     if (context.role === 'orchestrator') {
-      assert.equal(prompt.split('MANAGER_SINGLE_ASSIGNMENT').length - 1, 1);
+      assert.equal(prompt.split('MANAGER_SINGLE_ASSIGNMENT').length - 1, wireContext(prompt).delivery?.mode === 'delta' ? 0 : 1);
       assert(!prompt.includes('UNIQUE_REQUIREMENT_'));
       assert(!prompt.includes('Inspect only the addressed task data.'));
       assert(!prompt.includes('Execute your configured role.'));
@@ -1456,3 +1467,96 @@ test('public CLI prepared package child steer pins saved data and wire input; la
   const event = (await sandbox.events()).find(event => event.type === 'received' && contextOf(event.prompt).inputId === correction.inputId);
   assert.deepEqual(contextOf(event.prompt), correction.taskContext);
 });
+
+for (const boundary of ['accepted', 'lost_response']) {
+  test(`public CLI delta delivery retries immutable acknowledged-base input at ${boundary} and reads recovery snapshot`, { timeout: 60000 }, async t => {
+    const task = { ...eightTasks().taskPackages[0], dependencies: [] };
+    const definition = { task: 'Return only for new inputs', workspace: 'directory', taskPackages: [task], entry: 'manager',
+      nodes: { manager: { role: 'orchestrator', instructions: 'INITIAL_ASSIGNMENT_ONLY', tools: ['read'], skills: [] } },
+      transitions: { manager: { again: 'manager', done: null } } };
+    const rounds = new Map();
+    const recovered = new Set();
+    const sandbox = await fixture(t, definition, ({ prompt, toolResults }) => {
+      const wire = wireContext(prompt);
+      if (!rounds.has(wire.inputId)) rounds.set(wire.inputId, rounds.size + 1);
+      const round = rounds.get(wire.inputId);
+      if (wire.delivery?.mode === 'delta') {
+        assert(!prompt.includes('INITIAL_ASSIGNMENT_ONLY'));
+        // Deliberately discard model memory: native read must provide the exact
+        // current decisions/state even if a recreated/compacted session lacks base.
+        const recoveredSnapshot = toolResults.find(text => text.includes(wire.inputId));
+        if (!recoveredSnapshot) return { toolCalls: [{ name: 'read', arguments: { path: wire.delivery.snapshot.path } }] };
+        assert(recoveredSnapshot.includes('INITIAL_ASSIGNMENT_ONLY'));
+        if (round >= 3) assert(recoveredSnapshot.includes('LATE_EXACT_DECISION'));
+        recovered.add(wire.inputId);
+      }
+      return JSON.stringify({ outcome: round < 4 ? 'again' : 'done', summary: 'ROUND_RESULT_' + round });
+    }, true, {}, { boundary, index: 2, afterStart: true });
+    await sandbox.release();
+    await waitFor(() => readJson(sandbox.fault.marker), 15000, 'second input native acknowledgement fault');
+    const saved = await waitFor(() => {
+      const state = getWorkflow(sandbox.state, sandbox.runId);
+      return state.visits.length >= 2 && (boundary !== 'lost_response' || state.service === 'unavailable') && state;
+    }, 10000, 'unconfirmed delta persisted');
+    const input = saved.visits[1];
+    assert.equal(input.delivery.mode, 'delta');
+    assert.equal(input.delivery.baseInputId, saved.visits[0].inputId);
+    assert.equal(input.delivery.acknowledged, false);
+    assert.equal(saved.visits[0].delivery.acknowledged, true);
+    const message = join(sandbox.root, 'late-decision.txt');
+    await writeFile(message, 'LATE_EXACT_DECISION\r\nKeep exact bytes\n');
+    await sandbox.command(['steer', sandbox.runId, 'manager', '--message-file', message, '--kind', 'decision']);
+    if (boundary === 'lost_response') await sandbox.fault.reconnect();
+    else { expireWorkflowLease(sandbox); await sandbox.command(['inspect', sandbox.runId]); }
+    const final = await sandbox.finish();
+    assert.equal(final.status, 'succeeded', final.error);
+    assert.equal(final.visits.length, 4, 'cached native replies must not create additional model visits');
+    assert(final.visits.every(visit => visit.delivery.acknowledged));
+    assert(final.visits.every(visit => visit.sessionId === input.sessionId));
+    assert.equal(final.visits[1].prompt, input.prompt);
+    assert.equal(final.visits[1].inputId, input.inputId);
+    assert(!input.prompt.includes('LATE_EXACT_DECISION'));
+    assert(final.visits[2].prompt.includes('LATE_EXACT_DECISION'));
+    assert(!final.visits[3].prompt.includes('LATE_EXACT_DECISION'));
+    assert.equal(final.visits[3].taskContext.userInputs[0].kind, 'decision');
+    assert.equal(final.visits[3].taskContext.userInputs[0].text, 'LATE_EXACT_DECISION\r\nKeep exact bytes\n');
+    assert.equal(recovered.size, 3);
+    const attempts = (await transcript(sandbox.fault.calls)).filter(call => call.inputId === input.inputId);
+    assert(attempts.length >= 2);
+    for (const attempt of attempts) assert.equal(attempt.request.text, input.prompt);
+    const requests = (await sandbox.events()).filter(event => event.type === 'received');
+    assert.equal(new Set(requests.map(event => wireContext(event.prompt).inputId)).size, 4);
+    assert.equal(final.controls[0].status, 'applied');
+  });
+}
+
+
+for (const boundary of ['prepared', 'admission_started']) {
+  test(`public CLI delta delivery preserves saved input at ${boundary} before any native send`, { timeout: 60000 }, async t => {
+    const definition = { task: 'Exact current requirements\r\n', workspace: 'directory', entry: 'manager',
+      nodes: { manager: { role: 'orchestrator', tools: ['read'], skills: [] } },
+      transitions: { manager: { again: 'manager', done: null } } };
+    const ids = new Set();
+    const sandbox = await fixture(t, definition, ({ prompt }) => {
+      ids.add(wireContext(prompt).inputId);
+      return verdict(ids.size === 1 ? 'again' : 'done');
+    }, true, {}, { boundary, index: 2, afterStart: true });
+    await sandbox.release();
+    await waitFor(() => readJson(sandbox.fault.marker), 15000, 'second saved input fault');
+    const saved = getWorkflow(sandbox.state, sandbox.runId);
+    const input = saved.visits[1];
+    assert.equal(input.delivery.mode, 'delta');
+    assert.equal(input.delivery.acknowledged, false);
+    assert.equal(input.admissionStarted, boundary !== 'prepared');
+    assert.equal((await transcript(sandbox.fault.calls)).filter(call => call.inputId === input.inputId).length, 0);
+    expireWorkflowLease(sandbox);
+    await sandbox.command(['inspect', sandbox.runId]);
+    const final = await sandbox.finish();
+    assert.equal(final.status, 'succeeded', final.error);
+    assert.equal(final.visits.length, 2);
+    assert.equal(final.visits[1].inputId, input.inputId);
+    assert.equal(final.visits[1].prompt, input.prompt);
+    assert.equal(final.visits[1].delivery.acknowledged, true);
+    assert.equal((await transcript(sandbox.fault.calls)).filter(call => call.inputId === input.inputId).length, 1);
+  });
+}

@@ -29,6 +29,7 @@ function fault(id) {
 export function persisted(state) {
   if (existsSync(config.marker)) return;
   const visit = state.visits.at(-1);
+  if (state.visits.length < config.index) return;
   if ((config.boundary === 'prepared' && visit?.admissionStarted === false) ||
       (config.boundary === 'admission_started' && visit?.admissionStarted === true && !visit.admitted)) fault(state.id);
 }

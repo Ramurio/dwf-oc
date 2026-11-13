@@ -774,3 +774,33 @@ test('prepared mapped steering updates only its bound package version while pres
   assert.doesNotMatch(f.admitted[0].request.text, /Exact clarification for B/);
   assert.match(f.admitted[1].request.text, /Exact clarification for B/);
 });
+
+test('legacy prepared steering recovers orphan context documents left before a failed state commit', async t => {
+  const definition = { task: 'Recover a legacy prepared draft', workspace: 'directory', entry: 'jobs',
+    nodes: { review: { role: 'reviewer' }, verify: { role: 'verifier' } },
+    groups: { jobs: { members: ['review'] } },
+    transitions: { jobs: { done: 'verify', changes: null, failed: null },
+      review: { approve: 'verify', changes: null }, verify: { approve: null, changes: null } } };
+  const child = { node: 'review', participant: 'review', required: true, sessionId: 'ses_legacy',
+    inputId: 'msg_legacy', revision: 'original', prompt: 'Saved raw-only draft' };
+  const f = await fixture(t, { definition, visits: [{ node: 'jobs', inputId: 'group_legacy', revision: 'original',
+    admissionStarted: false, children: [child] }] });
+  const first = f.command('steer', 'review', 'FIRST_CLARIFICATION');
+  const { prepareRoleInput } = await import('./role-context.mjs');
+  const saved = f.state();
+  const orphan = structuredClone(child);
+  // Simulate process failure after document writes but before the enclosing
+  // SQLite action commits: persisted legacy child still has no taskContext.
+  prepareRoleInput(f.root, saved, orphan, undefined, saved.workspace, 'jobs', first);
+  const document = join(orphan.contextDirectory, 'context.json');
+  const original = await readFile(document, 'utf8');
+  f.command('steer', 'review', 'SECOND_CLARIFICATION');
+  await f.run();
+  const result = f.state();
+  assert.equal(result.status, 'succeeded', result.error);
+  assert.equal(result.visits[0].verdict.outcome, 'done');
+  assert.notEqual(result.visits[0].children[0].inputId, child.inputId);
+  assert.equal(result.visits[0].children[0].sessionId, child.sessionId);
+  assert.deepEqual(result.controls.map(command => command.status), ['applied', 'applied']);
+  assert.equal(await readFile(document, 'utf8'), original);
+});

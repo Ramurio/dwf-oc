@@ -91,7 +91,9 @@ function callView(state, visit, location, { root, owned }) {
     task: visit.taskContext ? (visit.taskContext.task?.requirements ||
       visit.taskContext.assignment?.instructions || 'Coordinate the supplied task catalog') : visit.prompt ?? unknown,
     taskSource: visit.taskContext ? 'structured' : 'raw-only',
+    // taskData is the exact logical snapshot; promptRaw may carry only its delta.
     taskData: visit.taskContext ?? null,
+    ...(visit.delivery ? { contextDelivery: visit.delivery } : {}),
     promptRaw: visit.prompt ?? null,
     ...resultProjection(visit.verdict ?? visit.error),
     state: status,
@@ -131,7 +133,7 @@ export function workflowView(state, { root, owned = false, order = 0 } = {}) {
         if (!visit.correction) return [first];
         const correction = callView(state, {
           ...visit, correction: undefined, inputId: visit.correction.inputId,
-          prompt: visit.correction.prompt, taskContext: undefined, startedAt: undefined,
+          prompt: visit.correction.prompt, taskContext: undefined, delivery: undefined, startedAt: undefined,
         }, location, { root, owned });
         if (correction) correction.lastObservedDirectory = first.lastObservedDirectory;
         return [{

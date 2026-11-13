@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { prepareContextDelivery } from './context-delivery.mjs';
 import { taskPackageAt } from './task-packages.mjs';
 import { participantSettings, rolePrompt, roleTools, workflowControlContext } from './workflow-definition.mjs';
 import { publicError } from './run-store.mjs';
@@ -130,7 +131,7 @@ export function prepareRoleInput(root, state, visit, previous, workspace = state
     .map(r => r.role === 'orchestrator' ? { ...r, result: { outcome: r.result?.outcome, summary: r.result?.summary }, details: details(r) } : r);
   const assignmentReport = execution.implement?.controllerInputId && historyReports.find(r => r.inputId === execution.implement.controllerInputId);
   const context = { formatVersion: 1, runId: state.id, inputId: visit.inputId, role: node.role, node: visit.node, participant: visit.participant ?? visit.node,
-    candidate: visit.revision,
+    candidate: visit.revision, history,
     ...(visit.review ? { review: { ...visit.review, purpose: 'Complete candidate diff relative to the workflow base' } } : {}),
     assignment: { ...(node.instructions ? { instructions: node.instructions } : {}),
       ...(execution.implement ? { implement: { text: execution.implement.assignment, controllerInputId: execution.implement.controllerInputId,
@@ -143,6 +144,17 @@ export function prepareRoleInput(root, state, visit, previous, workspace = state
     ...(!own && node.role !== 'orchestrator' ? { taskScope: { kind: 'workflow',
       reason: 'No taskId is bound. The original workflow requirements and this assignment apply; no package is inferred.' } } : {}),
   };
+  // Package revisions already retain bound steering. Older/unbound workflows
+  // have only controls: keep their exact accepted user inputs in every recovery
+  // snapshot instead of depending on the model remembering one-off steer text.
+  const packagedSteers = new Set((state.taskRevisions ?? []).map(revision => revision.source));
+  const userInputs = (state.controls ?? []).filter(command => command.kind === 'steer' && !packagedSteers.has(`steer:${command.id}`) &&
+    (node.role === 'orchestrator' || command.node === (visit.participant ?? visit.node))).map(command => ({
+      id: command.id, target: command.node, text: command.text, source: `steer:${command.id}`,
+      ...(command.revisionKind ? { kind: command.revisionKind } : {}), createdAt: command.createdAt,
+      commandStatus: command.status,
+    }));
+  if (userInputs.length) context.userInputs = userInputs;
   if (execution.implement) {
     const { assignment, controllerInputId, dependencies, ...identity } = execution.implement;
     context.implement = identity;
@@ -191,6 +203,7 @@ export function prepareRoleInput(root, state, visit, previous, workspace = state
   // event arrays, package metadata or verdicts mutated by later ticks.
   visit.taskContext = JSON.parse(JSON.stringify(context));
   visit.contextDirectory = directory;
+  const payload = prepareContextDelivery(state, visit, saveDocument('context.json', visit.taskContext), tools.includes('read'));
   visit.prompt = rolePrompt(definition, visit.node, previous, visit.revision, state.visits,
-    Boolean(state.roleAgents || state.participants), visit.review, workspace, transitionSource, visit.taskContext);
+    Boolean(state.roleAgents || state.participants), visit.review, workspace, transitionSource, payload);
 }

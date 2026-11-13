@@ -1,5 +1,6 @@
 import { initializeImplements, publicImplements, controlVisit, implementTarget, implementContext, implementObservation,
   applyImplementDecision, advanceImplementState, checkImplementCandidates } from './workflow-implements.mjs';
+import { acknowledgeContext } from './context-delivery.mjs';
 import { prepareRoleInput } from './role-context.mjs';
 import { taskBinding } from './task-packages.mjs';
 import { randomUUID } from 'node:crypto';
@@ -174,6 +175,7 @@ async function tickImplementParticipants(root, state, owner, client) {
       try {
         await admit(client, request(state, visit));
         visit.admitted = true;
+        acknowledgeContext(visit);
         state.sessions[visit.participant] = visit.sessionId;
       } catch (error) {
         if (error.publicMessage) visit.error = error.publicMessage;
@@ -393,7 +395,9 @@ export async function runWorkflow(root, id) {
             }
             // A changed prepared draft gets a fresh document namespace. Other
             // implement reports can arrive between group preparation and steer.
-            if (child.taskContext) child.inputId = 'msg_' + randomUUID();
+            // Even a raw-only legacy draft can have orphan documents from a
+            // crashed, uncommitted preparation. Never reuse its namespace.
+            child.inputId = 'msg_' + randomUUID();
             Object.assign(child, taskBinding(state, child.node, child.item));
             const previousControl = state.visits.slice(0, state.visits.indexOf(visit)).findLast(v => !v.implementId);
             prepareRoleInput(root, state, child, previousControl?.verdict, child.workspace ?? state.workspace, visit.node, steering,
@@ -419,6 +423,7 @@ export async function runWorkflow(root, id) {
               try {
                 await admit(client, request(state, child));
                 child.admitted = true;
+                acknowledgeContext(child);
                 state.sessions[child.participant] = child.sessionId;
               }
               catch (error) {
@@ -467,6 +472,7 @@ export async function runWorkflow(root, id) {
             if (state.controls?.some(command => command.status === 'pending' && command.kind === 'stop')) return;
             await admit(client, request(state, visit));
             visit.admitted = true;
+            acknowledgeContext(visit);
             state.sessions[visit.participant ?? visit.node] = visit.sessionId;
           });
         } catch (error) {

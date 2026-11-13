@@ -1,3 +1,4 @@
+import { currentContext, wireContext } from './context-delivery.mjs';
 // Controlled model only; real candidate CLI, native OpenCode inbox/tools/storage,
 // separate service profile and Git repositories. Never use the developer service.
 import assert from 'node:assert/strict';
@@ -15,7 +16,7 @@ import { installAdmissionFault } from './admission-faults.mjs';
 import { getWorkflow } from '../run-store.mjs';
 
 const cli = [process.execPath, fileURLToPath(new URL('../dwf.mjs', import.meta.url))];
-const taskContext = prompt => JSON.parse(prompt.match(/^Task\/context data:\n(.*)$/m)[1]);
+const taskContext = currentContext;
 const context = (prompt, name) => {
   const data = taskContext(prompt);
   if (name === 'Implement control context') return data.implements;
@@ -668,6 +669,13 @@ test('implement participants read pinned context links, retain scoped findings a
   const alphaWorkers = final.visits.filter(v => v.participant === 'alpha/worker');
   assert.equal(alphaWorkers.length, 2);
   assert.equal(alphaWorkers[0].sessionId, alphaWorkers[1].sessionId);
+  assert.equal(alphaWorkers[0].delivery.mode, 'snapshot');
+  assert.equal(alphaWorkers[1].delivery.mode, 'delta');
+  assert.equal(alphaWorkers[1].delivery.baseInputId, alphaWorkers[0].inputId);
+  assert.equal(alphaWorkers[1].delivery.acknowledged, true);
+  assert.equal(wireContext(alphaWorkers[1].prompt).delivery.mode, 'delta');
+  assert(!alphaWorkers[1].prompt.includes('Create alpha.txt'));
+  assert(alphaWorkers[1].prompt.includes('Add revision.txt'));
   const corrected = alphaWorkers[1].taskContext;
   assert.equal(corrected.otherReports.handoff.summary, 'Add revision.txt');
   assert.equal(corrected.otherReports.handoffSource.participant, 'alpha/reviewer');
@@ -678,6 +686,8 @@ test('implement participants read pinned context links, retain scoped findings a
   const worker = view.graph.nodes.find(node => node.id === 'implements').participants.find(p => p.id === 'alpha/worker');
   assert.equal(worker.invocations[1].taskSource, 'structured');
   assert.deepEqual(worker.invocations[1].taskData, corrected);
+  assert.equal(worker.invocations[1].contextDelivery.baseInputId, alphaWorkers[0].inputId);
+  assert.equal(worker.invocations[1].contextDelivery.acknowledged, true);
   assert.equal(worker.invocations[1].promptRaw, alphaWorkers[1].prompt);
 });
 

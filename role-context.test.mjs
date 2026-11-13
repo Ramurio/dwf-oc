@@ -13,9 +13,10 @@ function fixture(t) {
   const state = { id: 'context-test', definition: eightTasks(), visits: [], workspace: { path: root }, taskRevisions: [] };
   return { root, state };
 }
+let inputSequence = 0;
 function build(root, state, node, previous, item) {
   const taskId = item?.taskId ?? state.definition.nodes[node].taskId;
-  const visit = { node, participant: node, inputId: `msg_${node}`, revision: 'candidate-2', ...(item ? { item } : {}),
+  const visit = { node, participant: node, inputId: `msg_${node}_${++inputSequence}`, revision: 'candidate-2', ...(item ? { item } : {}),
     ...(taskId ? { taskId, taskVersion: 1 + state.taskRevisions.filter(r => r.taskId === taskId).length } : {}) };
   prepareRoleInput(root, state, visit, previous, state.workspace);
   return visit;
@@ -144,7 +145,8 @@ test('context references stay identical when a restarted controller uses a symli
   const alias = join(root, 'state-alias');
   symlinkSync(root, alias);
   const first = build(root, state, 'worker0');
-  const restored = build(alias, state, 'worker0');
+  const restored = structuredClone(first);
+  prepareRoleInput(alias, state, restored, undefined, state.workspace);
   assert.equal(first.contextDirectory, restored.contextDirectory);
   assert.deepEqual(first.taskContext, restored.taskContext);
   assert.equal(first.taskContext.runId, state.id);

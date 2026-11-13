@@ -1,3 +1,4 @@
+import { currentContext } from './context-delivery.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -177,7 +178,7 @@ Given('подготовлен workflow ролей с независимыми п
       } }] };
     }
     if (role === 'reviewer') {
-      const review = JSON.parse(prompt.match(/Task\/context data:\n([^\n]+)/)[1]).review;
+      const review = currentContext(prompt).review;
       assert(review, 'Reviewer должен получить материалы своего снимка');
       assert(prompt.includes(`Workspace snapshot recorded and checked by DWF: ${review.revision}`));
       if (!toolResults.some(text => text.includes(`+implementation-${iteration}`))) {
@@ -189,7 +190,8 @@ Given('подготовлен workflow ролей с независимыми п
       this.reviewMaterials.push({ ...review, path: resolve(workspace, review.path) });
     }
     assert(!prompt.includes('Work within the current project'), 'Постоянные инструкции должны быть в system');
-    assert(prompt.includes('Проверить обмен замечаниями'), 'Поручение должно остаться в пользовательском сообщении');
+    assert(currentContext(prompt).task.requirements.includes('Проверить обмен замечаниями'),
+      'Точные требования должны остаться в актуальном снимке; повторный input может быть дельтой');
     counts[role] = (counts[role] ?? 0) + 1;
     if (role === 'worker' && counts[role] > 1) {
       assert(userTexts.length > 1, 'Доработка должна сохранять пользовательскую историю');
@@ -197,7 +199,7 @@ Given('подготовлен workflow ролей с независимыми п
       assert(prompt.includes('feedback-'), 'Worker должен получить замечания проверяющего');
     }
     if (role === 'orchestrator') {
-      const context = JSON.parse(prompt.match(/Task\/context data:\n([^\n]+)/)[1]);
+      const context = currentContext(prompt);
       if (!this.managerHistoryRequested) {
         this.managerHistoryRequested = true;
         return { toolCalls: [{ name: 'read', arguments: { path: context.history.path } }] };

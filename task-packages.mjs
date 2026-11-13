@@ -1,3 +1,4 @@
+import { validateContextDelivery } from './context-delivery.mjs';
 import { admissionStage } from './workflow-admission.mjs';
 import { publicError } from './run-store.mjs';
 
@@ -75,6 +76,7 @@ export function taskPackageAt(state, taskId, version) {
 }
 
 export function validateTaskState(state, saved) {
+  validateContextDelivery(state, saved, reject);
   if (state.taskRevisions !== undefined && !Array.isArray(state.taskRevisions)) reject('неверный журнал версий.');
   // Enforce saved invariants before considering the legacy no-definition shape.
   if (saved) {
