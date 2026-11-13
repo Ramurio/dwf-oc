@@ -15,7 +15,7 @@ const evidence = resolve('prototypes/dwf-ui/.evidence/view-regressions');
 await mkdir(evidence, { recursive: true });
 let browser;
 try {
-  const definition = validateWorkflow({ task: 'Controlled shared participant view', entry: 'r',
+  const definition = validateWorkflow({ task: 'Прочитай MEASUREMENT_CONTEXT.md и проверь ' + 'W'.repeat(80), entry: 'r',
     nodes: { r: { role: 'reviewer' } }, groups: { batch: { members: ['r'] } },
     transitions: { r: { approve: 'batch', changes: null }, batch: { done: null, changes: null, failed: null } } });
   const state = { id: 'controlled-view', definition, status: 'running', createdAt: 1,
@@ -28,6 +28,21 @@ try {
   const check = expression => waitFor(() => browser.evaluate(expression), 15000, expression);
   const click = selector => browser.evaluate(`document.querySelector(${JSON.stringify(selector)}).dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
   await check(`document.querySelector('#run-id').textContent === 'controlled-view'`);
+  for (const [width, height] of [[1440, 900], [1024, 768], [390, 844]]) {
+    await browser.viewport(width, height);
+    if (await browser.evaluate(`!document.querySelector('#run-menu').open`)) await click('#run-menu > summary');
+    assert.equal(await browser.evaluate(`(() => {
+      const title = document.querySelector('[data-run="controlled-view"] strong');
+      const card = title.closest('.run').getBoundingClientRect();
+      const range = document.createRange();
+      range.selectNodeContents(title);
+      return [...range.getClientRects()].every(rect => rect.left >= card.left && rect.right <= card.right);
+    })()`), true, `Run title must wrap inside its card at ${width}px`);
+    assert.equal(await browser.evaluate('document.documentElement.scrollWidth <= innerWidth'), true,
+      `Long run titles must not widen the page at ${width}px`);
+    await browser.screenshot(resolve(evidence, `long-run-title-${width}.png`));
+  }
+  await browser.viewport(1440, 900);
   assert.deepEqual(await browser.evaluate(`[...document.querySelectorAll('.node.active')].map(n => n.dataset.node)`), ['r']);
   assert.equal(await browser.evaluate(`document.querySelector('#current').textContent`), 'r is working');
   const geometry = `JSON.stringify([...document.querySelectorAll('[data-node]')].map(n => n.getAttribute('transform')))`;

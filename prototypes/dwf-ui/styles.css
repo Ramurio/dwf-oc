@@ -96,6 +96,7 @@ h1,h2,h3,p {
 }
 .sidebar {
   border-right:1px solid var(--rule);
+  overflow-wrap:anywhere;
   padding:28px 14px 18px;
   display:flex;
   flex-direction:column;
@@ -189,6 +190,7 @@ h1,h2,h3,p {
 }
 .run-heading {
   display:flex;
+  overflow-wrap:anywhere;
   justify-content:space-between;
   align-items:center;
   gap:18px;
