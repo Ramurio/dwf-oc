@@ -2,7 +2,7 @@ import { prepareRoleInput } from './role-context.mjs';
 import { taskBinding, validateTaskReference } from './task-packages.mjs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import { participantVisits, rolePrompt, validateItems } from './workflow-definition.mjs';
+import { participantVisits, validateItems } from './workflow-definition.mjs';
 import { git, snapshot, verificationWorkspace, writeReviewDiff } from './workflow-git.mjs';
 import { publicError } from './run-store.mjs';
 
@@ -26,11 +26,8 @@ export function prepareGroup(root, state, id, previous) {
     const review = node.role === 'reviewer' && state.workspace.mode !== 'directory'
       ? writeReviewDiff(workspace, revision, join(root, 'workflows', state.id, 'reviews', `${inputId}.diff`)) : undefined;
     const input = previous && ['scout', 'researcher'].includes(node.role) ? { summary: previous.summary } : previous;
-    const prompt = rolePrompt(state.definition, item.node, input, revision, state.visits,
-      Boolean(state.roleAgents), review, workspace, id) +
-      (item.item ? `\n\nЭлемент параллельной группы:\n${JSON.stringify(item.item)}` : '');
     const child = { ...item, ...taskBinding(state, item.node, item.item), sessionId, inputId, revision,
-      startedAt: Date.now(), workspace, prompt, ...(review ? { review } : {}) };
+      startedAt: Date.now(), workspace, ...(review ? { review } : {}) };
     prepareRoleInput(root, state, child, input, workspace, id);
     return child;
   });

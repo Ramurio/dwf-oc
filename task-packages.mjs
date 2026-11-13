@@ -86,10 +86,10 @@ export function validateTaskState(state, saved) {
     if (saved.definition) {
       const inputs = workflow => (workflow.visits ?? []).flatMap(group =>
         (group.children ?? [group]).map(visit => ({ visit, group })));
-      const current = inputs(state);
-      for (const [index, { visit, group }] of inputs(saved).entries()) {
+      const current = new Map(inputs(state).map(input => [input.visit.inputId, input]));
+      for (const { visit, group } of inputs(saved)) {
         if (admissionStage(visit, group) === 'prepared') continue;
-        const nextInput = current[index];
+        const nextInput = current.get(visit.inputId);
         const next = nextInput?.visit;
         if (!saved.definition.taskPackages && visit.taskContext === undefined && next?.taskContext === undefined) continue;
         if (!next || admissionStage(next, nextInput.group) === 'prepared' || next.inputId !== visit.inputId || next.taskId !== visit.taskId || next.taskVersion !== visit.taskVersion ||
@@ -125,8 +125,10 @@ export function validateTaskState(state, saved) {
 export function recordTaskSteering(state, command, kind = 'clarification') {
   const visits = (state.visits ?? []).flatMap(visit => visit.children ?? [visit]);
   const visit = visits.findLast(visit => visit.participant === command.node);
-  const node = Object.hasOwn(state.definition.nodes, command.node) ? command.node : visit?.node;
-  const binding = taskBinding(state, node, visit?.item);
+  const [implementId, implementRole] = command.node.split('/');
+  const implement = Object.hasOwn(state.definition.implements?.instances ?? {}, implementId) && state.definition.implements.instances[implementId];
+  const node = implement ? implement[implementRole ?? 'worker'] : Object.hasOwn(state.definition.nodes, command.node) ? command.node : visit?.node;
+  const binding = taskBinding(state, node, implement ? { taskId: implement.taskId } : visit?.item);
   if (!binding.taskId) return;
   state.taskRevisions ??= [];
   state.taskRevisions.push({ taskId: binding.taskId, version: binding.taskVersion + 1,

@@ -252,3 +252,83 @@ for (const source of ['reviewer0', 'verifier0']) {
     assert(!visit.prompt.includes('UNIQUE_REQUIREMENT_0'));
   });
 }
+
+import { implementDefinition } from './acceptance/implement-definition.mjs';
+import { publicImplements } from './workflow-implements.mjs';
+import { taskBinding } from './task-packages.mjs';
+
+function implementFixture(t) {
+  const fixtureState = fixture(t);
+  const { state } = fixtureState;
+  state.definition = implementDefinition();
+  state.sessions = {};
+  state.implements = { instances: Object.fromEntries(['alpha', 'beta', 'gamma'].map(id => [id,
+    { id, taskId: id, status: id === 'gamma' ? 'queued' : 'running', cycle: 1 }])),
+    events: [{ sequence: 1, implementId: 'alpha', taskId: 'alpha', type: 'changes', result: { outcome: 'changes', summary: 'Fix alpha only' } }] };
+  return fixtureState;
+}
+
+test('shared preparation gives manager real implement states, dependencies and state-aware gates', t => {
+  const { root, state } = implementFixture(t);
+  const visit = { node: 'manage', participant: 'manage', inputId: 'msg_manager', revision: 'combined' };
+  prepareRoleInput(root, state, visit, undefined, state.workspace, 'manage', undefined, { implements: publicImplements(state) });
+  assert.equal(visit.taskContext.implements.instances[2].waitingReason, 'dependencies');
+  assert.deepEqual(visit.taskContext.implements.instances[2].waitingFor, ['alpha', 'beta']);
+  assert.equal(visit.taskContext.catalog[2].status, 'queued');
+  assert.equal(visit.taskContext.catalog[0].implementId, 'alpha');
+  assert.equal(visit.taskContext.implements.events[0].result.summary, 'Fix alpha only');
+  for (const task of state.definition.taskPackages) assert(!visit.prompt.includes(task.requirements));
+});
+
+test('interleaved implement handoff uses saved input identity, not the last neighbour or object equality', t => {
+  const { root, state } = implementFixture(t);
+  const previous = { outcome: 'changes', summary: 'Addressed alpha finding', findings: [{ file: 'alpha.txt', text: 'Keep exact bytes' }] };
+  state.visits = [
+    { node: 'review', participant: 'alpha/reviewer', implementId: 'alpha', inputId: 'msg_alpha_review', taskId: 'alpha', taskVersion: 1, verdict: previous },
+    { node: 'review', participant: 'beta/reviewer', implementId: 'beta', inputId: 'msg_beta_review', taskId: 'beta', taskVersion: 1,
+      verdict: { outcome: 'changes', summary: 'UNRELATED_BETA_FINDING' } },
+  ];
+  const visit = { node: 'work', participant: 'alpha/worker', implementId: 'alpha', inputId: 'msg_alpha_fix', revision: 'alpha-tree',
+    item: { id: 'alpha', taskId: 'alpha' }, ...taskBinding(state, 'work', { taskId: 'alpha' }) };
+  prepareRoleInput(root, state, visit, structuredClone(previous), state.workspace, 'work', undefined, {
+    handoffInputId: 'msg_alpha_review', implement: { id: 'alpha', taskId: 'alpha', cycle: 2, assignment: 'Original concrete alpha assignment',
+      controllerInputId: 'msg_admission', dependencies: [] },
+  });
+  const context = visit.taskContext;
+  assert.equal(context.implement.id, 'alpha');
+  assert.equal(context.participant, 'alpha/worker');
+  assert.equal(context.assignment.implement.text, 'Original concrete alpha assignment');
+  assert.deepEqual(context.otherReports.handoff, previous);
+  assert.equal(context.otherReports.handoffSource.inputId, 'msg_alpha_review');
+  assert.equal(context.otherReports.handoffSource.implementId, 'alpha');
+  assert(!visit.prompt.includes('UNRELATED_BETA_FINDING'));
+  assert(!visit.prompt.includes('Implement execution context:'));
+  assert.equal(JSON.parse(readFileSync(context.sources.task.path)).requirements, state.definition.taskPackages[0].requirements);
+});
+
+test('prepared implement control context is detached from subsequent events and nested operation changes', t => {
+  const { root, state } = implementFixture(t);
+  state.implements.instances.alpha.integration = { id: 'integration_alpha', status: 'prepared' };
+  const visit = { node: 'manage', participant: 'manage', inputId: 'msg_control_snapshot', revision: 'combined' };
+  prepareRoleInput(root, state, visit, undefined, state.workspace, 'manage', undefined, { implements: publicImplements(state) });
+  const saved = structuredClone(visit.taskContext);
+  state.implements.events.push({ sequence: 2, implementId: 'alpha', type: 'ready' });
+  state.implements.instances.alpha.integration.status = 'integrated';
+  assert.deepEqual(visit.taskContext, saved);
+});
+
+test('implement dependency links keep package identity separate from instance identity', t => {
+  const { root, state } = implementFixture(t);
+  const visit = { node: 'work', participant: 'gamma-instance/worker', implementId: 'gamma-instance', inputId: 'msg_dependency',
+    revision: 'gamma-tree', item: { id: 'gamma-instance', taskId: 'gamma' }, ...taskBinding(state, 'work', { taskId: 'gamma' }) };
+  prepareRoleInput(root, state, visit, undefined, state.workspace, 'work', undefined, { implement: {
+    id: 'gamma-instance', taskId: 'gamma', assignment: 'Use integrated dependencies', dependencies: [
+      { id: 'alpha-instance', taskId: 'alpha', revision: 'alpha-tree', resultVersion: 2, result: { outcome: 'approve', summary: 'Observed alpha checks' } },
+    ],
+  } });
+  const dependency = visit.taskContext.dependencies[0];
+  assert.equal(dependency.id, 'alpha');
+  assert.equal(dependency.implementId, 'alpha-instance');
+  assert.equal(dependency.resultVersion, 2);
+  assert.equal(JSON.parse(readFileSync(dependency.details.path)).id, 'alpha');
+});

@@ -1,3 +1,5 @@
+import { initializeImplements, publicImplements, controlVisit, implementTarget, implementContext, implementObservation,
+  applyImplementDecision, advanceImplementState, checkImplementCandidates } from './workflow-implements.mjs';
 import { prepareRoleInput } from './role-context.mjs';
 import { taskBinding } from './task-packages.mjs';
 import { randomUUID } from 'node:crypto';
@@ -8,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout as pause } from 'node:timers/promises';
 import { admit, checkRoleAgents, connect, readExecution, stopSessions, captureStopSessions, interruptSessions } from './opencode-runtime.mjs';
 import { claimWorkflow, getWorkflow, updateWorkflow, workflowHasOwner, publicError, withWorkflowAction } from './run-store.mjs';
-import { parseVerdict, rolePermissions, rolePrompt, roleAgents, checkApprovals, workflowCommitTitle,
+import { parseVerdict, rolePermissions, roleAgents, checkApprovals, workflowCommitTitle,
   participantVisits, validateItems, decisionOutcomes } from './workflow-definition.mjs';
 import { researchGraph, researchResult, scientistPhase, validateScientistVerdict } from './research-workflow.mjs';
 import { mergeWorkspace, snapshot, writeReviewDiff, verificationWorkspace } from './workflow-git.mjs';
@@ -16,7 +18,7 @@ import { prepareGroup, groupVerdict, integrateGroup } from './workflow-groups.mj
 import { admissionStage } from './workflow-admission.mjs';
 
 export function publicWorkflow(state) {
-  const current = state.visits.at(-1);
+  const current = controlVisit(state);
   let result = state.result;
   if (state.status === 'succeeded' && result?.commit) {
     result = { ...result,
@@ -24,9 +26,11 @@ export function publicWorkflow(state) {
       summary: `DWF подтвердил локальный merge в ${state.workspace.branch}. Коммит ${result.commit}.\n\nОтчёт участника до интеграции\n${result.summary}` };
   }
   return { runId: state.id, status: state.status, workspace: state.workspace.path,
+    ...(state.definition.implements ? { implements: publicImplements(state) } : {}),
     ...(state.definition.taskPackages ? { taskPackages: state.definition.taskPackages, taskRevisions: state.taskRevisions ?? [] } : {}),
-    current: current && { node: current.node, role: state.definition.nodes[current.node]?.role ?? 'group',
-      sessionId: current.sessionId, visit: state.visits.length,
+    current: current && { node: current.node, role: current.kind === 'implements' ? 'implements' : state.definition.nodes[current.node]?.role ?? 'group',
+      sessionId: current.sessionId, visit: state.visits.indexOf(current) + 1,
+      ...(current.kind === 'implements' && !current.verdict && state.status === 'running' ? { waitingReason: 'implement_events', eventCursor: current.eventCursor } : {}),
       ...(current.taskId ? { taskId: current.taskId, taskVersion: current.taskVersion } : {}),
       ...(current.participant ? { participant: current.participant } : {}),
       ...(current.children ? { members: current.children.map(child => ({ participant: child.participant, node: child.node,
@@ -35,10 +39,12 @@ export function publicWorkflow(state) {
       ...(current.startedAt ? { startedAt: current.startedAt } : {}),
       ...(current.progress ? { progress: current.progress } : {}) },
     history: state.visits.map(visit => ({ node: visit.node, sessionId: visit.sessionId, ...taskIdentity(visit),
+      ...(visit.implementId ? { implementId: visit.implementId, participant: visit.participant } : {}),
       ...(visit.children ? { members: visit.children.map(child => ({ participant: child.participant, node: child.node, ...taskIdentity(child) })) } : {}),
       ...(visit.verdict ? { result: visit.verdict, revision: visit.revision } : {}) })),
     ...(state.controls ? { controls: state.controls.map(({ target, ...command }) => command) } : {}),
     ...(state.error ? { error: state.error } : {}),
+    ...(state.pendingFailure ? { pendingFailure: state.pendingFailure } : {}),
     ...(state.service ? { service: { status: 'unavailable' } } : {}),
     ...(result ? { result } : {}) };
 }
@@ -104,23 +110,26 @@ function request(state, visit) {
     rule.action !== 'skill' || state.roleAgents?.[node.role] === roleAgents[node.role]);
   const artifactPermissions = [
     ...(visit.review ? [{ action: 'external_directory', resource: join(dirname(visit.review.path), '*'), effect: 'allow' }] : []),
+    ...(visit.contextDirectories ?? []).map(directory => ({ action: 'external_directory', resource: join(directory, '*'), effect: 'allow' })),
     ...(visit.contextDirectory ? [{ action: 'external_directory', resource: join(dirname(visit.contextDirectory), '*'), effect: 'allow' }] : []),
   ];
   return { id: state.id, sessionId: visit.sessionId, inputId: input.inputId,
-    ...(visit.contextDirectory ? { artifactPermissions } : {}),
-    request: { text: input.prompt, session: { title: `DWF ${node.role} ${visit.node}`,
+    ...(artifactPermissions.length ? { artifactPermissions } : {}),
+    request: { text: input.prompt, session: { title: `DWF ${node.role} ${visit.implementId ? visit.participant : visit.node}`,
       agent: participant?.id ?? state.roleAgents?.[node.role] ?? 'build', model: participant?.model ?? state.model,
       location: { directory: visit.workspace?.path ?? state.workspace.path },
-      metadata: { dwfRunId: state.id },
+      metadata: { dwfRunId: state.id, ...(visit.implementId ? { dwfImplementId: visit.implementId,
+         dwfTaskId: visit.taskId, dwfParticipant: visit.participant } : {}) },
       permissions: [...permissions, ...artifactPermissions] } } };
 }
 
 function finishParticipant(state, visit, outcome) {
   const role = state.definition.nodes[visit.node].role;
   const revision = snapshot(visit.workspace ?? state.workspace);
-  if (role !== 'worker' && revision !== visit.revision) {
+  if (role !== 'worker' && !(role === 'orchestrator' && state.implements) && revision !== visit.revision) {
     throw publicError('Рабочее дерево изменилось во время проверки. Требуется новая проверка.');
   }
+  if (role === 'orchestrator' && state.implements) visit.completionRevision = revision;
   if (outcome.status !== 'succeeded') throw publicError(outcome.error);
   let verdict;
   try {
@@ -144,6 +153,57 @@ function finishParticipant(state, visit, outcome) {
   if (role === 'worker') visit.revision = revision;
 }
 
+function failWorkflow(state, message) {
+  if (state.implements) state.pendingFailure ??= message;
+  else { state.status = 'failed'; state.error = message; }
+}
+
+async function tickImplementParticipants(root, state, owner, client) {
+  await withWorkflowAction(root, state, owner, () => {
+    if (state.controls?.some(command => command.kind === 'stop' && command.status === 'pending')) return;
+    advanceImplementState(root, state);
+    for (const visit of state.visits.filter(visit => visit.implementId && admissionStage(visit) === 'prepared')) {
+      visit.admissionStarted = true;
+    }
+  });
+  let available = true;
+  const admitting = state.visits.filter(visit => visit.implementId && admissionStage(visit) === 'admission_started');
+  if (admitting.length) await withWorkflowAction(root, state, owner, async () => {
+    if (state.controls?.some(command => command.kind === 'stop' && command.status === 'pending')) return;
+    await Promise.all(admitting.map(async visit => {
+      try {
+        await admit(client, request(state, visit));
+        visit.admitted = true;
+        state.sessions[visit.participant] = visit.sessionId;
+      } catch (error) {
+        if (error.publicMessage) visit.error = error.publicMessage;
+        else { state.service = 'unavailable'; available = false; }
+      }
+    }));
+  });
+  const active = state.visits.filter(visit => visit.implementId && admissionStage(visit) === 'admitted');
+  const executions = await Promise.allSettled(active.map(visit => readExecution(client, request(state, visit))));
+  if (executions.length) await withWorkflowAction(root, state, owner, () => {
+    if (state.controls?.some(command => command.kind === 'stop' && command.status === 'pending')) return;
+    for (const [index, execution] of executions.entries()) {
+      const visit = active[index];
+      try {
+        if (execution.status === 'rejected') throw execution.reason;
+        if (execution.value.progress) visit.progress = execution.value.progress;
+        if (execution.value.outcome) finishParticipant(state, visit, execution.value.outcome);
+      } catch (error) {
+        if (error.publicMessage) visit.error = error.publicMessage;
+        else { state.service = 'unavailable'; available = false; }
+      }
+      if (visit.steering && admissionStage(visit) === 'finished') {
+        state.controls.find(command => command.id === visit.steering).status = 'applied';
+      }
+    }
+  });
+  if (available) delete state.service;
+  return available;
+}
+
 export async function runWorkflow(root, id) {
   const owner = randomUUID();
   if (!claimWorkflow(root, id, owner)) {
@@ -151,6 +211,7 @@ export async function runWorkflow(root, id) {
     return;
   }
   const state = getWorkflow(root, id);
+  initializeImplements(state);
   const research = researchGraph(state.definition);
   const save = complete => updateWorkflow(root, state, owner, complete);
   if (state.status !== 'running') { save(true); acknowledge(); return; }
@@ -179,18 +240,50 @@ export async function runWorkflow(root, id) {
         });
         await withWorkflowAction(root, state, owner, async () => {
           await stopSessions(client, state);
-          for (const command of state.controls) if (command.status === 'pending') command.status = 'cancelled';
+          for (const command of state.controls) if (command.status === 'pending' || (state.implements && command.status === 'delivered')) command.status = 'cancelled';
           stop.status = 'applied';
           state.status = 'cancelled';
+          delete state.pendingFailure;
           delete state.service;
         });
         break;
       }
-      let visit = state.visits.at(-1);
+      if (state.pendingFailure) {
+        await withWorkflowAction(root, state, owner, () => captureStopSessions(client, state));
+        await withWorkflowAction(root, state, owner, async () => {
+          await interruptSessions(client, state);
+          await captureStopSessions(client, state);
+        });
+        await withWorkflowAction(root, state, owner, async () => {
+          await stopSessions(client, state);
+          state.error = state.pendingFailure;
+          delete state.pendingFailure;
+          delete state.service;
+          state.executionStopped = true;
+          for (const command of state.controls ?? []) if (['pending', 'delivered'].includes(command.status)) command.status = 'cancelled';
+          state.status = 'failed';
+        });
+        break;
+      }
+      if (state.implements) {
+        const available = await tickImplementParticipants(root, state, owner, client);
+        if (!available) { client = undefined; await pause(300); continue; }
+      }
+      let visit = controlVisit(state);
+      if (visit?.kind === 'implements' && !visit.verdict) {
+        if (!acknowledged) { acknowledge(); acknowledged = true; }
+        if (state.implements.events.length > visit.eventCursor || state.controls?.some(command =>
+          command.kind === 'steer' && command.status === 'pending' && !implementTarget(state, command.node))) {
+          visit.verdict = { outcome: 'done', summary: 'Получены новые события implement.',
+            events: state.implements.events.slice(visit.eventCursor) };
+          save(false);
+        } else await pause(300);
+        continue;
+      }
       const stage = visit && admissionStage(visit);
       if (stage === 'finished' && !visit.verdict) throw publicError(visit.error);
       if (!visit || stage === 'finished') {
-        const steering = state.controls?.find(command => command.kind === 'steer' && command.status === 'pending');
+        const steering = state.controls?.find(command => command.kind === 'steer' && command.status === 'pending' && !implementTarget(state, command.node));
         const steered = steering && {
           ...participantVisits(state.visits).findLast(item => item.participant === steering.node),
           ...steering.target,
@@ -203,15 +296,15 @@ export async function runWorkflow(root, id) {
             await withWorkflowAction(root, state, owner, () => {
               if (state.controls?.some(command => command.status === 'pending')) return;
               state.result = visit.verdict;
-              state.error = `Группа ${visit.node} завершилась с результатом ${visit.verdict.outcome}.`;
-              state.status = 'failed';
+              failWorkflow(state, `Группа ${visit.node} завершилась с результатом ${visit.verdict.outcome}.`);
             });
             continue;
           }
           if (!state.finalizing) {
             await withWorkflowAction(root, state, owner, () => {
               if (state.controls?.some(command => command.status === 'pending')) return;
-              checkApprovals(state, snapshot(state.workspace));
+              checkImplementCandidates(state);
+               checkApprovals(state, snapshot(state.workspace));
               state.finalizing = true;
             });
             continue;
@@ -219,12 +312,22 @@ export async function runWorkflow(root, id) {
           await withWorkflowAction(root, state, owner, () => {
             if (state.controls?.some(command => command.status === 'pending')) return;
             const revision = snapshot(state.workspace);
-            checkApprovals(state, revision);
+            checkImplementCandidates(state);
+             checkApprovals(state, revision);
             if (state.definition.merge) {
               state.result = { summary: visit.verdict.summary,
                 commit: mergeWorkspace(state.workspace, revision, workflowCommitTitle(state, revision)) };
             } else state.result = report ?? visit.verdict;
             state.status = 'succeeded';
+          });
+          continue;
+        }
+        if (next === 'implements' && state.definition.implements) {
+          await withWorkflowAction(root, state, owner, () => {
+            if (state.controls?.some(command => command.kind === 'stop' && command.status === 'pending')) return;
+            applyImplementDecision(state, visit);
+            state.visits.push({ node: 'implements', kind: 'implements', startedAt: Date.now(),
+              inputId: 'implements_' + randomUUID(), eventCursor: visit.implementEventCursor ?? 0 });
           });
           continue;
         }
@@ -237,11 +340,12 @@ export async function runWorkflow(root, id) {
           if (!node) {
             await withWorkflowAction(root, state, owner, () => {
               if (state.controls?.some(command => command.kind === 'stop' && command.status === 'pending')) return;
-              state.status = 'failed';
-              state.error = `Не найден участник workflow ${next}.`;
+              failWorkflow(state, `Не найден участник workflow ${next}.`);
             });
             continue;
           }
+          const previous = visit?.verdict;
+          const handoffInputId = visit?.inputId;
           const revision = snapshot(state.workspace);
           const participant = steered?.participant ?? next;
           const sessionId = steering ? steered?.sessionId ?? state.sessions[participant] ?? 'ses_' + randomUUID()
@@ -257,14 +361,12 @@ export async function runWorkflow(root, id) {
             ...(steered?.item ? { item: steered.item } : {}),
             ...(node.role === 'verifier' ? { workspace } : {}),
             ...(review ? { review } : {}),
-            prompt: rolePrompt(state.definition, next, visit?.verdict, revision, state.visits, Boolean(state.roleAgents), review, workspace) };
+             ...(node.role === 'orchestrator' && state.implements ? { implementEventCursor: state.implements.events.length, implementObserved: implementObservation(state) } : {}) };
           if (steering) {
-            if (steered?.item) visit.prompt += `\n\nЭлемент параллельной группы:\n${JSON.stringify(steered.item)}`;
-            visit.prompt += `\n\nУточнение пользователя для этого участника:\n${steering.text}`;
             visit.steering = steering.id;
             steering.status = 'delivered';
           }
-          prepareRoleInput(root, state, visit, state.visits.at(-1)?.verdict, workspace, next, steering);
+          prepareRoleInput(root, state, visit, previous, workspace, next, steering, { ...implementContext(state), handoffInputId });
           state.visits.push(visit);
           save(false);
         }
@@ -272,26 +374,30 @@ export async function runWorkflow(root, id) {
       if (admissionStage(visit) === 'prepared') {
         await withWorkflowAction(root, state, owner, () => {
           if (state.controls?.some(command => command.status === 'pending' && command.kind === 'stop')) {
-            state.visits.pop();
+            state.visits.splice(state.visits.indexOf(visit), 1);
             return;
           }
-          const steering = state.controls?.find(command => command.status === 'pending' && command.kind === 'steer');
+          const steering = state.controls?.find(command => command.status === 'pending' && command.kind === 'steer' && !implementTarget(state, command.node));
           if (steering && !visit.steering) {
             const child = visit.children?.find(item => item.participant === steering.node);
             if (!child) {
               for (const command of state.controls ?? []) {
                 const target = visit.children?.find(item => item.participant === command.node);
-                if (command.kind === 'steer' && command.status === 'pending' && target) {
+                if (command.kind === 'steer' && command.status === 'pending' && !implementTarget(state, command.node) && target) {
                   command.target ??= { node: target.node, participant: target.participant,
                     ...(target.item ? { item: target.item } : {}) };
                 }
               }
-              state.visits.pop();
+              state.visits.splice(state.visits.indexOf(visit), 1);
               return;
             }
-            child.prompt += `\n\nУточнение пользователя для этого участника:\n${steering.text}`;
+            // A changed prepared draft gets a fresh document namespace. Other
+            // implement reports can arrive between group preparation and steer.
+            if (child.taskContext) child.inputId = 'msg_' + randomUUID();
             Object.assign(child, taskBinding(state, child.node, child.item));
-            prepareRoleInput(root, state, child, state.visits.at(-2)?.verdict, child.workspace ?? state.workspace, visit.node, steering);
+            const previousControl = state.visits.slice(0, state.visits.indexOf(visit)).findLast(v => !v.implementId);
+            prepareRoleInput(root, state, child, previousControl?.verdict, child.workspace ?? state.workspace, visit.node, steering,
+              { handoffInputId: previousControl?.inputId });
             child.steering = steering.id;
             steering.status = 'delivered';
           }
@@ -396,7 +502,7 @@ export async function runWorkflow(root, id) {
       try {
         finishParticipant(state, visit, outcome);
       } catch (error) {
-        if (!state.controls?.some(command => command.kind === 'steer' && command.status === 'pending')) throw error;
+        if (!state.controls?.some(command => command.kind === 'steer' && command.status === 'pending' && !implementTarget(state, command.node))) throw error;
         visit.verdict = { outcome: 'blocked', summary: error.publicMessage };
       }
       if (visit.steering) state.controls.find(command => command.id === visit.steering).status = 'applied';
@@ -411,14 +517,13 @@ export async function runWorkflow(root, id) {
             state.service = 'unavailable';
             return;
           }
-          if (state.controls?.some(command => command.kind === 'steer' && command.status === 'pending')) {
-            const visit = state.visits.at(-1);
+          if (state.controls?.some(command => command.kind === 'steer' && command.status === 'pending' && !implementTarget(state, command.node))) {
+            const visit = controlVisit(state);
             if (visit && !visit.verdict) visit.verdict = { outcome: visit.children ? 'failed' : 'blocked',
               summary: error.publicMessage ?? 'Выполнение этапа прервано уточнением.' };
             return;
           }
-          state.status = 'failed';
-          state.error = error.publicMessage ?? 'Контроллер workflow завершился с ошибкой. Рабочее дерево сохранено.';
+          failWorkflow(state, error.publicMessage ?? 'Контроллер workflow завершился с ошибкой. Рабочее дерево сохранено.');
         });
       } catch { break; /* A replacement controller owns the current state. */ }
       if (state.status === 'running') { client = undefined; await pause(1000); }

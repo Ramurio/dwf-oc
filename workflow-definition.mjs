@@ -1,3 +1,4 @@
+import { implementApprovalProblems, implementNodeIds, validateImplements } from './implement-definition.mjs';
 import { validateTaskPackages } from './task-packages.mjs';
 import { createHash } from 'node:crypto';
 import { relative } from 'node:path';
@@ -37,12 +38,12 @@ function validateSettings(value, role, reject) {
 export function validateWorkflow(value) {
   const reject = message => { throw publicError('Workflow: ' + message); };
   if (!object(value)) reject('ожидается объект.');
-  if (Object.keys(value).some(key => !['task', 'taskPackages', 'entry', 'nodes', 'groups', 'transitions', 'merge', 'roles', 'workspace'].includes(key))) reject('неизвестное поле.');
+  if (Object.keys(value).some(key => !['task', 'taskPackages', 'entry', 'nodes', 'groups', 'implements', 'transitions', 'merge', 'roles', 'workspace'].includes(key))) reject('неизвестное поле.');
   if (typeof value.task !== 'string' || !value.task.trim()) reject('нужно непустое task.');
   if (!object(value.nodes) || !Object.keys(value.nodes).length) reject('нужны nodes.');
   if (!object(value.transitions)) reject('нужны transitions.');
   if (value.groups !== undefined && !object(value.groups)) reject('groups должен быть объектом.');
-  const entries = { ...value.nodes, ...value.groups };
+  const entries = { ...value.nodes, ...value.groups, ...(value.implements ? { implements: value.implements } : {}) };
   if (!identifier(value.entry) || !Object.hasOwn(entries, value.entry)) reject('entry должен указывать на участника или группу.');
   if (value.merge !== undefined && typeof value.merge !== 'boolean') reject('merge должен быть boolean.');
   if (value.workspace !== undefined && !['worktree', 'directory'].includes(value.workspace)) reject('неверный workspace.');
@@ -80,7 +81,7 @@ export function validateWorkflow(value) {
     }
   }
   for (const id of Object.keys(entries)) {
-    const expected = value.nodes[id] ? outcomes[value.nodes[id].role] : groupOutcomes;
+    const expected = id === 'implements' && value.implements ? ['done'] : value.nodes[id] ? outcomes[value.nodes[id].role] : groupOutcomes;
     const routes = value.transitions[id];
     const manages = value.nodes[id]?.role === 'orchestrator';
     const canEscalate = ['worker', 'reviewer', 'verifier'].includes(value.nodes[id]?.role);
@@ -102,6 +103,8 @@ export function validateWorkflow(value) {
     }
   }
   if (Object.keys(value.transitions).some(id => !Object.hasOwn(entries, id))) reject('переход от неизвестного участника.');
+  validateTaskPackages(value);
+  validateImplements(value, reject);
   const seen = new Set();
   const pending = [value.entry];
   while (pending.length) {
@@ -111,6 +114,7 @@ export function validateWorkflow(value) {
     pending.push(...Object.values(value.transitions[id]).filter(next => next !== null));
     const group = value.groups?.[id];
     if (group) pending.push(...(group.members ?? [group.member]));
+    if (id === 'implements' && value.implements) pending.push(...implementNodeIds(value));
   }
   if (seen.size !== Object.keys(entries).length) reject('есть недостижимые участники.');
   if (![...seen].some(id => Object.values(value.transitions[id]).includes(null))) reject('нужен завершающий переход null.');
@@ -118,7 +122,6 @@ export function validateWorkflow(value) {
   if (value.merge && !['reviewer', 'verifier'].every(role => Object.values(value.nodes).some(node => node.role === role && node.required !== false))) {
     reject('merge требует reviewer и verifier.');
   }
-  validateTaskPackages(value);
   validateResearchGraph(value, participantSettings, reject);
   return structuredClone(value);
 }
@@ -132,7 +135,7 @@ export function validateItems(items) {
 }
 
 export function participantVisits(visits) {
-  return visits.flatMap(visit => visit.children ?? [visit]);
+  return visits.flatMap(visit => visit.kind === 'implements' ? [] : visit.children ?? [visit]);
 }
 
 function verdictObjects(text) {
@@ -225,9 +228,10 @@ export function participantAgent(role, config) {
 
 export function approvalProblems(state, revision) {
   const required = [];
-  const problems = [];
+  const problems = implementApprovalProblems(state);
+  const templates = implementNodeIds(state.definition);
   for (const [id, node] of Object.entries(state.definition.nodes)) {
-    if (!['reviewer', 'verifier'].includes(node.role) || node.required === false) continue;
+    if (templates.has(id) || !['reviewer', 'verifier'].includes(node.role) || node.required === false) continue;
     const maps = Object.entries(state.definition.groups ?? {}).filter(([, group]) => group.member === id);
     for (const [groupId] of maps) {
       const latest = state.visits.findLast(visit => visit.node === groupId);
@@ -235,7 +239,7 @@ export function approvalProblems(state, revision) {
       for (const child of latest.children) required.push({ id: child.participant, role: node.role,
         visit: participantVisits(state.visits).findLast(visit => visit.participant === child.participant) });
     }
-    const ordinary = participantVisits(state.visits).findLast(visit => visit.node === id && !visit.item);
+    const ordinary = participantVisits(state.visits).findLast(visit => visit.node === id && !visit.item && !visit.implementId);
     if (!maps.length || ordinary) required.push({ id, role: node.role, visit: ordinary });
   }
   for (const { id, visit } of required) {
@@ -243,8 +247,8 @@ export function approvalProblems(state, revision) {
       problems.push(`Для завершения нужно одобрение ${id} текущей версии.`);
     }
   }
-  if (state.definition.merge && !['reviewer', 'verifier'].every(role => required.some(item => item.role === role))) {
-    problems.push('Для merge нужны фактические одобрения reviewer и verifier.');
+  if ((state.definition.merge || state.definition.implements) && !['reviewer', 'verifier'].every(role => required.some(item => item.role === role))) {
+    problems.push('Для ' + (state.definition.implements ? 'завершения implements' : 'merge') + ' нужны фактические одобрения reviewer и verifier.');
   }
   return problems;
 }
@@ -256,7 +260,7 @@ export function checkApprovals(state, revision) {
 
 export function workflowCommitTitle(state, revision) {
   const verifier = participantVisits(state.visits).findLast(visit =>
-    state.definition.nodes[visit.node]?.role === 'verifier' &&
+    !visit.implementId && state.definition.nodes[visit.node]?.role === 'verifier' &&
     state.definition.nodes[visit.node].required !== false &&
     visit.revision === revision && visit.verdict?.outcome === 'approve');
   const title = verifier?.verdict.summary?.trim().split(/[\r\n]/, 1)[0];
@@ -306,6 +310,7 @@ const roleInstructions = {
   ].join('\n'),
   orchestrator: [
     'Manage the assigned work through the supplied workflow graph. Choose an outcome from this node\'s configured transitions; DWF executes its target. In summary, give the reason and the target\'s assignment or correction.',
+    'If the supplied graph has implements, dispatch concrete assignments with implements: [{action: "admit"|"revise", id: "instance ID", assignment: "specific work or correction"}, {action: "integrate", id: "ready instance ID"}]. Choose the transition targeting implements to wait for actual new results. An empty implements array waits without polling the model. Dependencies require integrated results. Individual approvals do not replace review and verification of the combined candidate.',
     'Preserve project files. Delegate implementation and checks to the configured participants. DWF owns execution, session reuse and integration; do not launch nested workflows or perform Git integration yourself.',
     'Return done when your assigned stage is complete. If done ends the workflow, the requested work must be complete and the supplied approval requirements satisfied. DWF checks the current revision again before completing or merging. Your decision is not evidence that integration happened.',
     'When configured only with done, complete the assigned report or preparation using the supplied history; the configured target determines whether another stage follows. Return blocked when the available routes cannot resolve missing information or unfinished work.',
@@ -329,7 +334,7 @@ export const roleAgents = Object.fromEntries(Object.keys(outcomes).map(role => [
     system: roleSystemPrompt(role), permissions: rolePermissions(role),
   })).digest('hex').slice(0, 16)}`]));
 
-export function workflowControlContext(definition, nodeId, visits, revision) {
+export function workflowControlContext(definition, nodeId, visits, revision, state) {
   const routes = definition.transitions?.[nodeId] ?? { done: null };
   return { transitions: routes,
     ...(Object.keys(routes).length > 1 ? {
@@ -342,7 +347,7 @@ export function workflowControlContext(definition, nodeId, visits, revision) {
             { items: group.items.map(item => ({ id: item.id, ...(item.taskId ? { taskId: item.taskId } : {}) })) }) }])),
       routes: definition.transitions,
     } : {}),
-    approvalProblems: approvalProblems({ definition, visits }, revision) };
+    approvalProblems: approvalProblems(state ?? { definition, visits }, revision) };
 }
 
 export function rolePrompt(definition, nodeId, previous, revision, visits = [], separateSystem = false, review, workspace, transitionSource = nodeId, context) {
@@ -363,11 +368,13 @@ export function rolePrompt(definition, nodeId, previous, revision, visits = [], 
   const history = node.role === 'orchestrator' ? visits.flatMap((visit, index) => visit.verdict ? [{
     visit: index + 1, node: visit.node, role: definition.nodes[visit.node]?.role ?? 'group',
     sessionId: visit.sessionId, revision: visit.revision, result: visit.verdict,
+    ...(visit.implementId ? { implementId: visit.implementId, participant: visit.participant } : {}),
   }] : []) : undefined;
   return [
     separateSystem ? '' : research ? researchInstructions : commonInstructions,
     separateSystem ? '' : research ? researchRoles[node.role].system : roleInstructions[node.role],
     context ? '' : node.instructions ?? '',
+    context?.implement ? 'Work only on the supplied implement assignment and its task package in this isolated candidate. Other implement results are dependency evidence, not additional assignments. DWF owns scheduling and integration.' : '',
     !context && node.role === 'orchestrator' ? `Workflow control context:\n${JSON.stringify(workflowControlContext(definition, nodeId, visits, revision))}` : '',
     node.role === 'scientist' ? scientistPhase(researchGraph(definition), visits) : '',
     node.role === 'reviewer' ? `Workflow verification context: ${verification}` : '',

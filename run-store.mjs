@@ -1,3 +1,4 @@
+import { implementNodeIds } from './implement-definition.mjs';
 import { validateTaskState, recordTaskSteering } from './task-packages.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import { existsSync } from 'node:fs';
@@ -175,7 +176,11 @@ export function queueWorkflowCommand(root, id, kind, node, text, revisionKind = 
     if (kind === 'steer' && state.definition.nodes[state.definition.entry]?.role === 'scientist') {
       throw publicError('Research-mid выполняет исходное поручение целиком. Используйте stop и новый запуск для изменения задачи.');
     }
-    const knownParticipant = Object.hasOwn(state.definition.nodes, node) ||
+    const [implementId, implementRole, implementExtra] = (node ?? '').split('/');
+    const implement = Object.hasOwn(state.definition.implements?.instances ?? {}, implementId) && state.definition.implements.instances[implementId];
+    const knownImplement = implement && implementExtra === undefined && (implementRole === undefined || ['worker', 'reviewer', 'verifier'].includes(implementRole));
+    if (kind === 'steer' && implementNodeIds(state.definition).has(node)) throw publicError('Для роли implement укажите instance/role, не общий шаблон.');
+    const knownParticipant = knownImplement || Object.hasOwn(state.definition.nodes, node) ||
       state.visits.flatMap(visit => visit.children ?? [visit]).some(visit => visit.participant === node);
     if (kind === 'steer' && (!knownParticipant ||
       typeof text !== 'string' || !text.trim())) throw publicError('Нужны известный участник и непустое уточнение.');

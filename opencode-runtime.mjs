@@ -246,6 +246,10 @@ export async function admit(client, run) {
     }
   }
   if (session.metadata?.dwfRunId !== run.id) throw publicError('Сессия OpenCode не принадлежит этому запуску DWF.');
+  for (const field of ['dwfImplementId', 'dwfTaskId', 'dwfParticipant']) {
+    const expected = run.request.session.metadata?.[field];
+    if (expected !== undefined && session.metadata?.[field] !== expected) throw publicError('Сессия OpenCode не принадлежит этому implement/участнику.');
+  }
   // Sessions keep their create-time permissions. Reentry (including an older
   // raw-only session) must be able to read the new saved context documents.
   // Preserve every existing rule; add only DWF's generated artifact directories.

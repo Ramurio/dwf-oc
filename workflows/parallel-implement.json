@@ -1,0 +1,115 @@
+{
+  "task": "Combine alpha, beta and dependent gamma",
+  "entry": "manage",
+  "merge": false,
+  "taskPackages": [
+    {
+      "formatVersion": 1,
+      "id": "alpha",
+      "requirements": "Create alpha.txt",
+      "acceptanceCriteria": [
+        "alpha.txt contains alpha"
+      ],
+      "dependencies": [],
+      "decisions": [],
+      "artifacts": []
+    },
+    {
+      "formatVersion": 1,
+      "id": "beta",
+      "requirements": "Create beta.txt",
+      "acceptanceCriteria": [
+        "beta.txt contains beta"
+      ],
+      "dependencies": [],
+      "decisions": [],
+      "artifacts": []
+    },
+    {
+      "formatVersion": 1,
+      "id": "gamma",
+      "requirements": "Create gamma.txt",
+      "acceptanceCriteria": [
+        "gamma.txt contains gamma"
+      ],
+      "dependencies": [
+        "alpha",
+        "beta"
+      ],
+      "decisions": [],
+      "artifacts": []
+    }
+  ],
+  "nodes": {
+    "manage": {
+      "role": "orchestrator"
+    },
+    "work": {
+      "role": "worker"
+    },
+    "review": {
+      "role": "reviewer"
+    },
+    "verify": {
+      "role": "verifier"
+    },
+    "integrationReview": {
+      "role": "reviewer"
+    },
+    "integrationVerify": {
+      "role": "verifier"
+    }
+  },
+  "implements": {
+    "concurrency": 2,
+    "instances": {
+      "alpha": {
+        "taskId": "alpha",
+        "worker": "work",
+        "reviewer": "review",
+        "verifier": "verify"
+      },
+      "beta": {
+        "taskId": "beta",
+        "worker": "work",
+        "reviewer": "review",
+        "verifier": "verify"
+      },
+      "gamma": {
+        "taskId": "gamma",
+        "worker": "work",
+        "reviewer": "review",
+        "verifier": "verify"
+      }
+    }
+  },
+  "transitions": {
+    "manage": {
+      "dispatch": "implements",
+      "finish": "integrationReview",
+      "done": null
+    },
+    "implements": {
+      "done": "manage"
+    },
+    "work": {
+      "done": "review"
+    },
+    "review": {
+      "approve": "verify",
+      "changes": "work"
+    },
+    "verify": {
+      "approve": null,
+      "changes": "work"
+    },
+    "integrationReview": {
+      "approve": "integrationVerify",
+      "changes": "manage"
+    },
+    "integrationVerify": {
+      "approve": null,
+      "changes": "manage"
+    }
+  }
+}

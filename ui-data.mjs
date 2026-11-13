@@ -1,3 +1,5 @@
+import { implementNodeIds } from './implement-definition.mjs';
+import { publicImplements } from './workflow-implements.mjs';
 import { join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { OpenCode, isSessionNotFoundError } from '@opencode/client';
@@ -76,7 +78,7 @@ function callView(state, visit, location, { root, owned }) {
   let status = 'unknown';
   if (visit.error) status = 'failed';
   else if (visit.verdict) status = 'done';
-  else if (state.status === 'cancelled') status = 'cancelled';
+  else if (state.status === 'cancelled' || state.executionStopped) status = 'cancelled';
   else if (state.status === 'running' && owned && !state.service) status = 'active';
   return {
     id: visit.inputId ?? `${visit.sessionId}/${visit.startedAt ?? ''}`,
@@ -110,7 +112,7 @@ export function workflowView(state, { root, owned = false, order = 0 } = {}) {
   const visits = state.visits ?? [];
   const groups = def.groups ?? {};
   const flat = visits.flatMap(visit => (visit.children ?? [visit])
-    .map(child => ({ visit: child, location: visit.node })));
+    .map(child => ({ visit: child, location: child.implementId ? 'implements' : visit.node })));
 
   const lastDirectories = new Map();
   for (const { visit } of flat) {
@@ -160,10 +162,15 @@ export function workflowView(state, { root, owned = false, order = 0 } = {}) {
   }
   walk(def.entry);
   for (const visit of visits) {
-    if (!visit.children) walk(visit.node);
+    if (!visit.children && !visit.implementId) walk(visit.node);
   }
-  const ids = [...Object.keys(def.nodes), ...Object.keys(groups)].filter(id => reachable.has(id));
+  const templates = implementNodeIds(def);
+  const ids = [...Object.keys(def.nodes).filter(id => !templates.has(id)), ...Object.keys(groups),
+    ...(def.implements ? ['implements'] : [])].filter(id => reachable.has(id));
   const nodes = ids.map(id => {
+    if (id === 'implements' && def.implements) return { id, label: 'implements', role: 'implement cycles', group: 'implements',
+      instances: publicImplements(state).instances, participants: Object.entries(def.implements.instances).flatMap(([instanceId, config]) =>
+        ['worker', 'reviewer', 'verifier'].map(role => ({ ...person(`${instanceId}/${role}`, config[role], `${instanceId}/${role}`, 'implements'), showRole: true }))) };
     if (!Object.hasOwn(groups, id)) {
       // A steered data-driven member can execute outside its group while
       // retaining its mapped identity. Put the latest standalone identity first
@@ -236,6 +243,7 @@ export function workflowView(state, { root, owned = false, order = 0 } = {}) {
   let description = '';
   if (state.status === 'running') {
     if (!owned) description = 'Saved running · controller not confirmed (resume with dwf inspect)';
+    else if (state.pendingFailure) description = 'Stopping after controller failure · execution stop not yet confirmed';
     else description = state.service ? 'Running · OpenCode connection unavailable' : 'Running';
   }
   return {
@@ -248,6 +256,7 @@ export function workflowView(state, { root, owned = false, order = 0 } = {}) {
     status: state.status,
     createdAt: state.createdAt ?? visits.find(visit => visit.startedAt)?.startedAt ?? null,
     order, description, graph: { nodes, edges },
+    ...(def.implements ? { implements: publicImplements(state) } : {}),
   };
 }
 
