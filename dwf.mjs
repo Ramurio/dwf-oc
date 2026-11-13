@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { isUtf8 } from 'node:buffer';
 import { randomUUID } from 'node:crypto';
 import { readFile, mkdir, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -31,8 +32,11 @@ async function canonical(path) {
     return join(await canonical(dirname(path)), basename(path));
   }
 }
-async function start(workflowFile, supplied) {
-  const workflow = supplied ?? parse(await readFile(workflowFile, 'utf8'), 'Файл workflow содержит неверный JSON.');
+async function start(workflowFile, supplied, suppliedSnapshot) {
+  const raw = supplied ? undefined : await readFile(workflowFile);
+  if (raw && !isUtf8(raw)) throw publicError('Файл workflow должен быть UTF-8 без потерь.');
+  const inputSnapshot = suppliedSnapshot ?? { encoding: 'base64', data: raw.toString('base64'), source: resolve(workflowFile) };
+  const workflow = supplied ?? parse(raw.toString('utf8'), 'Файл workflow содержит неверный JSON.');
   const graph = object(workflow) && Object.hasOwn(workflow, 'nodes');
   if (graph) validateWorkflow(workflow);
   else if (!object(workflow) || Object.keys(workflow).length !== 1 || !object(workflow.planner) ||
@@ -74,7 +78,7 @@ async function start(workflowFile, supplied) {
     await checkRoleAgents(client, workspace, Object.fromEntries(Object.entries(participants).map(([name, item]) => [name, item.id])));
     const working = prepareWorkspace(root, workspace, id, workflow.workspace);
     const workflowModel = researchGraph(workflow) ? participants[workflow.entry].model : model;
-    createWorkflow(root, { id, createdAt: Date.now(), definition: workflow, model: workflowModel, workspace: working, roleAgents,
+    createWorkflow(root, { id, createdAt: Date.now(), definition: workflow, inputSnapshot, model: workflowModel, workspace: working, roleAgents,
       participants, opencode: client.dwfProfile,
       rolePermissions: Object.fromEntries(Object.keys(roleAgents).map(role => [role, rolePermissions(role)])),
       status: 'running', sessions: {}, visits: [] });
@@ -83,7 +87,7 @@ async function start(workflowFile, supplied) {
     return;
   }
   const run = { id, sessionId: `ses_${randomUUID()}`, inputId: `msg_${randomUUID()}`,
-    request: { ...sessionRequest(workspace, model, id, workflow.planner.task), createdAt: Date.now(), opencode: client.dwfProfile } };
+    request: { ...sessionRequest(workspace, model, id, workflow.planner.task), inputSnapshot, createdAt: Date.now(), opencode: client.dwfProfile } };
   await checkRoleAgents(client, workspace, { planner: run.request.session.agent });
   createRun(root, run);
   await admit(client, run);
@@ -135,10 +139,12 @@ async function watch(runId) {
   }
 }
 
-async function control(runId, kind, node, file) {
+async function control(runId, kind, node, file, revisionKind = 'clarification') {
   const root = stateRoot();
+  const raw = file ? await readFile(file) : undefined;
+  if (raw && !isUtf8(raw)) throw publicError('Уточнение должно быть UTF-8 без потерь.');
   const command = queueWorkflowCommand(root, runId, kind, node,
-    file ? await readFile(file, 'utf8') : undefined);
+    raw?.toString('utf8'), revisionKind);
   await ensureWorkflowRunner(root, runId);
   if (kind === 'steer') {
     json({ runId, command });
@@ -153,10 +159,14 @@ async function control(runId, kind, node, file) {
 
 async function startPreset(name, taskFile) {
   if (!taskFile) throw publicError('Использование: dwf start --preset <имя> --task-file <файл задания>');
-  const task = await readFile(taskFile, 'utf8');
+  const rawTask = await readFile(taskFile);
+  if (!isUtf8(rawTask)) throw publicError('Файл поручения должен быть UTF-8 без потерь.');
+  const task = rawTask.toString('utf8');
   const definition = presets(stateRoot()).find(item => item.name === name)?.definition;
   if (!definition) throw publicError('Пресет не найден.');
-  await start(null, { ...definition, task });
+  if (definition.taskPackages) throw publicError('Пресет с пакетами требует явного нового workflow через start --file; --task-file не заменяет требования пакетов.');
+  await start(null, { ...definition, task }, { encoding: 'base64', data: Buffer.from(JSON.stringify({ ...definition, task })).toString('base64'),
+    source: `preset:${name}`, taskFile: { encoding: 'base64', data: rawTask.toString('base64'), source: resolve(taskFile) } });
 }
 
 function presetFromRun(root, runId) {
@@ -196,8 +206,10 @@ async function presetCommand(args) {
     throw publicError('Использование: dwf preset list | dwf preset show <имя> | dwf preset save <имя> --file <workflow.json> | --from-run <run-id>.');
   }
   const root = stateRoot();
+  const raw = args[2] === '--file' ? await readFile(args[3]) : undefined;
+  if (raw && !isUtf8(raw)) throw publicError('Файл workflow должен быть UTF-8 без потерь.');
   const definition = validateWorkflow(args[2] === '--from-run' ? presetFromRun(root, args[3]) :
-    parse(await readFile(args[3], 'utf8'), 'Неверный JSON workflow.'));
+    parse(raw.toString('utf8'), 'Неверный JSON workflow.'));
   await mkdir(root, { recursive: true, mode: 0o700 });
   savePreset(root, args[1], definition);
   json({ preset: args[1] });
@@ -213,7 +225,7 @@ const usage = {
   schema: ['dwf schema', 'Показывает формат workflow, роли и результаты переходов.'],
   preset: ['dwf preset list', 'dwf preset show <имя>', 'dwf preset save <имя> --file workflow.json',
     'dwf preset save <имя> --from-run <run-id>'],
-  steer: ['dwf steer <run-id> <участник> --message-file <файл>', 'Передаёт уточнение участнику на границе ответа.'],
+  steer: ['dwf steer <run-id> <участник> --message-file <файл>', 'Передаёт уточнение участнику на границе ответа. Необязательно: --kind clarification|decision.'],
   stop: ['dwf stop <run-id>', 'Останавливает workflow и возвращает подтверждённое терминальное состояние.'],
 };
 try {
@@ -253,10 +265,16 @@ try {
   else if (command === 'inspect' && args.length === 2 && args[1] === '--watch') await watch(args[0]);
   else if (command === 'stop' && args.length === 1) await control(args[0], 'stop');
   else if (command === 'steer' && args.length === 4 && args[2] === '--message-file') await control(args[0], 'steer', args[1], args[3]);
+  else if (command === 'steer' && args.length === 6 && args[2] === '--message-file' && args[4] === '--kind') await control(args[0], 'steer', args[1], args[3], args[5]);
   else if (command === 'schema' && args.length === 0) json({ example: {
     task: 'Поручение и критерии готовности', entry: 'execute',
     nodes: { execute: { role: 'worker' } }, transitions: { execute: { done: null } },
   },
+    taskPackages: { formatVersion: 1, documentation: 'docs/task-packages.md',
+      example: { formatVersion: 1, id: 'task-A', beadsId: 'project-123', requirements: 'Exact original requirement',
+        acceptanceCriteria: ['Exact criterion'], dependencies: [], decisions: [{ id: 'storage', text: 'Use the existing store', source: 'user:approval' }],
+        artifacts: [{ id: 'spec', uri: 'docs/spec.md' }] },
+      binding: 'nodes.<node>.taskId or groups.<group>.items[].taskId; visits pin taskId/taskVersion' },
     roles: outcomes, tools: roleTools,
     orchestrator: { outcomes: 'done и именованные решения из transitions этого узла; blocked останавливает выполнение',
       transitions: { implementTask: 'execute', done: null },

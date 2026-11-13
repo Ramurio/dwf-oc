@@ -1,3 +1,4 @@
+import { taskBinding } from './task-packages.mjs';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { openSync, closeSync } from 'node:fs';
@@ -22,20 +23,27 @@ export function publicWorkflow(state) {
       summary: `DWF подтвердил локальный merge в ${state.workspace.branch}. Коммит ${result.commit}.\n\nОтчёт участника до интеграции\n${result.summary}` };
   }
   return { runId: state.id, status: state.status, workspace: state.workspace.path,
+    ...(state.definition.taskPackages ? { taskPackages: state.definition.taskPackages, taskRevisions: state.taskRevisions ?? [] } : {}),
     current: current && { node: current.node, role: state.definition.nodes[current.node]?.role ?? 'group',
       sessionId: current.sessionId, visit: state.visits.length,
+      ...(current.taskId ? { taskId: current.taskId, taskVersion: current.taskVersion } : {}),
       ...(current.participant ? { participant: current.participant } : {}),
       ...(current.children ? { members: current.children.map(child => ({ participant: child.participant, node: child.node,
-        sessionId: child.sessionId, status: child.error ? 'failed' : child.verdict ? 'completed' : 'running',
+        sessionId: child.sessionId, ...taskIdentity(child), status: child.error ? 'failed' : child.verdict ? 'completed' : 'running',
         ...(child.progress ? { progress: child.progress } : {}) })) } : {}),
       ...(current.startedAt ? { startedAt: current.startedAt } : {}),
       ...(current.progress ? { progress: current.progress } : {}) },
-    history: state.visits.map(visit => ({ node: visit.node, sessionId: visit.sessionId,
+    history: state.visits.map(visit => ({ node: visit.node, sessionId: visit.sessionId, ...taskIdentity(visit),
+      ...(visit.children ? { members: visit.children.map(child => ({ participant: child.participant, node: child.node, ...taskIdentity(child) })) } : {}),
       ...(visit.verdict ? { result: visit.verdict, revision: visit.revision } : {}) })),
     ...(state.controls ? { controls: state.controls.map(({ target, ...command }) => command) } : {}),
     ...(state.error ? { error: state.error } : {}),
     ...(state.service ? { service: { status: 'unavailable' } } : {}),
     ...(result ? { result } : {}) };
+}
+
+function taskIdentity(visit) {
+  return visit.taskId ? { taskId: visit.taskId, taskVersion: visit.taskVersion } : {};
 }
 
 export function watchEvent(previous, state) {
@@ -241,6 +249,7 @@ export async function runWorkflow(root, id) {
           const review = node.role === 'reviewer' && state.workspace.mode !== 'directory' && (!earlierReview || earlierReview.review) ? writeReviewDiff(state.workspace, revision,
             join(root, 'workflows', id, 'reviews', `${inputId}.diff`)) : undefined;
           visit = { node: next, participant, sessionId, inputId, revision, startedAt: Date.now(),
+            ...taskBinding(state, next, steered?.item),
             admissionStarted: false,
             ...(steered?.item ? { item: steered.item } : {}),
             ...(node.role === 'verifier' ? { workspace } : {}),
@@ -277,6 +286,7 @@ export async function runWorkflow(root, id) {
               return;
             }
             child.prompt += `\n\nУточнение пользователя для этого участника:\n${steering.text}`;
+            Object.assign(child, taskBinding(state, child.node, child.item));
             child.steering = steering.id;
             steering.status = 'delivered';
           }

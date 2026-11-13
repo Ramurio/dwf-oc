@@ -1,3 +1,4 @@
+import { taskBinding, validateTaskReference } from './task-packages.mjs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { participantVisits, rolePrompt, validateItems } from './workflow-definition.mjs';
@@ -6,11 +7,15 @@ import { publicError } from './run-store.mjs';
 
 export function prepareGroup(root, state, id, previous) {
   const group = state.definition.groups[id];
-  const revision = snapshot(state.workspace);
   const items = group.members ? group.members.map(node => ({ node, participant: node,
     required: (group.required ?? group.members).includes(node) })) :
     validateItems(group.items ?? participantVisits(state.visits).findLast(visit => visit.node === group.itemsFrom)?.verdict?.items)
       .map(item => ({ node: group.member, participant: `${id}/${item.id}`, item, required: true }));
+  // Validate all dynamic links before preparing any child workspace or session.
+  if (state.definition.taskPackages) {
+    for (const item of items) validateTaskReference(state.definition, item.item?.taskId);
+  }
+  const revision = snapshot(state.workspace);
   const children = items.map(item => {
     const node = state.definition.nodes[item.node];
     const sessionId = state.participants?.[item.node]?.memory === false ? 'ses_' + randomUUID()
@@ -23,7 +28,7 @@ export function prepareGroup(root, state, id, previous) {
     const prompt = rolePrompt(state.definition, item.node, input, revision, state.visits,
       Boolean(state.roleAgents), review, workspace, id) +
       (item.item ? `\n\nЭлемент параллельной группы:\n${JSON.stringify(item.item)}` : '');
-    return { ...item, sessionId, inputId, revision,
+    return { ...item, ...taskBinding(state, item.node, item.item), sessionId, inputId, revision,
       startedAt: Date.now(), workspace, prompt, ...(review ? { review } : {}) };
   });
   return { node: id, inputId: 'group_' + randomUUID(), revision, startedAt: Date.now(), admissionStarted: false, children };
@@ -36,7 +41,7 @@ export function groupVerdict(visit) {
   return { outcome: failed ? 'failed' : changes ? 'changes' : 'done',
     summary: `Собраны результаты ${visit.children.length} участников группы ${visit.node}.`,
     results: visit.children.map(child => ({ participant: child.participant, node: child.node,
-      required: child.required, ...(child.item ? { item: child.item } : {}), revision: child.revision,
+      required: child.required, ...(child.taskId ? { taskId: child.taskId, taskVersion: child.taskVersion } : {}), ...(child.item ? { item: child.item } : {}), revision: child.revision,
       status: child.error ? 'failed' : 'completed',
       ...(child.error ? { error: child.error } : { result: child.verdict }) })) };
 }

@@ -1,3 +1,4 @@
+import { validateTaskState, recordTaskSteering } from './task-packages.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -99,6 +100,7 @@ function workflowTable(db) {
 }
 
 export function createWorkflow(root, state) {
+  validateTaskState(state);
   const db = open(root, true);
   try {
     workflowTable(db);
@@ -112,7 +114,10 @@ export function getWorkflow(root, id) {
   try {
     if (!db.prepare("SELECT name FROM sqlite_master WHERE name = 'workflows'").get()) return undefined;
     const row = db.prepare('SELECT state FROM workflows WHERE id = ?').get(id);
-    return row && JSON.parse(row.state);
+    if (!row) return undefined;
+    const state = JSON.parse(row.state);
+    validateTaskState(state);
+    return state;
   } finally { db.close(); }
 }
 
@@ -153,7 +158,8 @@ export function presets(root) {
   } finally { db.close(); }
 }
 
-export function queueWorkflowCommand(root, id, kind, node, text) {
+export function queueWorkflowCommand(root, id, kind, node, text, revisionKind = 'clarification') {
+  if (!['clarification', 'decision'].includes(revisionKind)) throw publicError('Неверный вид уточнения.');
   if (!['stop', 'steer'].includes(kind)) throw publicError('Неизвестная команда workflow.');
   const db = open(root, true);
   try {
@@ -162,6 +168,7 @@ export function queueWorkflowCommand(root, id, kind, node, text) {
     const row = db.prepare('SELECT state FROM workflows WHERE id = ?').get(id);
     if (!row) throw publicError('Workflow не найден.');
     const state = JSON.parse(row.state);
+    validateTaskState(state);
     const stopped = state.controls?.find(command => command.kind === 'stop');
     if (kind === 'stop' && stopped) return stopped;
     if (state.status !== 'running' || state.finalizing || stopped) throw publicError('Workflow уже завершает работу и не принимает команды.');
@@ -174,6 +181,8 @@ export function queueWorkflowCommand(root, id, kind, node, text) {
       typeof text !== 'string' || !text.trim())) throw publicError('Нужны известный участник и непустое уточнение.');
     const command = { id: randomUUID(), kind, status: 'pending', createdAt: Date.now(),
       ...(kind === 'steer' ? { node, text } : {}) };
+    if (kind === 'steer') recordTaskSteering(state, command, revisionKind);
+    validateTaskState(state);
     state.controls ??= [];
     state.controls.push(command);
     db.prepare('UPDATE workflows SET state = ? WHERE id = ?').run(JSON.stringify(state), id);
@@ -209,10 +218,16 @@ function refreshControls(db, state, owner) {
   const row = db.prepare('SELECT state FROM workflows WHERE id = ? AND owner = ?').get(state.id, owner);
   if (!row) throw Object.assign(publicError('Контроллер workflow потерял владение запуском.'), { code: 'DWF_OWNER_LOST' });
   const saved = JSON.parse(row.state);
+  // Revisions are appended by commands under the same transaction as controls.
+  // Check the caller's prefix before merging commands accepted by another process.
+  validateTaskState(state, { ...saved, taskRevisions: (saved.taskRevisions ?? []).slice(0, (state.taskRevisions ?? []).length) });
+  if (saved.taskRevisions) state.taskRevisions = structuredClone(saved.taskRevisions);
+  validateTaskState(state, saved);
   if (saved.controls?.length) {
     const known = new Map((state.controls ?? []).map(command => [command.id, command]));
     state.controls = saved.controls.map(command => known.get(command.id) ?? command);
   }
+  return saved;
 }
 
 // Keep the owner check and external side effect indivisible with respect to commands and takeover.
@@ -220,8 +235,9 @@ export async function withWorkflowAction(root, state, owner, action) {
   const db = open(root, true);
   try {
     db.exec('BEGIN IMMEDIATE');
-    refreshControls(db, state, owner);
+    const saved = refreshControls(db, state, owner);
     const result = await action();
+    validateTaskState(state, saved);
     const complete = state.status !== 'running';
     db.prepare('UPDATE workflows SET state = ?, owner = ?, expires = ? WHERE id = ? AND owner = ?')
       .run(JSON.stringify(state), complete ? null : owner, complete ? 0 : Date.now() + 30000, state.id, owner);
@@ -241,7 +257,8 @@ export function savedRuns(root) {
     db.exec('BEGIN');
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map(row => row.name);
     const workflows = tables.includes('workflows') ? db.prepare('SELECT rowid, state, owner, expires FROM workflows ORDER BY rowid DESC').all()
-      .map(row => ({ state: JSON.parse(row.state), order: row.rowid, owned: Boolean(row.owner && row.expires > Date.now()) })) : [];
+      .map(row => { const state = JSON.parse(row.state); validateTaskState(state);
+        return { state, order: row.rowid, owned: Boolean(row.owner && row.expires > Date.now()) }; }) : [];
     const runs = db.prepare('SELECT rowid, * FROM runs ORDER BY rowid DESC').all().map(row => ({ id: row.id,
       sessionId: row.session_id, inputId: row.input_id, request: JSON.parse(row.request), admitted: row.admitted === 1,
       status: row.status, result: row.result, error: row.error, order: row.rowid }));

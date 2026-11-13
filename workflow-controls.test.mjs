@@ -748,3 +748,26 @@ for (const kind of ['single', 'fixed', 'map']) {
     });
   }
 }
+
+test('prepared mapped steering updates only its bound package version while preserving the other child', async t => {
+  const taskPackages = ['A', 'B'].map(id => ({ formatVersion: 1, id: `task-${id}`, requirements: `Exact task ${id}`,
+    acceptanceCriteria: [], dependencies: [], decisions: [], artifacts: [] }));
+  const definition = { task: 'Prepared package steering', workspace: 'directory', taskPackages, entry: 'jobs',
+    nodes: { review: { role: 'reviewer', taskId: 'task-A' }, verify: { role: 'verifier' } },
+    groups: { jobs: { member: 'review', items: [{ id: 'alpha' }, { id: 'beta', taskId: 'task-B' }] } },
+    transitions: { jobs: { done: 'verify', changes: null, failed: null },
+      review: { approve: 'verify', changes: null }, verify: { approve: null, changes: null } } };
+  const children = definition.groups.jobs.items.map((item, index) => ({ node: 'review', participant: `jobs/${item.id}`,
+    item, required: true, taskId: taskPackages[index].id, taskVersion: 1,
+    sessionId: `ses_${item.id}`, inputId: `msg_${item.id}`, revision: 'original', prompt: `Item ${item.id}` }));
+  const f = await fixture(t, { definition, visits: [{ node: 'jobs', inputId: 'group_1', revision: 'original', admissionStarted: false, children }] });
+  f.command('steer', 'jobs/beta', 'Exact clarification for B');
+  await f.run();
+  const state = f.state();
+  assert.equal(state.status, 'succeeded', state.error);
+  assert.deepEqual(state.visits[0].children.map(child => [child.taskId, child.taskVersion]), [['task-A', 1], ['task-B', 2]]);
+  assert.equal(state.taskRevisions[0].taskId, 'task-B');
+  assert.equal(state.taskRevisions[0].text, 'Exact clarification for B');
+  assert.doesNotMatch(f.admitted[0].request.text, /Exact clarification for B/);
+  assert.match(f.admitted[1].request.text, /Exact clarification for B/);
+});

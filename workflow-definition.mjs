@@ -1,3 +1,4 @@
+import { validateTaskPackages } from './task-packages.mjs';
 import { createHash } from 'node:crypto';
 import { relative } from 'node:path';
 import { publicError } from './run-store.mjs';
@@ -36,7 +37,7 @@ function validateSettings(value, role, reject) {
 export function validateWorkflow(value) {
   const reject = message => { throw publicError('Workflow: ' + message); };
   if (!object(value)) reject('ожидается объект.');
-  if (Object.keys(value).some(key => !['task', 'entry', 'nodes', 'groups', 'transitions', 'merge', 'roles', 'workspace'].includes(key))) reject('неизвестное поле.');
+  if (Object.keys(value).some(key => !['task', 'taskPackages', 'entry', 'nodes', 'groups', 'transitions', 'merge', 'roles', 'workspace'].includes(key))) reject('неизвестное поле.');
   if (typeof value.task !== 'string' || !value.task.trim()) reject('нужно непустое task.');
   if (!object(value.nodes) || !Object.keys(value.nodes).length) reject('нужны nodes.');
   if (!object(value.transitions)) reject('нужны transitions.');
@@ -55,7 +56,7 @@ export function validateWorkflow(value) {
   }
   for (const [id, node] of Object.entries(value.nodes)) {
     if (!identifier(id) || !object(node) || !Object.hasOwn(outcomes, node.role)) reject('неверный участник ' + id);
-    if (Object.keys(node).some(key => !['role', 'instructions', 'required', ...settings].includes(key)) ||
+    if (Object.keys(node).some(key => !['role', 'instructions', 'required', 'taskId', ...settings].includes(key)) ||
       (node.instructions !== undefined && typeof node.instructions !== 'string')) reject('неверные настройки ' + id);
     validateSettings(node, node.role, reject);
     if (node.required !== undefined && (typeof node.required !== 'boolean' ||
@@ -117,6 +118,7 @@ export function validateWorkflow(value) {
   if (value.merge && !['reviewer', 'verifier'].every(role => Object.values(value.nodes).some(node => node.role === role && node.required !== false))) {
     reject('merge требует reviewer и verifier.');
   }
+  validateTaskPackages(value);
   validateResearchGraph(value, participantSettings, reject);
   return structuredClone(value);
 }

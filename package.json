@@ -13,7 +13,7 @@
     "test:harness": "node --test acceptance/harness.test.mjs acceptance/tester.test.mjs acceptance/isolation.test.mjs acceptance/benchmark.test.mjs",
     "test:mutation": "node acceptance/verify-lifetime-mutation.mjs",
     "dwf": "node dwf.mjs",
-    "test:product": "node --test run-store.test.mjs workflow.test.mjs workflow-controls.test.mjs workflow-groups.test.mjs workflow-admission.test.mjs ui.test.mjs",
+    "test:product": "node --test task-packages.test.mjs run-store.test.mjs workflow.test.mjs workflow-controls.test.mjs workflow-groups.test.mjs workflow-admission.test.mjs ui.test.mjs",
     "test:runtime": "node --test acceptance/runtime.test.mjs",
     "test:recovery": "cucumber-js --config cucumber.mjs --tags @recovery --format json:acceptance-results/opencode/recovery.json",
     "test:workflow": "cucumber-js --config cucumber.mjs --tags @workflow --format json:acceptance-results/opencode/workflow.json",

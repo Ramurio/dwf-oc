@@ -1128,3 +1128,63 @@ for (const kind of ['single', 'fixed', 'map']) {
       });
   }
 }
+
+test('public CLI task packages preserve exact input, versioned decisions and task identity through controller restart', { timeout: 60000 }, async t => {
+  const requirements = '  Точные требования\r\n\tБез сводки: e\u0301 ≠ é 😀\n\u0000 конец  \r\n';
+  const task = { formatVersion: 1, id: 'task-A', beadsId: 'example-1', requirements,
+    acceptanceCriteria: ['Preserve exact text'], dependencies: [],
+    decisions: [{ id: 'storage', text: 'Use existing SQLite store', source: 'user:architecture' }],
+    artifacts: [{ id: 'spec', uri: 'docs/spec.md' }] };
+  const definition = { task: 'Full original request for audit', workspace: 'directory', entry: 'report',
+    taskPackages: [task], nodes: { report: { role: 'orchestrator', taskId: task.id, tools: [], skills: [] } },
+    transitions: { report: { done: null } } };
+  const sandbox = await fixture(t, definition, () => verdict('done'), true, {}, { boundary: 'accepted' });
+  const original = getWorkflow(sandbox.state, sandbox.runId);
+  const input = original.visits[0];
+  assert.equal(input.taskId, task.id);
+  assert.equal(input.taskVersion, 1);
+  assert.deepEqual(Buffer.from(original.inputSnapshot.data, 'base64'), await readFile(join(sandbox.root, 'workflow.json')));
+  const message = join(sandbox.root, 'decision.txt');
+  const decision = '  Согласованное решение\r\nОставить точное условие.\n';
+  await writeFile(message, decision);
+  const queued = await sandbox.command(['steer', sandbox.runId, 'report', '--message-file', message, '--kind', 'decision']);
+  assert.equal(queued.command.taskId, task.id);
+  assert.equal(queued.command.taskVersion, 2);
+  expireWorkflowLease(sandbox);
+  await sandbox.command(['inspect', sandbox.runId]);
+  await sandbox.release();
+  const final = await sandbox.finish();
+  assert.equal(final.status, 'succeeded', final.error);
+  assert.deepEqual(final.definition.taskPackages, [task]);
+  assert.deepEqual(Buffer.from(final.definition.taskPackages[0].requirements), Buffer.from(requirements));
+  assert.deepEqual(final.inputSnapshot, original.inputSnapshot);
+  assert.deepEqual(final.visits.map(visit => [visit.taskId, visit.taskVersion]), [[task.id, 1], [task.id, 2]]);
+  for (const field of ['sessionId', 'inputId', 'prompt']) assert.equal(final.visits[0][field], input[field]);
+  assert.equal(final.visits[1].sessionId, input.sessionId);
+  assert.deepEqual(final.taskRevisions, [{ taskId: task.id, version: 2, kind: 'decision', text: decision,
+    source: `steer:${queued.command.id}`, createdAt: queued.command.createdAt }]);
+  const inspected = await sandbox.command(['inspect', sandbox.runId]);
+  assert.deepEqual(inspected.taskPackages, [task]);
+  assert.equal(inspected.history[0].taskId, task.id);
+  assert.equal(inspected.history[1].taskVersion, 2);
+});
+
+test('public CLI mapped visits retain distinct task packages and expose structured child identities', { timeout: 60000 }, async t => {
+  const packages = ['A', 'B'].map(id => ({ formatVersion: 1, id: `task-${id}`, requirements: `Exact requirement ${id}`,
+    acceptanceCriteria: [`Criterion ${id}`], dependencies: [], decisions: [], artifacts: [] }));
+  const definition = { task: 'Original full multi-task request', workspace: 'directory', taskPackages: packages, entry: 'reports',
+    nodes: { report: { role: 'orchestrator', taskId: 'task-A', tools: [], skills: [] } },
+    groups: { reports: { member: 'report', items: [{ id: 'one' }, { id: 'two', taskId: 'task-B' }] } },
+    transitions: { report: { done: null }, reports: { done: null, changes: null, failed: null } } };
+  const sandbox = await fixture(t, definition, () => verdict('done'), true);
+  const running = await sandbox.command(['inspect', sandbox.runId]);
+  assert.deepEqual(running.current.members.map(child => [child.participant, child.taskId, child.taskVersion]), [
+    ['reports/one', 'task-A', 1], ['reports/two', 'task-B', 1],
+  ]);
+  await sandbox.release();
+  const final = await sandbox.finish();
+  assert.equal(final.status, 'succeeded', final.error);
+  const inspected = await sandbox.command(['inspect', sandbox.runId]);
+  assert.deepEqual(inspected.history[0].members.map(child => [child.taskId, child.taskVersion]), [['task-A', 1], ['task-B', 1]]);
+  assert.deepEqual(final.definition.taskPackages, packages);
+});
