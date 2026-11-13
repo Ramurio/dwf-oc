@@ -232,3 +232,19 @@ export async function withWorkflowAction(root, state, owner, action) {
     db.close();
   }
 }
+
+// A consistent, read-only snapshot for observers. Never claims or resumes runs.
+export function savedRuns(root) {
+  const db = open(root, false);
+  if (!db) return { workflows: [], runs: [] };
+  try {
+    db.exec('BEGIN');
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map(row => row.name);
+    const workflows = tables.includes('workflows') ? db.prepare('SELECT rowid, state, owner, expires FROM workflows ORDER BY rowid DESC').all()
+      .map(row => ({ state: JSON.parse(row.state), order: row.rowid, owned: Boolean(row.owner && row.expires > Date.now()) })) : [];
+    const runs = db.prepare('SELECT rowid, * FROM runs ORDER BY rowid DESC').all().map(row => ({ id: row.id,
+      sessionId: row.session_id, inputId: row.input_id, request: JSON.parse(row.request), admitted: row.admitted === 1,
+      status: row.status, result: row.result, error: row.error, order: row.rowid }));
+    return { workflows, runs };
+  } finally { if (db.isTransaction) db.exec('ROLLBACK'); db.close(); }
+}

@@ -47,10 +47,24 @@ dwf inspect <runId> --watch
 пресеты, параллельные группы, уточнения и остановку. Для исследований есть
 схема [research-mid](docs/research-mid.md).
 
+## Общий браузерный UI
+
+```sh
+dwf ui --start    # возвращает URL и завершается; UI остаётся в фоне
+dwf ui --status   # узнать текущий URL (также dwf ui)
+dwf ui --stop     # только UI, не workflow и не OpenCode
+```
+
+Один список настоящих запусков всех проектов из `~/.dwf/dwf.sqlite`, автоматическая
+карта Lines, живые статусы, история и копирование команды выбранной OpenCode-сессии.
+Новые запуски появляются без перезагрузки страницы. Явно заданные `DWF_STATE_DIR`
+остаются изолированы. [Использование, проверенные сценарии и ограничения](docs/ui.md).
+
 ## Карта проекта
 
 | Путь | Назначение |
 | --- | --- |
+| [ui-service.mjs](ui-service.mjs), [ui-server.mjs](ui-server.mjs), [ui-data.mjs](ui-data.mjs) | Фоновый localhost UI и адаптер настоящих запусков |
 | [dwf.mjs](dwf.mjs) | Вход CLI, запуск, просмотр, управление и пресеты |
 | [workflow-definition.mjs](workflow-definition.mjs) | Проверка схемы, роли, системные инструкции и одобрения |
 | [workflow-runtime.mjs](workflow-runtime.mjs), [workflow-groups.mjs](workflow-groups.mjs) | Контроллер, переходы, сессии и параллельные группы |

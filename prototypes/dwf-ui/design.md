@@ -32,7 +32,7 @@ The narrow view model is:
 - invocation: fictional actual `session`, task/result, state, model/reasoning/speed/skills;
 - transition: unique `id`, `from`, `to`, `label`, `kind: control | result`, optional `reentry`.
 
-This is **not a production runtime parser**. A future adapter must supply real nodes, groups, transitions and observations without replacing session identity with role names. No runtime source is imported or changed.
+The layout is **not a runtime parser**. The production adapter is now `../../ui-data.mjs`: it supplies real nodes, groups, transitions and observations, identifies cycle feedback edges automatically, and preserves actual session identities. The static demo still uses only `fixtures.mjs`; neither mode introduces runtime scheduling into the renderer. See [live UI](../../docs/ui.md).
 
 `layout.mjs` performs:
 
@@ -59,5 +59,5 @@ Compare `baseline-1440x900.png` with `research-1440x900.png`: both scout partici
 - Nested groups, dynamic group virtualization, and hundreds of participants are not implemented. Dense cross-linked graphs or dozens of returns need congestion-aware routing/edge bundling beyond these gutters. No universal aesthetic guarantee is claimed.
 - Long maps intentionally need pan/zoom. Overview captions can be too small to read; 100% and current navigation are the reading modes.
 - Text-only CSS enlargement and actual CDP pinch zoom were exercised. Native Chrome page zoom at 200% is also covered by the review regressions (a preference only in their temporary profile, verified by actual viewport reflow and DPR). Assistive-technology use, touch hardware and non-Chrome browsers still need inspection.
-- All data is fictional and static. Live backend updates, persistence, production CLI lifecycle, and real OpenCode attachment are out of scope.
+- The static demo data is fictional. The same assets now also support the real local service; lifecycle, live updates, actual session commands and their verification are documented in [live UI](../../docs/ui.md).
 - The final paired-arrow revision was approved for merging by the user on 2026-11-13. Historical DWF critic scores concern their reviewed revisions. Current implementation checks and user approval are recorded separately in `review-summary.json`.

@@ -25,7 +25,7 @@ export function layoutGraph(graph, {measure=estimateText}={}) {
   if(new Set(graph.edges.map(e=>e.id)).size!==graph.edges.length)throw new Error('Duplicate edge ID');
   const nodes=graph.nodes.map((n,index)=>{
     const title=wrapText(n.label,n.role==='terminal'?58:n.group?208:222,t=>measure(t,18,600));
-    const members=(n.group?n.participants||[]:[]).map(p=>({id:p.id,lines:wrapText(p.name,158,t=>measure(t,16,600))}));
+    const members=(n.group?n.participants||[]:[]).map(p=>({id:p.id,lines:wrapText(p.showRole?`${p.name} · ${p.role}`:p.name,158,t=>measure(t,16,600))}));
     const header=title.length*22+34;
     const rows=members.map(p=>Math.max(50,p.lines.length*18+28));
     return {id:n.id,index,role:n.role,group:n.group,title,members,header,rows,width:n.role==='terminal'?90:n.group?254:Math.max(150,Math.min(254,32+Math.ceil(Math.max(...title.map(t=>measure(t,18,600)))))),height:n.group?header+sum(rows)+16:n.role==='terminal'?82:Math.max(108,header+40),rank:0};
@@ -87,7 +87,15 @@ export function layoutGraph(graph, {measure=estimateText}={}) {
     inputBanks.set(n.id,inputOffsets);outputBanks.set(n.id,outputOffsets);
     n.height=Math.max(n.height,(inputOffsets.at(-1)||0)+(n.group?37:28),(outputOffsets.at(-1)||0)+(n.group?40:28));
   }
-  const top=24+skipped.length*38, gapY=24;
+  // A paired skip has a reply caption below its forward caption. Reserve
+  // the whole caption block before placing the next skip route or any nodes.
+  const skipLanes=new Map();
+  let top=24;
+  for(const edge of skipped) {
+    skipLanes.set(edge.id,top);
+    top+=38+(pairedForward.has(edge.id)?36:0);
+  }
+  const gapY=24;
   const maxHeight=Math.max(...layers.map(l=>sum(l.map(n=>n.height))+Math.max(0,l.length-1)*gapY));
   for(const layer of layers) {
     let y=top+(maxHeight-sum(layer.map(n=>n.height))-(layer.length-1)*gapY)/2;
@@ -166,7 +174,7 @@ export function layoutGraph(graph, {measure=estimateText}={}) {
       points=[start,{x:sx,y:start.y},{x:sx,y:lane},{x:tx,y:lane},{x:tx,y:finish.y},finish];
       label={x:(sx+tx)/2,y:lane-9-(lines.length-1)*18,text,lines,anchor:'middle'};
     } else if(skipped.includes(e)) {
-      const index=skipped.indexOf(e),lane=24+index*38,sx=gutters[source.rank].x+24+slot*14,tx=target.x-24;
+      const lane=skipLanes.get(e.id),sx=gutters[source.rank].x+24+slot*14,tx=target.x-24;
       points=[start,{x:sx,y:start.y},{x:sx,y:lane},{x:tx,y:lane},{x:tx,y:finish.y},finish];
       label={x:(sx+tx)/2,y:lane-8,text:e.label,anchor:'middle'};
     } else {

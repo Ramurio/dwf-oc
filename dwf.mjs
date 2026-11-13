@@ -12,6 +12,7 @@ import { ensureWorkflowRunner, publicWorkflow, watchEvent } from './workflow-run
 import { prepareWorkspace } from './workflow-git.mjs';
 import { bundledSkills } from './role-skills.mjs';
 import { researchGraph } from './research-workflow.mjs';
+import { uiCommand } from './ui-service.mjs';
 
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const json = value => process.stdout.write(JSON.stringify(value) + '\n');
@@ -73,7 +74,7 @@ async function start(workflowFile, supplied) {
     await checkRoleAgents(client, workspace, Object.fromEntries(Object.entries(participants).map(([name, item]) => [name, item.id])));
     const working = prepareWorkspace(root, workspace, id, workflow.workspace);
     const workflowModel = researchGraph(workflow) ? participants[workflow.entry].model : model;
-    createWorkflow(root, { id, definition: workflow, model: workflowModel, workspace: working, roleAgents,
+    createWorkflow(root, { id, createdAt: Date.now(), definition: workflow, model: workflowModel, workspace: working, roleAgents,
       participants, opencode: client.dwfProfile,
       rolePermissions: Object.fromEntries(Object.keys(roleAgents).map(role => [role, rolePermissions(role)])),
       status: 'running', sessions: {}, visits: [] });
@@ -82,7 +83,7 @@ async function start(workflowFile, supplied) {
     return;
   }
   const run = { id, sessionId: `ses_${randomUUID()}`, inputId: `msg_${randomUUID()}`,
-    request: { ...sessionRequest(workspace, model, id, workflow.planner.task), opencode: client.dwfProfile } };
+    request: { ...sessionRequest(workspace, model, id, workflow.planner.task), createdAt: Date.now(), opencode: client.dwfProfile } };
   await checkRoleAgents(client, workspace, { planner: run.request.session.agent });
   createRun(root, run);
   await admit(client, run);
@@ -197,6 +198,7 @@ async function presetCommand(args) {
 }
 const [command, ...args] = process.argv.slice(2);
 const usage = {
+  ui: ['dwf ui --start | --stop | --status', 'Алиасы: dwf ui start | stop | status. Без аргументов — адрес работающего UI.'],
   start: ['dwf start --file workflow.json', 'dwf start --preset <имя> --task-file <файл задания>',
     'Запускает workflow в текущем проекте и возвращает runId.'],
   inspect: ['dwf inspect <run-id> [--watch]',
@@ -219,6 +221,7 @@ try {
       '  dwf inspect <run-id> [--watch]',
       '  dwf steer <run-id> <участник> --message-file <файл>',
       '  dwf stop <run-id>',
+      '  dwf ui --start | --stop | --status',
       '  dwf schema',
       '  dwf preset list',
       '  dwf preset save <имя> --file workflow.json',
@@ -236,7 +239,8 @@ try {
     process.stdout.write(usage[command].join('\n') + '\n');
   } else if (command === 'preset' && ['list', 'save'].includes(args[0]) && args.length === 2 && ['--help', '-h'].includes(args[1])) {
     process.stdout.write(usage.preset.join('\n') + '\n');
-  } else if (command === 'start' && args.length === 2 && args[0] === '--file') await start(args[1]);
+  } else if (command === 'ui') json(await uiCommand(stateRoot(), args));
+  else if (command === 'start' && args.length === 2 && args[0] === '--file') await start(args[1]);
   else if (command === 'start' && args.length === 4 && args[0] === '--preset' && args[2] === '--task-file') await startPreset(args[1], args[3]);
   else if (command === 'inspect' && args.length === 1) json(await inspect(args[0]));
   else if (command === 'inspect' && args.length === 2 && args[1] === '--watch') await watch(args[0]);

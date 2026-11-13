@@ -14,13 +14,14 @@ Open <http://127.0.0.1:8000/>. Choose a run, select a primitive or participant, 
 
 Actual opposing transitions share two close routes. Green arrows show forward control, purple arrows show results or requested changes. Blocks show call counts and graphical session continuity. Click a block for the session explanation. Fit reveals the complete map. The percentage button restores 100% for reading, and scroll/drag navigates larger maps. Runs collapse into a menu on narrow screens.
 
-All runs and OpenCode IDs are fictional. Live DWF integration and the persistent `dwf ui --start/--stop` service are pending. `baseline.html` preserves the earlier comparison snapshot.
+All runs and OpenCode IDs in this **static demo** are fictional. The same `index.html`, `app.mjs`, `layout.mjs` and `styles.css` are shared with the persistent real-data service: run `dwf ui --start` (or `node dwf.mjs ui --start` from the repository). The service sets live mode and never serves demo fixtures. See [live UI documentation](../../docs/ui.md) for scope, lifecycle, session commands and checks. `baseline.html` preserves the earlier comparison snapshot.
 
 ## Reproduce checks
 
 Requires Node with built-in WebSocket and local Google Chrome. Set `CHROME_BIN` for a different Chrome installation. Browser checks own disposable profiles and debugging ports. Evidence is saved under ignored `.evidence/` directories.
 
 ```sh
+npm run test:ui # includes isolated real DWF/OpenCode + browser verification
 node --test prototypes/dwf-ui/qa/layout.test.mjs
 node prototypes/dwf-ui/qa/paired-routes.test.mjs
 node prototypes/dwf-ui/qa/browser-checks.mjs

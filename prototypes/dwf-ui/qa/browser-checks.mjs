@@ -147,6 +147,12 @@ try {
   assert.ok(await ev(`performance.getEntriesByType('resource').every(r=>r.name.startsWith(location.origin))`));
   checks.push('All loaded page resources are local; no third-party assets');
   checks.push('Short 1280x520 viewport and reduced-motion media exercised; enlarged-text exploratory screenshot (not native browser zoom)');
+  await fixture('research');
+  await ev(`{const g=dwfDemo.getGraph();for(const v of g.nodes.find(n=>n.id==='committee').participants[0].invocations)v.session=null;dwfDemo.showGraph(g)}`);
+  await click('[data-primitive="committee"]');
+  assert.ok((await ev('document.querySelector(".history").textContent')).includes('identity unknown'),'Missing session IDs must not claim continued or fresh context');
+  assert.ok((await text()).includes('Session identity unavailable'));
+  await click('[data-close]');checks.push('Missing historical session IDs explicitly show unknown identity, never same/new context');
   await browser.viewport(1440,900);await send('Page.navigate',{url:url+'/baseline.html'});
   await ev(`new Promise(r=>setTimeout(r,250))`);await shot('baseline-1440x900');
   assert.deepEqual(browser.errors,[]);

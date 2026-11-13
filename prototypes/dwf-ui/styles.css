@@ -1090,3 +1090,21 @@ details.skills strong {
     transition:none!important
   }
 }
+
+/* Shared Lines assets: the local service opts in to real observations. */
+.run-observations { margin-top: 10px; font-size: 14px; max-width: 70ch; }
+.run-observations summary { cursor: pointer; color: var(--muted); }
+.run-observations pre, .detail-block p, .skills p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.run-meta span { overflow-wrap: anywhere; }
+body[data-live] .run small { flex-wrap: wrap; gap: 4px; }
+body[data-live] .run small span { overflow-wrap: anywhere; }
+body[data-live] .run time { white-space: normal; }
+.result-fields { margin-top: 14px; }
+.result-fields details, .result-source { margin-top: 10px; font-size: 14px; }
+.result-fields summary, .result-source summary { cursor: pointer; color: var(--muted); }
+.result-fields p, .result-source pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.result-fields ul { padding-left: 22px; }
+.result-fields dt { color: var(--muted); font-size: 12px; }
+.result-fields dd { margin: 4px 0 12px 14px; }
+.result-fields dd p { margin: 0; }
+.session-directories code { display: block; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
