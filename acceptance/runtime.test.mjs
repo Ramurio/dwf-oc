@@ -3,7 +3,7 @@ import test from 'node:test';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { chmod, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -14,13 +14,15 @@ import { installAdmissionFault } from './admission-faults.mjs';
 import { createControlledHttpProvider, nativeProviderConfig } from './controlled-http-provider.mjs';
 import { claimWorkflow, createWorkflow, getWorkflow, updateWorkflow } from '../run-store.mjs';
 import { prepareGroup } from '../workflow-groups.mjs';
-import { captureStopSessions, checkModel, outcomeFromMessages, readExecution, stopSessions } from '../opencode-runtime.mjs';
+import { admit, captureStopSessions, checkModel, outcomeFromMessages, readExecution, stopSessions } from '../opencode-runtime.mjs';
 import { inspectTester } from './tester.mjs';
 import { validateWorkflow, participantSettings, validateItems } from '../workflow-definition.mjs';
 import { researchGraph, validateScientistVerdict } from '../research-workflow.mjs';
 import roleToolsPlugin from '../opencode-tools.mjs';
+import { eightTasks } from './context-fixture.mjs';
 
 const cli = [process.execPath, fileURLToPath(new URL('../dwf.mjs', import.meta.url))];
+const contextOf = prompt => JSON.parse(prompt.match(/Task\/context data:\n([^\n]+)/)[1]);
 const verdict = (outcome = 'approve') => JSON.stringify({ outcome, summary: `Observed ${outcome}` });
 
 async function researchDefinition() {
@@ -326,7 +328,7 @@ test('public CLI completes a read-only graph without creating a Git repository',
     transitions: { read: { approve: 'summarize', changes: null }, summarize: { done: null } } };
   const sandbox = await fixture(t, definition, ({ prompt }) => {
     assert(prompt.includes('Inherited runtime test instructions'));
-    return verdict(prompt.includes('Завершённые этапы workflow') ? 'done' : 'approve');
+    return verdict(contextOf(prompt).role === 'orchestrator' ? 'done' : 'approve');
   }, true);
   await sandbox.release();
   const result = await sandbox.finish();
@@ -348,7 +350,7 @@ test('a completed run becomes a named preset with fresh sessions in another proj
       first: { approve: 'verify', changes: null }, second: { approve: 'verify', changes: null },
       verify: { approve: 'summary', changes: null }, summary: { done: null } } };
   const sandbox = await fixture(t, definition, ({ prompt }) =>
-    verdict(prompt.includes('Завершённые этапы workflow') ? 'done' : 'approve'), true);
+    verdict(contextOf(prompt).role === 'orchestrator' ? 'done' : 'approve'), true);
   await sandbox.release();
   const original = await sandbox.finish();
   assert.equal(original.status, 'succeeded', original.error);
@@ -413,8 +415,9 @@ test('native reviewer reads the supplied full diff with its scoped permission', 
       toolCalls: [{ name: 'shell', arguments: { command: 'printf reviewed-change > result.txt' } }],
     };
     if (prompt.includes('stage=review')) {
-      const review = JSON.parse(prompt.match(/Материалы ревью[^\n]*\n([^\n]+)/)[1]);
-      assert.match(review.path, /^\.\.\/reviews\/[^/]+\.diff$/);
+      const review = contextOf(prompt).review;
+      assert(isAbsolute(review.path));
+      assert.match(review.path, /\/reviews\/[^/]+\.diff$/);
       if (!toolResults.length) return { toolCalls: [{ name: 'read', arguments: { path: review.path } }] };
       assert.match(toolResults.join('\n'), /\+reviewed-change/);
       observedDiff = true;
@@ -673,12 +676,12 @@ test('native orchestrator receives a blocker, dispatches a correction and comple
   let decisions = 0;
   let attempts = 0;
   const sandbox = await fixture(t, definition, ({ prompt }) => {
-    if (prompt.startsWith('NATIVE_MANAGER')) {
+    if (contextOf(prompt).assignment.instructions === 'NATIVE_MANAGER') {
       decisions++;
       if (decisions === 2) assert.match(prompt, /Need an interface decision/);
       return JSON.stringify({ outcome: decisions < 3 ? 'implement' : 'done', summary: 'Keep the current interface' });
     }
-    if (prompt.startsWith('NATIVE_WORK')) {
+    if (contextOf(prompt).assignment.instructions === 'NATIVE_WORK') {
       if (attempts++) assert.match(prompt, /Keep the current interface/);
       return JSON.stringify({ outcome: attempts === 1 ? 'blocked' : 'done', summary: 'Need an interface decision' });
     }
@@ -745,7 +748,7 @@ test('map groups use runtime items, isolate writers and merge their complete res
   const sandbox = await fixture(t, definition, ({ prompt, toolResults }) => {
     if (prompt.includes('member=plan')) return JSON.stringify({ outcome: 'done', summary: 'Found two items', items: [{ id: 'alpha' }, { id: 'beta' }] });
     if (prompt.includes('member=write')) {
-      const name = JSON.parse(prompt.split('Элемент параллельной группы:\n').at(-1)).id;
+      const name = contextOf(prompt).assignment.item.id;
       return toolResults.length ? verdict('done') : { toolCalls: [{ name: 'shell', arguments: { command: `printf '${name}' > ${name}.txt` } }] };
     }
     if (prompt.includes('member=verify') && !toolResults.length) {
@@ -827,7 +830,7 @@ test('group reports retain optional branch failures and stop cancels every activ
       requiredReview: { approve: 'summary', changes: null }, advisory: { approve: 'summary', changes: null }, summary: { done: null } } };
   const sandbox = await fixture(t, definition, ({ prompt }) => {
     if (prompt.includes('member=advisory')) return 'invalid JSON';
-    return verdict(prompt.includes('Завершённые этапы workflow') ? 'done' : 'approve');
+    return verdict(contextOf(prompt).role === 'orchestrator' ? 'done' : 'approve');
   }, true);
   await sandbox.release();
   const result = await sandbox.finish();
@@ -896,7 +899,7 @@ test('accepted map targets survive discarded preparation and native controller r
   delete state.result;
   delete state.finalizing;
   state.visits.push(prepareGroup(sandbox.state, state, 'jobs'));
-  await mkdir(join(sandbox.state, 'workflows', state.id));
+  await mkdir(join(sandbox.state, 'workflows', state.id), { recursive: true });
   createWorkflow(sandbox.state, state);
   assert.equal(claimWorkflow(sandbox.state, state.id, 'prepare-test'), true);
   const message = join(sandbox.root, 'clarification.txt');
@@ -1159,7 +1162,10 @@ test('public CLI task packages preserve exact input, versioned decisions and tas
   assert.deepEqual(Buffer.from(final.definition.taskPackages[0].requirements), Buffer.from(requirements));
   assert.deepEqual(final.inputSnapshot, original.inputSnapshot);
   assert.deepEqual(final.visits.map(visit => [visit.taskId, visit.taskVersion]), [[task.id, 1], [task.id, 2]]);
-  for (const field of ['sessionId', 'inputId', 'prompt']) assert.equal(final.visits[0][field], input[field]);
+  for (const field of ['sessionId', 'inputId', 'prompt', 'contextDirectory']) assert.equal(final.visits[0][field], input[field]);
+  assert.deepEqual(final.visits[0].taskContext, input.taskContext);
+  assert(final.visits[1].prompt.includes('Согласованное решение'));
+  assert(!final.visits[0].prompt.includes('Согласованное решение'));
   assert.equal(final.visits[1].sessionId, input.sessionId);
   assert.deepEqual(final.taskRevisions, [{ taskId: task.id, version: 2, kind: 'decision', text: decision,
     source: `steer:${queued.command.id}`, createdAt: queued.command.createdAt }]);
@@ -1187,4 +1193,266 @@ test('public CLI mapped visits retain distinct task packages and expose structur
   const inspected = await sandbox.command(['inspect', sandbox.runId]);
   assert.deepEqual(inspected.history[0].members.map(child => [child.taskId, child.taskVersion]), [['task-A', 1], ['task-B', 1]]);
   assert.deepEqual(final.definition.taskPackages, packages);
+});
+
+
+test('public CLI routes eight complete task contexts and permits stable detail reads without backlog injection', { timeout: 120000 }, async t => {
+  const tasks = eightTasks().taskPackages;
+  const items = tasks.map((task, i) => ({ id: `item${i}`, taskId: task.id }));
+  const definition = { task: tasks.map(task => task.requirements).join('\n'), taskPackages: tasks, entry: 'manager',
+    nodes: { manager: { role: 'orchestrator', instructions: 'MANAGER_SINGLE_ASSIGNMENT', skills: [] },
+      work: { role: 'worker', instructions: 'Inspect only the addressed task data.', tools: ['read'], skills: [] },
+      review: { role: 'reviewer', instructions: 'Inspect the addressed criteria and candidate diff.', skills: [] },
+      verify: { role: 'verifier', instructions: 'Check the addressed context routing scenario.', skills: [] } },
+    groups: { workers: { member: 'work', items }, reviews: { member: 'review', items }, verifiers: { member: 'verify', items } },
+    transitions: { manager: { assign: 'workers', done: null },
+      workers: { done: 'reviews', changes: null, failed: null }, reviews: { done: 'verifiers', changes: null, failed: null },
+      verifiers: { done: 'manager', changes: null, failed: null },
+      work: { done: 'manager' }, review: { approve: 'verify', changes: 'manager' }, verify: { approve: 'manager', changes: 'manager' } } };
+  const observed = [];
+  const managerReads = new Set();
+  const sandbox = await fixture(t, definition, ({ prompt, tools, toolResults, systemTexts }) => {
+    const context = JSON.parse(prompt.match(/Task\/context data:\n([^\n]+)/)[1]);
+    const names = tools.map(tool => tool.function?.name);
+    if (context.role === 'orchestrator') {
+      assert.equal(prompt.split('MANAGER_SINGLE_ASSIGNMENT').length - 1, 1);
+      assert(!prompt.includes('UNIQUE_REQUIREMENT_'));
+      assert(!prompt.includes('Inspect only the addressed task data.'));
+      assert(!prompt.includes('Execute your configured role.'));
+      assert(systemTexts.some(text => text.includes('Manage the assigned work')));
+      const path = context.sources.originalInput.path;
+      if (!managerReads.has(path)) {
+        managerReads.add(path);
+        return { toolCalls: [{ name: 'read', arguments: { path: context.catalog[0].details.path } }] };
+      }
+      assert(toolResults.at(-1).includes('UNIQUE_REQUIREMENT_0'), 'Reused manager session must read this input artifact');
+      observed.push({ role: context.role });
+      return verdict(context.catalog.every(task => task.status === 'not_started') ? 'assign' : 'done');
+    }
+    const task = tasks.find(task => task.id === context.task.id);
+    assert.equal(context.task.requirements, task.requirements);
+    assert.deepEqual(context.task.acceptanceCriteria, task.acceptanceCriteria);
+    assert.equal(context.candidate, context.review?.revision ?? context.candidate);
+    for (const other of tasks) if (other.id !== task.id) assert(!prompt.includes(`UNIQUE_REQUIREMENT_${other.id.slice(5)}`));
+    assert(!prompt.includes('MANAGER_SINGLE_ASSIGNMENT'));
+    if (context.role === 'reviewer') {
+      assert(!names.includes('shell')); assert(!names.includes('edit')); assert(context.review);
+    }
+    if (!toolResults.length) return { toolCalls: [{ name: 'read', arguments: { path: context.sources.task.path } }] };
+    assert(toolResults.some(text => text.includes(`UNIQUE_REQUIREMENT_${task.id.slice(5)}`)), 'Native read must resolve the saved external context reference');
+    assert(!toolResults.some(text => /permission.*denied|outside.*allowed/i.test(text)));
+    observed.push({ role: context.role, taskId: task.id });
+    return verdict(context.role === 'worker' ? 'done' : 'approve');
+  });
+  await sandbox.release();
+  const final = await waitFor(() => {
+    const state = getWorkflow(sandbox.state, sandbox.runId);
+    return state.status !== 'running' && state;
+  }, 90000, 'eight task context completion');
+  assert.equal(final.status, 'succeeded', final.error);
+  for (const role of ['worker', 'reviewer', 'verifier']) assert.deepEqual(
+    observed.filter(value => value.role === role).map(value => value.taskId).sort(), tasks.map(task => task.id).sort());
+  assert.equal(observed.filter(value => value.role === 'orchestrator').length, 2);
+  const visits = final.visits.flatMap(visit => visit.children ?? [visit]);
+  assert(visits.every(visit => visit.taskContext && visit.contextDirectory));
+});
+
+
+test('reused owned sessions receive only the generated context read grant before a new input', async () => {
+  const original = [{ action: '*', resource: '*', effect: 'deny' }, { action: 'read', resource: '*', effect: 'allow' }];
+  const updates = [], prompts = [];
+  const client = { session: {
+    get: async () => ({ metadata: { dwfRunId: 'context-run' }, location: { directory: '/project' }, permissions: original }),
+    update: async update => updates.push(update),
+    prompt: async input => prompts.push(input),
+  } };
+  const grant = { action: 'external_directory', resource: '/isolated/contexts/*', effect: 'allow' };
+  await admit(client, { id: 'context-run', sessionId: 'ses_owned', inputId: 'msg_next', artifactPermissions: [grant],
+    request: { text: 'Next task', session: { location: { directory: '/project' }, permissions: [...original, grant] } } });
+  assert.deepEqual(updates, [{ sessionID: 'ses_owned', permissions: [...original, grant] }]);
+  assert.equal(prompts.length, 1);
+  updates.length = 0;
+  client.session.get = async () => ({ metadata: { dwfRunId: 'context-run' }, permissions: [...original, grant] });
+  await admit(client, { id: 'context-run', sessionId: 'ses_owned', inputId: 'msg_retry', artifactPermissions: [grant],
+    request: { text: 'Same task', session: { location: { directory: '/project' } } } });
+  assert.equal(updates.length, 0, 'Repeated admission does not accumulate grants');
+  client.session.get = async () => ({ metadata: { dwfRunId: 'foreign-run' }, permissions: original });
+  await assert.rejects(admit(client, { id: 'context-run', sessionId: 'ses_foreign', artifactPermissions: [grant] }), /не принадлежит/);
+  assert.equal(updates.length, 0);
+});
+
+for (const managerTask of [undefined, 'task-0']) for (const verifierTask of [undefined, 'task-1']) {
+  test(`public CLI delivers manager assignment and immediate review across bindings manager=${managerTask ?? 'unbound'} verifier=${verifierTask ?? 'unbound'}`,
+    { timeout: 60000 }, async t => {
+    const tasks = eightTasks().taskPackages.slice(0, 2);
+    const assignment = 'UNIQUE_ROUTED_ASSIGNMENT: preserve the agreed endpoint';
+    const question = 'UNIQUE_ROUTED_REVIEW_QUESTION: reproduce exception continuation';
+    const detailQuestion = 'UNIQUE_STRUCTURED_QUESTION: observe the second callback';
+    const common = 'UNIQUE_COMMON_SCOPE_REQUIREMENT: check compatibility of the combined workflow';
+    const definition = { task: common, taskPackages: tasks, entry: 'manager',
+      nodes: { manager: { role: 'orchestrator', ...(managerTask ? { taskId: managerTask } : {}), tools: [], skills: [] },
+        work: { role: 'worker', taskId: 'task-1', tools: [], skills: [] },
+        review: { role: 'reviewer', taskId: 'task-0', tools: [], skills: [] },
+        verify: { role: 'verifier', ...(verifierTask ? { taskId: verifierTask } : {}), tools: [], skills: [] } },
+      transitions: { manager: { done: 'work' }, work: { done: 'review' },
+        review: { approve: 'verify', changes: 'work' }, verify: { approve: null, changes: 'work' } } };
+    const seen = new Set();
+    const sandbox = await fixture(t, definition, ({ prompt }) => {
+      const context = contextOf(prompt);
+      seen.add(context.role);
+      if (context.role === 'orchestrator') return JSON.stringify({ outcome: 'done', summary: assignment, backlog: tasks });
+      if (context.role === 'worker') {
+        assert(prompt.includes(assignment), 'Concrete manager assignment must reach the actual worker request');
+        assert.equal(context.otherReports.handoffSource.node, 'manager');
+        assert.equal(context.otherReports.handoffSource.taskId, managerTask);
+        assert(!prompt.includes('UNIQUE_REQUIREMENT_0'), 'Manager source task must not become the worker backlog');
+        return verdict('done');
+      }
+      if (context.role === 'reviewer') {
+        assert(prompt.includes('A required verifier (verify) runs immediately after approve and receives this review.'));
+        return JSON.stringify({ outcome: 'approve', summary: question, questions: [detailQuestion] });
+      }
+      assert(prompt.includes(question));
+      assert(prompt.includes(detailQuestion));
+      assert.equal(context.otherReports.handoffSource.role, 'reviewer');
+      assert(context.otherReports.evidence.includes('not independent verification'));
+      if (!verifierTask) {
+        assert.equal(context.task.requirements, common);
+        assert.equal(context.taskScope.kind, 'workflow');
+        assert.equal(context.scenarios.requirements, '/task/requirements');
+        assert.equal(context.scenarios.criteria, undefined);
+      }
+      assert(!prompt.includes('UNIQUE_REQUIREMENT_0'));
+      return verdict();
+    });
+    await sandbox.release();
+    const final = await sandbox.finish();
+    assert.equal(final.status, 'succeeded', final.error);
+    assert.deepEqual([...seen].sort(), ['orchestrator', 'reviewer', 'verifier', 'worker']);
+    for (const event of (await sandbox.events()).filter(event => event.type === 'received')) {
+      const data = contextOf(event.prompt);
+      const saved = final.visits.find(visit => visit.inputId === data.inputId);
+      assert.deepEqual(saved.taskContext, data);
+    }
+  });
+}
+
+for (const role of ['worker', 'reviewer', 'verifier']) {
+  test(`public CLI delivers exact general requirements to an unbound ${role} with a package catalog`, { timeout: 60000 }, async t => {
+    const common = '  UNIQUE_GENERAL_REQUIREMENT\r\nCheck compatibility and retain every byte.  ';
+    const definition = { task: common, taskPackages: eightTasks().taskPackages.slice(0, 1), entry: 'general',
+      ...(role !== 'worker' ? { workspace: 'directory' } : {}),
+      nodes: { general: { role, tools: [], skills: [] } },
+      transitions: { general: role === 'worker' ? { done: null } : { approve: null, changes: null } } };
+    const sandbox = await fixture(t, definition, ({ prompt }) => {
+      const context = contextOf(prompt);
+      assert.equal(context.task.requirements, common);
+      assert.equal(context.taskScope.kind, 'workflow');
+      assert.equal(context.task.id, undefined);
+      assert.equal(context.sources.requirementsPointer, '/definition/task');
+      assert(!prompt.includes('UNIQUE_REQUIREMENT_0'));
+      return verdict(role === 'worker' ? 'done' : 'approve');
+    }, role !== 'worker');
+    await sandbox.release();
+    assert.equal((await sandbox.finish()).status, 'succeeded');
+  });
+}
+
+test('public CLI routes a real failed group integration to manager with successful child reports kept separate', { timeout: 60000 }, async t => {
+  const definition = { task: 'Observe integration failure, not just successful branch reports', taskPackages: eightTasks().taskPackages.slice(0, 2), entry: 'jobs',
+    nodes: { left: { role: 'worker', taskId: 'task-0', tools: ['shell'], skills: [] },
+      right: { role: 'worker', taskId: 'task-1', tools: ['shell'], skills: [] },
+      manager: { role: 'orchestrator', tools: ['read'], skills: [] } },
+    groups: { jobs: { members: ['left', 'right'] } },
+    transitions: { jobs: { done: 'manager', changes: 'manager', failed: 'manager' },
+      left: { done: 'manager' }, right: { done: 'manager' }, manager: { done: null } } };
+  let observedFailure;
+  const sandbox = await fixture(t, definition, ({ prompt, toolResults }) => {
+    const context = contextOf(prompt);
+    if (context.role === 'worker') {
+      if (!toolResults.length) return { toolCalls: [{ name: 'shell', arguments: { command: `printf '${context.node}' > shared.txt` } }] };
+      return verdict('done');
+    }
+    const group = context.groupResults.find(result => result.node === 'jobs');
+    assert.equal(group.result.outcome, 'failed');
+    assert(group.result.integrationError);
+    assert(context.catalog.every(task => task.results[0].result.outcome === 'done'));
+    observedFailure = group.result.integrationError;
+    if (!toolResults.length) return { toolCalls: [{ name: 'read', arguments: { path: context.history.path } }] };
+    // Native read JSON output escapes newlines inside the stored error string.
+    assert(toolResults.at(-1).includes(JSON.stringify(observedFailure)));
+    return verdict('done');
+  });
+  await sandbox.release();
+  const final = await sandbox.finish();
+  assert.equal(final.status, 'succeeded', final.error);
+  assert.equal(final.visits[0].verdict.outcome, 'failed');
+  assert.equal(final.visits[0].verdict.integrationError, observedFailure);
+  assert(final.visits[0].children.every(child => child.verdict.outcome === 'done'));
+  assert.equal(final.visits[1].taskContext.groupResults[0].revision, final.visits[0].revision);
+  await assert.rejects(readFile(join(final.workspace.path, 'shared.txt')), { code: 'ENOENT' });
+});
+
+test('public CLI prepared package child steer pins saved data and wire input; late steer creates a separate version', { timeout: 60000 }, async t => {
+  const tasks = eightTasks().taskPackages.slice(0, 2);
+  const definition = { task: 'Check prepared and frozen package inputs', taskPackages: tasks, workspace: 'directory', entry: 'jobs',
+    nodes: { review: { role: 'reviewer', taskId: 'task-0', tools: [], skills: [], memory: false } },
+    groups: { jobs: { member: 'review', items: [{ id: 'alpha' }, { id: 'beta', taskId: 'task-1' }] } },
+    transitions: { jobs: { done: null, changes: null, failed: null }, review: { approve: null, changes: null } } };
+  const sandbox = await fixture(t, definition, () => verdict(), true);
+  await sandbox.release();
+  const bootstrap = await sandbox.finish();
+  assert.equal(bootstrap.status, 'succeeded', bootstrap.error);
+  await writeJson(join(sandbox.control, 'release.json'), { token: sandbox.token, callIds: [] });
+  const state = { ...bootstrap, id: randomUUID(), status: 'running', sessions: {}, visits: [], controls: [], taskRevisions: [] };
+  delete state.result;
+  delete state.finalizing;
+  const prepared = prepareGroup(sandbox.state, state, 'jobs');
+  state.visits.push(prepared);
+  createWorkflow(sandbox.state, state);
+  assert(claimWorkflow(sandbox.state, state.id, 'prepare-context-test'));
+  const message = join(sandbox.root, 'prepared-package-steer.txt');
+  await writeFile(message, 'UNIQUE_PREPARED_STEER: retain the exact task-1 contract');
+  const queued = await sandbox.command(['steer', state.id, 'jobs/beta', '--message-file', message]);
+  assert.equal(queued.command.taskVersion, 2);
+  updateWorkflow(sandbox.state, state, 'prepare-context-test', true);
+  await sandbox.command(['inspect', state.id]);
+  const current = getWorkflow(sandbox.state, state.id);
+  const [alpha, beta] = current.visits[0].children;
+  assert.equal(beta.taskVersion, 2);
+  assert.equal(beta.taskContext.task.version, 2);
+  assert.equal(beta.taskContext.task.revisions[0].text, 'UNIQUE_PREPARED_STEER: retain the exact task-1 contract');
+  assert.equal(alpha.taskVersion, 1);
+  assert.deepEqual(alpha.taskContext, prepared.children[0].taskContext);
+  const requests = await waitFor(async () => {
+    const events = (await sandbox.events()).filter(event => event.type === 'received' && contextOf(event.prompt).runId === state.id);
+    return events.length === 2 && events;
+  }, 10000, 'prepared package native inputs');
+  for (const child of [alpha, beta]) {
+    const event = requests.find(event => contextOf(event.prompt).inputId === child.inputId);
+    assert.equal(event.prompt, child.prompt);
+    assert.deepEqual(contextOf(event.prompt), child.taskContext);
+  }
+  await writeFile(message, 'UNIQUE_LATE_STEER: check the additional boundary case');
+  const late = await sandbox.command(['steer', state.id, 'jobs/beta', '--message-file', message]);
+  assert.equal(late.command.taskVersion, 3);
+  const frozen = getWorkflow(sandbox.state, state.id).visits[0].children[1];
+  assert.equal(frozen.taskVersion, 2);
+  assert.equal(frozen.prompt, beta.prompt);
+  assert.deepEqual(frozen.taskContext, beta.taskContext);
+  assert(!frozen.prompt.includes('UNIQUE_LATE_STEER'));
+  await sandbox.release();
+  const final = await waitFor(() => {
+    const saved = getWorkflow(sandbox.state, state.id);
+    return saved.status !== 'running' && saved;
+  }, 30000, 'package child steering completion');
+  assert.equal(final.status, 'succeeded', final.error);
+  assert.deepEqual(final.visits[0].children[1].taskContext, beta.taskContext);
+  const correction = final.visits[1];
+  assert.equal(correction.participant, 'jobs/beta');
+  assert.equal(correction.taskVersion, 3);
+  assert.equal(correction.taskContext.task.version, 3);
+  assert(correction.prompt.includes('UNIQUE_LATE_STEER'));
+  const event = (await sandbox.events()).find(event => event.type === 'received' && contextOf(event.prompt).inputId === correction.inputId);
+  assert.deepEqual(contextOf(event.prompt), correction.taskContext);
 });

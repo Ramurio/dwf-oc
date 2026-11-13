@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
+import { mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Before, After, Given, When, Then, setDefaultTimeout } from '@cucumber/cucumber';
@@ -176,7 +177,7 @@ Given('подготовлен workflow ролей с независимыми п
       } }] };
     }
     if (role === 'reviewer') {
-      const review = JSON.parse(prompt.match(/Материалы ревью[^\n]*\n([^\n]+)/)?.[1] ?? 'null');
+      const review = JSON.parse(prompt.match(/Task\/context data:\n([^\n]+)/)[1]).review;
       assert(review, 'Reviewer должен получить материалы своего снимка');
       assert(prompt.includes(`Workspace snapshot recorded and checked by DWF: ${review.revision}`));
       if (!toolResults.some(text => text.includes(`+implementation-${iteration}`))) {
@@ -196,8 +197,17 @@ Given('подготовлен workflow ролей с независимыми п
       assert(prompt.includes('feedback-'), 'Worker должен получить замечания проверяющего');
     }
     if (role === 'orchestrator') {
-      this.orchestratorHistory = JSON.parse(prompt.match(/Завершённые этапы workflow \(по порядку\):\n([^\n]+)/)?.[1] ?? 'null');
+      const context = JSON.parse(prompt.match(/Task\/context data:\n([^\n]+)/)[1]);
+      if (!this.managerHistoryRequested) {
+        this.managerHistoryRequested = true;
+        return { toolCalls: [{ name: 'read', arguments: { path: context.history.path } }] };
+      }
+      this.orchestratorHistory = JSON.parse(readFileSync(context.history.path, 'utf8'));
       assert(Array.isArray(this.orchestratorHistory), 'Orchestrator должен получить историю завершённых этапов');
+      for (const visit of this.orchestratorHistory) {
+        assert(toolResults.at(-1).includes(visit.revision), 'История должна реально дойти через native read');
+        assert(toolResults.at(-1).includes(visit.result.summary));
+      }
     }
     const outcome = ['reviewer', 'verifier'].includes(role)
       ? (counts[role] === 1 ? 'changes' : 'approve') : 'done';
@@ -321,10 +331,12 @@ async function assertSkillCatalog(world) {
   }
   for (const sessionId of new Set(run.history.map(visit => visit.sessionId))) {
     const session = await client.session.get({ sessionID: sessionId });
-    assert.deepEqual(session.permissions.filter(rule => rule.action === 'external_directory'),
-      session.agent.startsWith('dwf-reviewer-')
+    assert.deepEqual(session.permissions.filter(rule => rule.action === 'external_directory'), [
+      ...(session.agent.startsWith('dwf-reviewer-')
         ? [{ action: 'external_directory', resource: join(dirname(world.reviewMaterials[0].path), '*'), effect: 'allow' }]
-        : [], 'Только reviewer получает доступ к каталогу diff текущего запуска');
+        : []),
+      { action: 'external_directory', resource: join(await realpath(world.sandbox.state), 'workflows', world.runId, 'contexts', '*'), effect: 'allow' },
+    ], 'Роли читают только материалы context текущего запуска; diff дополнительно разрешён reviewer');
   }
 }
 
@@ -380,7 +392,7 @@ Then('workflow завершает оба цикла доработки в исх
   'Фактический модельный запрос orchestrator должен содержать каждый завершённый этап');
   const received = (await events(this)).filter(event => event.type === 'received');
   const roles = new Set(Object.values((await readJson(this.workflowFile)).nodes).map(node => node.role));
-  assert.equal(received.length, 15 + [...roles].reduce((count, role) => count + roleSkills[role].length, 0));
+  assert.equal(received.length, 16 + [...roles].reduce((count, role) => count + roleSkills[role].length, 0));
   received.forEach(assertControlledHigh);
   await assertSkillCatalog(this);
   const before = await events(this);

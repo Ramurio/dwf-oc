@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { readFile, readdir, mkdir, open, link, unlink, rename } from 'node:fs/promises';
+import { readFile, readdir, mkdir, open, link, unlink, rename, realpath } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { setTimeout as pause } from 'node:timers/promises';
 import { homedir } from 'node:os';
@@ -246,6 +246,23 @@ export async function admit(client, run) {
     }
   }
   if (session.metadata?.dwfRunId !== run.id) throw publicError('Сессия OpenCode не принадлежит этому запуску DWF.');
+  // Sessions keep their create-time permissions. Reentry (including an older
+  // raw-only session) must be able to read the new saved context documents.
+  // Preserve every existing rule; add only DWF's generated artifact directories.
+  const permissionKey = async rule => {
+    const resource = rule.action === 'external_directory' && rule.resource.endsWith('/*')
+      ? join(await realpath(dirname(rule.resource)).catch(() => dirname(rule.resource)), '*') : rule.resource;
+    return JSON.stringify([rule.action, resource, rule.effect]);
+  };
+  const existing = new Set(await Promise.all((session.permissions ?? []).map(permissionKey)));
+  const missing = [];
+  for (const grant of run.artifactPermissions ?? []) {
+    if (!existing.has(await permissionKey(grant))) missing.push(grant);
+  }
+  if (missing.length) {
+    await client.session.update({ sessionID: run.sessionId,
+      permissions: [...(session.permissions ?? []), ...missing] });
+  }
   if (session.location && session.location.directory !== run.request.session.location.directory) {
     await client.session.move({ sessionID: run.sessionId, directory: run.request.session.location.directory });
   }

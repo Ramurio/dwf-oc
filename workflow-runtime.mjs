@@ -1,3 +1,4 @@
+import { prepareRoleInput } from './role-context.mjs';
 import { taskBinding } from './task-packages.mjs';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
@@ -101,13 +102,17 @@ function request(state, visit) {
   const input = visit.correction ?? visit;
   const permissions = participant?.agent.permissions ?? state.rolePermissions?.[node.role] ?? rolePermissions(node.role).filter(rule =>
     rule.action !== 'skill' || state.roleAgents?.[node.role] === roleAgents[node.role]);
+  const artifactPermissions = [
+    ...(visit.review ? [{ action: 'external_directory', resource: join(dirname(visit.review.path), '*'), effect: 'allow' }] : []),
+    ...(visit.contextDirectory ? [{ action: 'external_directory', resource: join(dirname(visit.contextDirectory), '*'), effect: 'allow' }] : []),
+  ];
   return { id: state.id, sessionId: visit.sessionId, inputId: input.inputId,
+    ...(visit.contextDirectory ? { artifactPermissions } : {}),
     request: { text: input.prompt, session: { title: `DWF ${node.role} ${visit.node}`,
       agent: participant?.id ?? state.roleAgents?.[node.role] ?? 'build', model: participant?.model ?? state.model,
       location: { directory: visit.workspace?.path ?? state.workspace.path },
       metadata: { dwfRunId: state.id },
-      permissions: [...permissions, ...(visit.review ? [{ action: 'external_directory',
-        resource: join(dirname(visit.review.path), '*'), effect: 'allow' }] : [])] } } };
+      permissions: [...permissions, ...artifactPermissions] } } };
 }
 
 function finishParticipant(state, visit, outcome) {
@@ -244,9 +249,7 @@ export async function runWorkflow(root, id) {
               : state.sessions[participant] ?? 'ses_' + randomUUID();
           const inputId = 'msg_' + randomUUID();
           const workspace = node.role === 'verifier' ? verificationWorkspace(root, id, state.workspace, revision, inputId) : state.workspace;
-          // A reviewer session from an older release lacks permission to read review artifacts.
-          const earlierReview = state.visits.find(item => item.node === next);
-          const review = node.role === 'reviewer' && state.workspace.mode !== 'directory' && (!earlierReview || earlierReview.review) ? writeReviewDiff(state.workspace, revision,
+          const review = node.role === 'reviewer' && state.workspace.mode !== 'directory' ? writeReviewDiff(state.workspace, revision,
             join(root, 'workflows', id, 'reviews', `${inputId}.diff`)) : undefined;
           visit = { node: next, participant, sessionId, inputId, revision, startedAt: Date.now(),
             ...taskBinding(state, next, steered?.item),
@@ -261,6 +264,7 @@ export async function runWorkflow(root, id) {
             visit.steering = steering.id;
             steering.status = 'delivered';
           }
+          prepareRoleInput(root, state, visit, state.visits.at(-1)?.verdict, workspace, next, steering);
           state.visits.push(visit);
           save(false);
         }
@@ -287,6 +291,7 @@ export async function runWorkflow(root, id) {
             }
             child.prompt += `\n\nУточнение пользователя для этого участника:\n${steering.text}`;
             Object.assign(child, taskBinding(state, child.node, child.item));
+            prepareRoleInput(root, state, child, state.visits.at(-2)?.verdict, child.workspace ?? state.workspace, visit.node, steering);
             child.steering = steering.id;
             steering.status = 'delivered';
           }

@@ -280,3 +280,30 @@ test('preset file import rejects invalid UTF-8 before creating or overwriting sa
   assert.equal(cli(['preset', 'show', 'preserved']).stdout, original.stdout);
   assert.deepEqual(JSON.parse(cli(['preset', 'list']).stdout), { presets: ['preserved'] });
 });
+
+
+test('a frozen structured input preserves its data, prompt and authorized reference directory', async t => {
+  const root = await fixture(t);
+  const visit = { node: 'review', participant: 'review', taskId: 'task-A', taskVersion: 1,
+    inputId: 'msg_structured', sessionId: 'ses_structured', admissionStarted: true, prompt: 'Saved input',
+    taskContext: { role: 'reviewer', candidate: 'tree-1', task: { requirements: exact } }, contextDirectory: '/isolated/contexts/msg_structured' };
+  const state = { id: 'frozen-context', definition: definition(), status: 'running', visits: [visit], sessions: {} };
+  createWorkflow(root, state); claimWorkflow(root, state.id, 'owner');
+  for (const mutate of [v => v.prompt = 'Rewritten', v => v.taskContext.task.requirements = 'Rewritten',
+    v => delete v.taskContext, v => v.contextDirectory = '/outside']) {
+    const current = getWorkflow(root, state.id); mutate(current.visits[0]);
+    assert.throws(() => updateWorkflow(root, current, 'owner'), /Task packages:/);
+  }
+});
+
+
+test('legacy frozen raw-only records cannot be relabelled as reconstructed task data', async t => {
+  const root = await fixture(t);
+  const d = definition(); delete d.taskPackages; delete d.nodes.review.taskId;
+  const state = { id: 'legacy-raw-input', definition: d, status: 'running', sessions: {},
+    visits: [{ node: 'review', inputId: 'msg_raw', prompt: 'Old raw input', admitted: true }] };
+  createWorkflow(root, state); claimWorkflow(root, state.id, 'owner');
+  state.visits[0].taskContext = { role: 'reviewer', task: { requirements: 'Guessed requirements' } };
+  assert.throws(() => updateWorkflow(root, state, 'owner'), /Task packages:/);
+  assert.equal(getWorkflow(root, state.id).visits[0].taskContext, undefined);
+});

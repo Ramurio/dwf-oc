@@ -290,3 +290,15 @@ test('call and last saved session directories remain distinct when native locati
   assert.ok(calls.every(c => c.command === calls[0].command));
   assert.ok(!calls[0].command.includes('/old snapshot'));
 });
+
+
+test('task data is distinct from technical prompt; raw-only calls are not reconstructed',()=>{
+ const s=state();
+ const taskContext={formatVersion:1,role:'worker',candidate:'tree-1',task:{id:'task-A',version:1,requirements:'Exact task',acceptanceCriteria:['Exact criterion']},assignment:{instructions:'Bounded assignment'}};
+ s.visits=[{node:'alpha',inputId:'structured',admitted:true,prompt:'Technical role wrapper',taskContext},
+  {node:'alpha',inputId:'legacy',admitted:true,prompt:'Legacy raw text'}];
+ const calls=workflowView(s,{root:'/controlled/state'}).graph.nodes.find(n=>n.id==='alpha').participants[0].invocations;
+ assert.equal(calls[0].task,'Exact task');assert.deepEqual(calls[0].taskData,taskContext);
+ assert.equal(calls[0].promptRaw,'Technical role wrapper');assert.equal(calls[0].taskSource,'structured');
+ assert.equal(calls[1].taskSource,'raw-only');assert.equal(calls[1].taskData,null);assert.equal(calls[1].promptRaw,'Legacy raw text');
+});

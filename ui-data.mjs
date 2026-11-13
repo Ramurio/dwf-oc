@@ -86,7 +86,11 @@ function callView(state, visit, location, { root, owned }) {
     sessionDirectory: null,
     lastObservedDirectory: null,
     location,
-    task: visit.prompt ?? unknown,
+    task: visit.taskContext ? (visit.taskContext.task?.requirements ||
+      visit.taskContext.assignment?.instructions || 'Coordinate the supplied task catalog') : visit.prompt ?? unknown,
+    taskSource: visit.taskContext ? 'structured' : 'raw-only',
+    taskData: visit.taskContext ?? null,
+    promptRaw: visit.prompt ?? null,
     ...resultProjection(visit.verdict ?? visit.error),
     state: status,
     model: model ? `${model.providerID}/${model.id}` : unknown,
@@ -125,7 +129,7 @@ export function workflowView(state, { root, owned = false, order = 0 } = {}) {
         if (!visit.correction) return [first];
         const correction = callView(state, {
           ...visit, correction: undefined, inputId: visit.correction.inputId,
-          prompt: visit.correction.prompt, startedAt: undefined,
+          prompt: visit.correction.prompt, taskContext: undefined, startedAt: undefined,
         }, location, { root, owned });
         if (correction) correction.lastObservedDirectory = first.lastObservedDirectory;
         return [{

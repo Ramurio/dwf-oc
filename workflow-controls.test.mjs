@@ -477,8 +477,11 @@ test('discarding a prepared map group retains every accepted child clarification
   assert.deepEqual(result.controls.map(command => command.status), ['applied', 'applied', 'applied']);
   assert.equal(f.admitted.length, 4);
   for (const [index, item] of items.entries()) {
-    const section = f.admitted[index + 1].request.text.split('Элемент параллельной группы:\n').at(-1);
-    assert.deepEqual(JSON.parse(section.split('\n\nУточнение пользователя')[0]), item);
+    const section = f.admitted[index + 1].request.text.match(/Task\/context data:\n([^\n]+)/)[1];
+    const context = JSON.parse(section);
+    assert.deepEqual(context.assignment.item, item);
+    assert.equal(context.assignment.steering.text, `Clarify ${item.id}`);
+    assert.deepEqual(result.visits[index + 1].taskContext, context);
   }
   assert(publicWorkflow(result).controls.every(command => !Object.hasOwn(command, 'target')));
 });

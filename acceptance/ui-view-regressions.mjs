@@ -64,6 +64,9 @@ try {
   assert.equal(await browser.evaluate(`document.querySelectorAll('.call-picker button').length`), 2);
   await click('.call-picker [data-invocation="0"]');
   assert.equal(await browser.evaluate(`document.querySelector('#inspector [data-result]').textContent`), verdict.summary);
+  assert.ok((await browser.evaluate(`document.querySelector('#inspector [data-task]').previousElementSibling.textContent`)).includes('raw prompt only'));
+  assert.equal(await browser.evaluate(`document.querySelector('#inspector [data-detail-key="task-data"]') === null`), true);
+
   assert.ok((await browser.evaluate(`document.querySelector('.result-fields').innerText`)).includes('Findings'));
   await click('.result-fields details summary');
   assert.ok((await browser.evaluate(`document.querySelector('.result-fields').innerText`)).includes('Verified heading escaping.'));

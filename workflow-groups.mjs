@@ -1,3 +1,4 @@
+import { prepareRoleInput } from './role-context.mjs';
 import { taskBinding, validateTaskReference } from './task-packages.mjs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
@@ -28,8 +29,10 @@ export function prepareGroup(root, state, id, previous) {
     const prompt = rolePrompt(state.definition, item.node, input, revision, state.visits,
       Boolean(state.roleAgents), review, workspace, id) +
       (item.item ? `\n\nЭлемент параллельной группы:\n${JSON.stringify(item.item)}` : '');
-    return { ...item, ...taskBinding(state, item.node, item.item), sessionId, inputId, revision,
+    const child = { ...item, ...taskBinding(state, item.node, item.item), sessionId, inputId, revision,
       startedAt: Date.now(), workspace, prompt, ...(review ? { review } : {}) };
+    prepareRoleInput(root, state, child, input, workspace, id);
+    return child;
   });
   return { node: id, inputId: 'group_' + randomUUID(), revision, startedAt: Date.now(), admissionStarted: false, children };
 }

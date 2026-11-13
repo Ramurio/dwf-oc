@@ -83,7 +83,7 @@ export function validateTaskState(state, saved) {
     if (JSON.stringify(saved.inputSnapshot) !== JSON.stringify(state.inputSnapshot)) reject('исходный ввод неизменяем.');
     const before = saved.taskRevisions ?? [];
     if (JSON.stringify((state.taskRevisions ?? []).slice(0, before.length)) !== JSON.stringify(before)) reject('история версий неизменяема.');
-    if (saved.definition?.taskPackages) {
+    if (saved.definition) {
       const inputs = workflow => (workflow.visits ?? []).flatMap(group =>
         (group.children ?? [group]).map(visit => ({ visit, group })));
       const current = inputs(state);
@@ -91,7 +91,10 @@ export function validateTaskState(state, saved) {
         if (admissionStage(visit, group) === 'prepared') continue;
         const nextInput = current[index];
         const next = nextInput?.visit;
-        if (!next || admissionStage(next, nextInput.group) === 'prepared' || next.inputId !== visit.inputId || next.taskId !== visit.taskId || next.taskVersion !== visit.taskVersion) {
+        if (!saved.definition.taskPackages && visit.taskContext === undefined && next?.taskContext === undefined) continue;
+        if (!next || admissionStage(next, nextInput.group) === 'prepared' || next.inputId !== visit.inputId || next.taskId !== visit.taskId || next.taskVersion !== visit.taskVersion ||
+          ((visit.taskContext !== undefined || next.taskContext !== undefined) && (JSON.stringify(next.taskContext) !== JSON.stringify(visit.taskContext) ||
+            next.prompt !== visit.prompt || next.contextDirectory !== visit.contextDirectory))) {
           reject('привязка замороженного ввода неизменяема.');
         }
       }

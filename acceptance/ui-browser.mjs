@@ -11,6 +11,7 @@ import { Service } from '@opencode/client/service';
 import { createSandbox, cliJson, launch, waitFor, writeJson, within } from './harness.mjs';
 import { createControlledHttpProvider, nativeProviderConfig } from './controlled-http-provider.mjs';
 import { getWorkflow, getRun, claimWorkflow, updateWorkflow } from '../run-store.mjs';
+import { ptyTextIncludes } from './pty-text.mjs';
 import { openBrowser } from '../prototypes/dwf-ui/qa/browser-probe.mjs';
 const execute=promisify(execFile),cli=[process.execPath,fileURLToPath(new URL('../dwf.mjs',import.meta.url))];
 const sandbox=await createSandbox();let browser,provider,ui;
@@ -43,6 +44,12 @@ try{
  const initialGeometry=await browser.evaluate(geometryExpression);
  await browser.evaluate(`document.querySelector('[data-primitive="review_long_named_first_step"]').dispatchEvent(new MouseEvent("click",{bubbles:true}))`);
  await check('document.querySelector("#command")!==null');
+ assert.equal(await browser.evaluate('document.querySelector("[data-task]").textContent'),definition.task);
+ assert.equal(await browser.evaluate('document.querySelector("[data-detail-key=technical-prompt]").open'),false);
+ const taskData=JSON.parse(await browser.evaluate('document.querySelector("[data-detail-key=task-data] pre").textContent'));
+ assert.equal(taskData.role,'reviewer');assert.equal(taskData.task.requirements,definition.task);
+ assert.equal(taskData.assignment.instructions,'UI_LOOP_A');
+
  const native=getWorkflow(sandbox.state,first.runId),endpoint=await Service.discover({file:native.opencode.registration,version:'2.2.5'});
  const client=OpenCode.make({baseUrl:endpoint.url,headers:Service.headers(endpoint)});
  const session=(await client.session.get({sessionID:native.visits[0].sessionId}));assert.equal(session.location.directory,await realpath(sandbox.workspace));
@@ -122,7 +129,7 @@ while True:
 os.waitpid(pid,0)
 `;
  const entry=launch(['python3','-c',ptyDriver],[selected.command],{cwd:secondProject,env:{...sandbox.env,TERM:'xterm-256color'}});
- try{await waitFor(()=>entry.stdout.includes('DWF reviewer mapped_checker'),20000,'generated command opens selected OpenCode session');}
+ try{await waitFor(()=>ptyTextIncludes(entry.stdout,'DWF reviewer mapped_checker'),20000,'generated command opens selected OpenCode session');}
   finally{await writeFile(join(evidence,'entry.txt'),entry.stdout+'\nSTDERR\n'+entry.stderr);}
  entry.child.stdin.write('\x03');entry.child.stdin.end();
  await within(entry.close,10000,'selected-session PTY fully closed');
@@ -197,7 +204,7 @@ os.waitpid(pid,0)
   if(index===0)assert.match(await browser.evaluate(`document.querySelector('[data-directory-note]').textContent`),/not the historical worktree/);
   const verificationEntry=launch(['python3','-c',ptyDriver],[verificationCommand],{cwd:secondProject,env:{...sandbox.env,TERM:'xterm-256color'}});
   try {
-   await waitFor(()=>verificationEntry.stdout.includes('verification_with_private_snapshot')&&verificationEntry.stdout.includes('Controlled verification worktree session'),20000,'generated command opens the same verifier session from either call');
+   await waitFor(()=>ptyTextIncludes(verificationEntry.stdout,'verification_with_private_snapshot')&&ptyTextIncludes(verificationEntry.stdout,'Controlled verification worktree session'),20000,'generated command opens the same verifier session from either call');
    assert.deepEqual((await client.session.get({sessionID:visit.sessionId})).location,beforeEntry.location,
     'opening either historical call must not move the native session');
   } finally {

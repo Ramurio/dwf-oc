@@ -329,7 +329,23 @@ export const roleAgents = Object.fromEntries(Object.keys(outcomes).map(role => [
     system: roleSystemPrompt(role), permissions: rolePermissions(role),
   })).digest('hex').slice(0, 16)}`]));
 
-export function rolePrompt(definition, nodeId, previous, revision, visits = [], separateSystem = false, review, workspace, transitionSource = nodeId) {
+export function workflowControlContext(definition, nodeId, visits, revision) {
+  const routes = definition.transitions?.[nodeId] ?? { done: null };
+  return { transitions: routes,
+    ...(Object.keys(routes).length > 1 ? {
+      nodes: Object.fromEntries(Object.entries(definition.nodes).map(([id, node]) => [id,
+        { role: node.role, ...(node.taskId ? { taskId: node.taskId } : {}),
+          ...(node.required !== undefined ? { required: node.required } : {}) }])),
+      groups: Object.fromEntries(Object.entries(definition.groups ?? {}).map(([id, group]) => [id,
+        group.members ? { members: group.members, ...(group.required ? { required: group.required } : {}) } :
+          { member: group.member, ...(group.itemsFrom ? { itemsFrom: group.itemsFrom } :
+            { items: group.items.map(item => ({ id: item.id, ...(item.taskId ? { taskId: item.taskId } : {}) })) }) }])),
+      routes: definition.transitions,
+    } : {}),
+    approvalProblems: approvalProblems({ definition, visits }, revision) };
+}
+
+export function rolePrompt(definition, nodeId, previous, revision, visits = [], separateSystem = false, review, workspace, transitionSource = nodeId, context) {
   const node = definition.nodes[nodeId];
   if (node.role === 'committee') {
     return [
@@ -339,7 +355,6 @@ export function rolePrompt(definition, nodeId, previous, revision, visits = [], 
     ].filter(Boolean).join('\n\n');
   }
   const research = Object.hasOwn(researchRoles, node.role);
-  const routes = definition.transitions?.[nodeId] ?? { done: null };
   const nextId = definition.transitions?.[transitionSource]?.approve;
   const nextNode = nextId == null ? undefined : definition.nodes[nextId];
   const verification = nextNode?.role === 'verifier' && nextNode.required !== false
@@ -352,26 +367,20 @@ export function rolePrompt(definition, nodeId, previous, revision, visits = [], 
   return [
     separateSystem ? '' : research ? researchInstructions : commonInstructions,
     separateSystem ? '' : research ? researchRoles[node.role].system : roleInstructions[node.role],
-    node.instructions ?? '',
-    node.role === 'orchestrator' ? `Workflow control context:\n${JSON.stringify({
-      transitions: routes,
-      ...(Object.keys(routes).length > 1 ? {
-        nodes: definition.nodes, groups: definition.groups ?? {}, routes: definition.transitions,
-      } : {}),
-      approvalProblems: approvalProblems({ definition, visits }, revision),
-    })}` : '',
+    context ? '' : node.instructions ?? '',
+    !context && node.role === 'orchestrator' ? `Workflow control context:\n${JSON.stringify(workflowControlContext(definition, nodeId, visits, revision))}` : '',
     node.role === 'scientist' ? scientistPhase(researchGraph(definition), visits) : '',
     node.role === 'reviewer' ? `Workflow verification context: ${verification}` : '',
     node.role === 'verifier' && definition.merge
       ? 'This workflow will create a Git commit. On approve, the first line of your summary becomes its title. Use DWF <type>: <description>, then a blank line and your verification report.' : '',
     workspace ? `Project workspace: ${workspace.path}` : '',
     workspace?.instructions?.length ? `Inherited project instructions captured at workflow start (outermost first):\n${JSON.stringify(workspace.instructions)}` : '',
-    `Поручение пользователя:\n${definition.task}`,
+    context ? `Task/context data:\n${JSON.stringify(context)}` : `Поручение пользователя:\n${definition.task}`,
     `Workspace snapshot recorded and checked by DWF: ${revision}`,
-    review ? `Материалы ревью (полный diff относительно начала задачи, path относительно Project workspace):\n${JSON.stringify({
+    review && !context ? `Материалы ревью (полный diff относительно начала задачи, path относительно Project workspace):\n${JSON.stringify({
       ...review, path: workspace ? relative(workspace.path, review.path) : review.path,
     })}` : '',
-    history ? `Завершённые этапы workflow (по порядку):\n${JSON.stringify(history)}` :
+    context ? '' : history ? `Завершённые этапы workflow (по порядку):\n${JSON.stringify(history)}` :
       previous ? `Предыдущий результат участника:\n${JSON.stringify(previous)}` : '',
     separateSystem ? '' : resultInstructions(node.role),
   ].filter(Boolean).join('\n\n');

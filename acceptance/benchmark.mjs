@@ -18,7 +18,7 @@ const model = { providerID: 'openai', id: 'gpt-6.1-sol-ultrafast', variant: 'hig
 const runtimeFiles = ['dwf.mjs', 'ui-service.mjs', 'ui-server.mjs', 'ui-data.mjs',
   'prototypes/dwf-ui/app.mjs', 'prototypes/dwf-ui/layout.mjs', 'prototypes/dwf-ui/index.html', 'prototypes/dwf-ui/styles.css',
   'workflow-definition.mjs', 'workflow-runtime.mjs', 'workflow-admission.mjs', 'workflow-git.mjs',
-  'run-store.mjs', 'task-packages.mjs', 'opencode-runtime.mjs', 'opencode-tools.mjs', 'role-skills.mjs', 'skills', 'package.json', 'package-lock.json',
+  'run-store.mjs', 'task-packages.mjs', 'role-context.mjs', 'opencode-runtime.mjs', 'opencode-tools.mjs', 'role-skills.mjs', 'skills', 'package.json', 'package-lock.json',
   'acceptance/tester.mjs', 'workflow-groups.mjs', 'research-workflow.mjs', 'acceptance/model-observer'];
 
 function git(directory, args) {
