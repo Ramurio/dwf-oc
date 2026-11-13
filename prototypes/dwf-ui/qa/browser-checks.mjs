@@ -23,6 +23,18 @@ try {
   const shot=name=>browser.screenshot(resolve(evidence,name+'.png'));
   const fixture=async id=>{if(await ev(`matchMedia('(max-width:760px)').matches && !document.querySelector('#run-menu').open`))await click('#run-menu summary');await click(`[data-run="${id}"]`);assert.equal(await ev(`document.querySelector('[data-run="${id}"]').getAttribute('aria-pressed')`),'true');};
   const text=()=>ev('document.body.innerText');
+  const sessionDetails='[data-detail-key="technical-session"]';
+  const assertSession=async id=>{
+    // Identity is deliberately on demand; the usable command is not hidden.
+    assert.equal(await ev(`document.querySelector('#command').checkVisibility()`),true);
+    assert.equal(await ev(`document.querySelector('#command').value`),`opencode --session ${id}`);
+    if(!await ev(`document.querySelector('${sessionDetails}').open`)) {
+      assert.equal(await ev(`document.querySelector('[data-session]').checkVisibility()`),false);
+      await click(`${sessionDetails} > summary`);
+    }
+    assert.equal(await ev(`document.querySelector('[data-session]').checkVisibility()`),true);
+    assert.equal(await ev(`document.querySelector('[data-session]').textContent`),id);
+  };
   assert.equal(await ev(`document.querySelector('[data-run="research"]').getAttribute('aria-pressed')`),'true');
   // Status counts must describe the selected observation cohort, not infer
   // "working" merely because more than one participant is present.
@@ -60,7 +72,7 @@ try {
       assert.ok(await ev(`(()=>{const view=document.querySelector('#map-viewport').getBoundingClientRect();return Array.from(document.querySelectorAll('[data-route-label]')).every(el=>{const r=el.getBoundingClientRect();return r.top>=view.top&&r.bottom<=view.bottom})})()`),'Fit must show all core research route labels');
     }
     await fixture('build');await shot(`build-${w}x${h}`);
-    await click('[data-primitive="worker"]');assert.ok((await text()).includes('demo_ses_worker_01'));await shot(`detail-${w}x${h}`);await click('[data-close]');
+    await click('[data-primitive="worker"]');await assertSession('demo_ses_worker_01');await shot(`detail-${w}x${h}`);await click('[data-close]');
     checks.push(`${w}x${h}: both core maps, worker details, no document horizontal overflow`);
   }
   await browser.viewport(1440,900);
@@ -70,13 +82,18 @@ try {
   const geometry=await ev('JSON.stringify(dwfDemo.getLayout())');
   const activeBefore=await ev(`document.querySelectorAll('.participant.active').length`);
   await click('[data-participant="researcher-3"]');
-  assert.ok((await text()).includes('demo_ses_r4_b'));
+  await assertSession('demo_ses_r4_b');
   await click('[data-invocation="0"]');
-  assert.ok((await text()).includes('demo_ses_r4_a'));assert.equal(await ev(`document.querySelector('#command').value`),'opencode --session demo_ses_r4_a');
+  await assertSession('demo_ses_r4_a');
   assert.ok((await text()).includes('Inspecting an earlier call.'));assert.ok((await text()).includes('Keep the architecture visible'));
   assert.equal(await ev('JSON.stringify(dwfDemo.getLayout())'),geometry);assert.equal(await ev(`document.querySelectorAll('.participant.active').length`),activeBefore);
   await click('details.skills summary');assert.ok((await text()).includes('Interface evaluation'));
-  await click('#latest');assert.ok((await text()).includes('demo_ses_r4_b'));assert.ok((await text()).includes('Fresh session'));
+  await click('#latest');await assertSession('demo_ses_r4_b');assert.ok((await text()).includes('Fresh session'));
+  assert.equal(await ev(`document.querySelector('[data-previous-session]').textContent`),'demo_ses_r4_a');
+  await click('.history > summary');
+  assert.deepEqual(await ev(`Array.from(document.querySelectorAll('.history button code'),el=>el.innerText)`),['demo_ses_r4_a','demo_ses_r4_b']);
+  await click('.history [data-invocation="0"]');await assertSession('demo_ses_r4_a');
+  await click('#latest');await assertSession('demo_ses_r4_b');
   await shot('research-current-detail');
   // Clipboard API success is read back from the actual isolated browser clipboard.
   await send('Browser.grantPermissions',{origin:url,permissions:['clipboardReadWrite','clipboardSanitizedWrite']});
@@ -99,21 +116,21 @@ try {
   await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9,nativeVirtualKeyCode:9});await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9,nativeVirtualKeyCode:9});
   assert.equal(await ev('document.querySelector("#inspector").contains(document.activeElement)'),true);
   await click('[data-close]');
-  checks.push('Research old/current result, task, fresh IDs, skills, stable map, exact clipboard readback, denied-copy selection fallback, Enter/Escape and modal Tab containment');
+  checks.push('Research old/current result, task, exact disclosed fresh IDs and always-available commands, skills, stable map, exact clipboard readback, denied-copy selection fallback, Enter/Escape and modal Tab containment');
   await fixture('build');await click('[data-primitive="worker"]');await click('[data-invocation="0"]');
-  assert.equal(await ev('document.querySelector("#command").value'),'opencode --session demo_ses_worker_01');
+  await assertSession('demo_ses_worker_01');
   assert.ok((await text()).includes('Add Markdown export'));
-  await click('#latest');assert.ok((await text()).includes('Same session'));assert.ok((await text()).includes('empty note'));
+  await click('#latest');await assertSession('demo_ses_worker_01');assert.ok((await text()).includes('Same session'));assert.ok((await text()).includes('empty note'));
   await click('[data-close]');
   checks.push('Old/latest worker invocations keep the same session, with corresponding task and command');
   await fixture('research');
   for(const [id,expected] of [['scouts','Same session'],['committee','Fresh session'],['scientist','Same session']]) {
-    await click(`[data-primitive="${id}"]`);assert.ok((await text()).includes(expected));
-    if(id==='scouts'){await click('[data-pick="scout-1"]');assert.equal(await ev(`document.querySelector('[data-session]').textContent`),'demo_ses_scout_2');}
+    await click(`[data-primitive="${id}"]`);await click(`${sessionDetails} > summary`);assert.ok((await text()).includes(expected));
+    if(id==='scouts'){await click('[data-pick="scout-1"]');await assertSession('demo_ses_scout_2');}
     await click('[data-close]');
   }
   checks.push('Independent scout member IDs; continuing scientist and scouts; actual old/new committee review IDs');
-  await browser.viewport(390,844);await fixture('research');await click('#current');assert.ok((await text()).includes('demo_ses_r4_b'));await click('[data-close]');
+  await browser.viewport(390,844);await fixture('research');await click('#current');await assertSession('demo_ses_r4_b');await click('[data-close]');
   await click('#help-open');assert.equal(await ev('document.querySelector("#help").open'),true);await click('#help-close');
   checks.push('Narrow current-participant jump, run navigation, guide open/close');
   await browser.viewport(1440,900);
@@ -150,7 +167,8 @@ try {
   await fixture('research');
   await ev(`{const g=dwfDemo.getGraph();for(const v of g.nodes.find(n=>n.id==='committee').participants[0].invocations)v.session=null;dwfDemo.showGraph(g)}`);
   await click('[data-primitive="committee"]');
-  assert.ok((await ev('document.querySelector(".history").textContent')).includes('identity unknown'),'Missing session IDs must not claim continued or fresh context');
+  await click('.history > summary');await click(`${sessionDetails} > summary`);
+  assert.ok((await ev('document.querySelector(".history").innerText')).includes('identity unknown'),'Missing session IDs must not claim continued or fresh context');
   assert.ok((await text()).includes('Session identity unavailable'));
   await click('[data-close]');checks.push('Missing historical session IDs explicitly show unknown identity, never same/new context');
   await browser.viewport(1440,900);await send('Page.navigate',{url:url+'/baseline.html'});

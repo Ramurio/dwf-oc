@@ -30,4 +30,6 @@ node prototypes/dwf-ui/qa/review-regressions.mjs
 node prototypes/dwf-ui/qa/browser-paired.mjs http://127.0.0.1:8000/ prototypes/dwf-ui/.evidence/paired
 ```
 
+The two standalone QA scripts above are separate from `test:ui` and exercise fictional demo fixtures. `browser-checks.mjs` opens session identity/history disclosures and verifies exact IDs plus immediately available commands. `review-regressions.mjs` follows semantic keyboard targets through complete forward/backward focus cycles at native 200% zoom, rather than assuming fixed Tab positions. Real session command availability is checked by the live acceptance scripts in `test:ui`.
+
 The browser console exposes `dwfDemo.getGraph()`, `dwfDemo.showGraph(graph)` and `dwfDemo.getLayout()` for coordinate-free graph changes. `setParticipantState(id, state)` changes the demo observation with stable geometry. See [design.md](design.md) for routing and supported graph structures, and [CHECKS.md](CHECKS.md) for verification and limits.

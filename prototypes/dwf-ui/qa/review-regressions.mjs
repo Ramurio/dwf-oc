@@ -97,21 +97,50 @@ try {
       const el=document.activeElement,header=document.querySelector('.detail-top'),dialog=document.querySelector('#inspector');
       const r=el.getBoundingClientRect(),h=header.getBoundingClientRect(),d=dialog.getBoundingClientRect();
       const hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
-      return {text:el.textContent.trim(),top:r.top,bottom:r.bottom,headerBottom:h.bottom,dialogBottom:d.bottom,inHeader:header.contains(el),hit:el===hit||el.contains(hit)};
+      const path=[];for(let n=el;n&&n!==dialog;n=n.parentElement)path.unshift(n.tagName+':'+Array.from(n.parentElement.children).indexOf(n));
+      return {key:path.join('/'),text:el.textContent.trim(),top:r.top,bottom:r.bottom,headerBottom:h.bottom,dialogBottom:d.bottom,inHeader:header.contains(el),inDialog:dialog.contains(el),hit:el===hit||el.contains(hit)};
     })()`);
-    for(let i=0;i<13;i++)await tab(false);
-    for(let i=0;i<5;i++)await tab(true);
-    report.focusAfterSequence=await focusBounds();
-    await shot(zoomed,'focus-200');
-    await check('13 Tab + 5 Shift+Tab: Skills is fully visible below sticky heading',async()=>{
-      const f=report.focusAfterSequence;
-      assert.match(f.text,/Skills/);assert.ok(f.top>=f.headerBottom+4,JSON.stringify(f));assert.ok(f.bottom<=f.dialogBottom-4,JSON.stringify(f));assert.ok(f.hit,JSON.stringify(f));
+    const assertFocus=f=>{
+      assert.ok(f.inDialog,JSON.stringify(f));
+      assert.ok(f.inHeader||f.top>=f.headerBottom+4,JSON.stringify(f));
+      assert.ok(f.bottom<=Math.min(f.dialogBottom-4,report.nativeZoom.height-8),JSON.stringify(f));
+      assert.ok(f.hit,JSON.stringify(f));
+    };
+    // Navigate with real keys until a semantic target, never a fixed Tab index.
+    // Repetition detects an unreachable target; the bound only guards a broken trap.
+    const tabTo=async(selector,shift=false)=>{
+      const seen=new Set();
+      for(let i=0;i<100;i++) {
+        await tab(shift);const f=await focusBounds();assertFocus(f);
+        if(await zoomed.evaluate(`document.activeElement.matches(${JSON.stringify(selector)})`))return f;
+        assert.ok(!seen.has(f.key),`Unreachable keyboard target: ${selector}`);seen.add(f.key);
+      }
+      assert.fail(`Keyboard traversal did not reach ${selector}`);
+    };
+    await check('native 200% zoom: Skills reached forward and backward stays visible below sticky heading',async()=>{
+      await tabTo('.skills > summary');
+      await tabTo('#command');
+      report.focusAfterSequence=await tabTo('.skills > summary',true);
+      await shot(zoomed,'focus-200');
+      // The disclosure must actually work from the keyboard, not just receive focus.
+      for(const type of ['keyDown','keyUp'])await zoomed.send('Input.dispatchKeyEvent',{type,key:'Enter',code:'Enter',windowsVirtualKeyCode:13,nativeVirtualKeyCode:13,...(type==='keyDown'?{text:'\r'}:{})});
+      assert.equal(await zoomed.evaluate(`document.querySelector('.skills').open`),true);
+      assert.equal(await zoomed.evaluate(`document.querySelector('.skills strong').checkVisibility()`),true);
     });
     await check('native 200% zoom: every forward/backward focused control is unobscured',async()=>{
-      for(const shift of [false,true])for(let i=0;i<24;i++) {
-        await tab(shift);const f=await focusBounds();
-        assert.ok(f.inHeader||f.top>=f.headerBottom+4,JSON.stringify(f));
-        assert.ok(f.bottom<=report.nativeZoom.height-8,JSON.stringify(f));assert.ok(f.hit,JSON.stringify(f));
+      const targets=['[data-close="header"]','.member-picker button','.call-picker button','[data-detail-key="technical-session"] > summary','.skills > summary','#copy','#command','.history > summary','.back-map'];
+      for(const shift of [false,true]) {
+        // A full focus cycle, with coverage tied to controls rather than step count.
+        await tabTo('.skills > summary',shift);
+        const first=(await focusBounds()).key,seen=new Set(),reached=new Set();
+        for(let i=0;i<100;i++) {
+          await tab(shift);const f=await focusBounds();assertFocus(f);
+          for(const selector of targets)if(await zoomed.evaluate(`document.activeElement.matches(${JSON.stringify(selector)})`))reached.add(selector);
+          if(f.key===first)break;
+          assert.ok(!seen.has(f.key),'Focus cycle did not return to Skills');seen.add(f.key);
+          assert.ok(i<99,'Focus cycle did not finish');
+        }
+        assert.deepEqual([...reached].sort(),[...targets].sort(),shift?'backward controls':'forward controls');
       }
     });
     report.errors.push(...zoomed.errors);

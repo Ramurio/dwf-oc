@@ -206,3 +206,29 @@ sandboxes were cleaned. No merge/push was performed. Independent review/verifier
 and integration remain with DWF. Existing Chrome/reboot/very-large-database
 limitations still apply; live directory reads add native observation work and
 have not been benchmarked against very large saved histories.
+
+
+## Supplemental QA after implement UI integration (2026-11-14)
+
+Reproduced both stale QA expectations: the browser check looked for a visible
+session ID before opening its technical disclosure; the native-zoom regression
+expected Skills after a fixed Tab sequence, which now reaches Session identity.
+No product defect was reproduced; app, layout and styles remain unchanged.
+
+The browser check now opens the disclosure, verifies exact selected and previous
+session IDs, selects older calls through both history controls, and checks the
+exact, always-available command before disclosure. Clipboard readback/fallback,
+same/fresh/unknown identity, map stability and narrow-screen coverage remain.
+The zoom regression reaches Skills forward and backward by semantic selector,
+activates it with Enter, then checks complete forward/backward focus cycles for
+containment, heading/viewport clearance and hit visibility, including command
+controls. Repeated focus detects unreachable targets; a safety bound is not an
+expected Tab count.
+
+Verified: both standalone QA commands pass without browser exceptions;
+`npm run test:ui` passes 20 UI unit tests, 15 layout tests, paired routes and all
+live/controlled browser acceptance scripts. Dependencies were installed with
+`npm ci` after the initial UI-suite attempt reported missing `@opencode/client`.
+`npm test` was not rerun for this QA-only change. Evidence remains ignored;
+Chrome-only and native-OS/browser limitations above still apply. No new manual
+visual review or independent design approval is claimed by these automated runs.
