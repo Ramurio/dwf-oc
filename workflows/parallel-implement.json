@@ -12,7 +12,8 @@
       ],
       "dependencies": [],
       "decisions": [],
-      "artifacts": []
+      "artifacts": [],
+      "title": "Create the alpha result"
     },
     {
       "formatVersion": 1,
@@ -23,7 +24,8 @@
       ],
       "dependencies": [],
       "decisions": [],
-      "artifacts": []
+      "artifacts": [],
+      "title": "Create the beta result"
     },
     {
       "formatVersion": 1,
@@ -37,7 +39,8 @@
         "beta"
       ],
       "decisions": [],
-      "artifacts": []
+      "artifacts": [],
+      "title": "Verify and combine alpha and beta"
     }
   ],
   "nodes": {

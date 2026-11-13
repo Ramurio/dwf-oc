@@ -13,11 +13,11 @@
     "test:harness": "node --test acceptance/pty-text.test.mjs acceptance/harness.test.mjs acceptance/tester.test.mjs acceptance/isolation.test.mjs acceptance/benchmark.test.mjs",
     "test:mutation": "node acceptance/verify-lifetime-mutation.mjs",
     "dwf": "node dwf.mjs",
-    "test:product": "node --test context-delivery.test.mjs role-context.test.mjs task-packages.test.mjs run-store.test.mjs workflow.test.mjs workflow-controls.test.mjs workflow-groups.test.mjs workflow-implements.test.mjs workflow-admission.test.mjs ui.test.mjs",
+    "test:product": "node --test context-delivery.test.mjs role-context.test.mjs task-packages.test.mjs run-store.test.mjs workflow.test.mjs workflow-controls.test.mjs workflow-groups.test.mjs workflow-implements.test.mjs workflow-admission.test.mjs ui.test.mjs ui-implements.test.mjs",
     "test:runtime": "node --test acceptance/runtime.test.mjs acceptance/implements.test.mjs",
     "test:recovery": "cucumber-js --config cucumber.mjs --tags @recovery --format json:acceptance-results/opencode/recovery.json",
     "test:workflow": "cucumber-js --config cucumber.mjs --tags @workflow --format json:acceptance-results/opencode/workflow.json",
-    "test:ui": "node --test ui.test.mjs && node --test prototypes/dwf-ui/qa/layout.test.mjs && node prototypes/dwf-ui/qa/paired-routes.test.mjs && node acceptance/ui-browser.mjs && node acceptance/ui-view-regressions.mjs"
+    "test:ui": "node --test ui.test.mjs ui-implements.test.mjs && node --test prototypes/dwf-ui/qa/layout.test.mjs && node prototypes/dwf-ui/qa/paired-routes.test.mjs && node acceptance/ui-browser.mjs && node acceptance/ui-view-regressions.mjs && node acceptance/ui-inspector-regressions.mjs && node acceptance/ui-overview-focus.mjs && node acceptance/ui-implements.mjs && node acceptance/ui-implements-native.mjs"
   },
   "devDependencies": {
     "@cucumber/cucumber": "13.2.1"

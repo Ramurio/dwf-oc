@@ -165,7 +165,7 @@ export function prepareRoleInput(root, state, visit, previous, workspace = state
     context.catalog = [...packages.values()].map(({ data, details }) => {
       const results = reports.filter(r => r.taskId === data.id);
       const instance = execution.implements?.instances.find(instance => instance.taskId === data.id);
-      return { id: data.id, ...(data.beadsId ? { beadsId: data.beadsId } : {}), version: data.version,
+      return { id: data.id, ...(data.title ? { title: data.title } : {}), ...(data.beadsId ? { beadsId: data.beadsId } : {}), version: data.version,
         dependencies: data.dependencies,
         ...(instance ? { implementId: instance.id, waitingReason: instance.waitingReason, waitingFor: instance.waitingFor } : {}),
         status: instance?.status ?? results.at(-1)?.result?.outcome ?? (results.at(-1)?.error ? 'failed' :

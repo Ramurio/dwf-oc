@@ -271,7 +271,7 @@ try {
     nodes: { execute: { role: 'worker' } }, transitions: { execute: { done: null } },
   },
     taskPackages: { formatVersion: 1, documentation: 'docs/task-packages.md',
-      example: { formatVersion: 1, id: 'task-A', beadsId: 'project-123', requirements: 'Exact original requirement',
+      example: { formatVersion: 1, id: 'task-A', title: 'Human-readable task name', beadsId: 'project-123', requirements: 'Exact original requirement',
         acceptanceCriteria: ['Exact criterion'], dependencies: [], decisions: [{ id: 'storage', text: 'Use the existing store', source: 'user:approval' }],
         artifacts: [{ id: 'spec', uri: 'docs/spec.md' }] },
       binding: 'nodes.<node>.taskId, groups.<group>.items[].taskId or implements.instances.<id>.taskId; visits pin taskId/taskVersion' },

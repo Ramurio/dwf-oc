@@ -89,11 +89,18 @@ function callView(state, visit, location, { root, owned }) {
     lastObservedDirectory: null,
     location,
     task: visit.taskContext ? (visit.taskContext.task?.requirements ||
-      visit.taskContext.assignment?.instructions || 'Coordinate the supplied task catalog') : visit.prompt ?? unknown,
+      visit.taskContext.assignment?.instructions || '') : visit.prompt ?? unknown,
     taskSource: visit.taskContext ? 'structured' : 'raw-only',
     // taskData is the exact logical snapshot; promptRaw may carry only its delta.
     taskData: visit.taskContext ?? null,
     ...(visit.delivery ? { contextDelivery: visit.delivery } : {}),
+    assignment: visit.taskContext?.assignment ?? null,
+    handoff: visit.taskContext?.otherReports?.handoff ?? null,
+    problem: visit.error ? (typeof visit.error === 'string' ? visit.error : visit.error.message ?? resultProjection(visit.error).result) :
+      ['blocked', 'changes', 'failed'].includes(visit.verdict?.outcome) ? visit.verdict.summary : null,
+    outcome: visit.verdict?.outcome ?? null,
+    cycle: visit.cycle ?? visit.taskContext?.implement?.cycle ?? null,
+    taskId: visit.taskId ?? null, taskVersion: visit.taskVersion ?? null,
     promptRaw: visit.prompt ?? null,
     ...resultProjection(visit.verdict ?? visit.error),
     state: status,
@@ -138,7 +145,7 @@ export function workflowView(state, { root, owned = false, order = 0 } = {}) {
         if (correction) correction.lastObservedDirectory = first.lastObservedDirectory;
         return [{
           ...first, state: 'done', result: 'Original reply required correction; its text was not saved.',
-          resultDetails: [], resultRaw: null,
+          resultDetails: [], resultRaw: null, outcome: null, problem: null, progress: null,
         }, ...(correction ? [correction] : [])];
       });
     const latest = invocations.at(-1);
@@ -170,8 +177,8 @@ export function workflowView(state, { root, owned = false, order = 0 } = {}) {
   const ids = [...Object.keys(def.nodes).filter(id => !templates.has(id)), ...Object.keys(groups),
     ...(def.implements ? ['implements'] : [])].filter(id => reachable.has(id));
   const nodes = ids.map(id => {
-    if (id === 'implements' && def.implements) return { id, label: 'implements', role: 'implement cycles', group: 'implements',
-      instances: publicImplements(state).instances, participants: Object.entries(def.implements.instances).flatMap(([instanceId, config]) =>
+    if (id === 'implements' && def.implements) return { id, label: 'Implement tasks', role: 'implement cycles', group: 'implements',
+      instances: publicImplements(state).instances, concurrency: def.implements.concurrency, participants: Object.entries(def.implements.instances).flatMap(([instanceId, config]) =>
         ['worker', 'reviewer', 'verifier'].map(role => ({ ...person(`${instanceId}/${role}`, config[role], `${instanceId}/${role}`, 'implements'), showRole: true }))) };
     if (!Object.hasOwn(groups, id)) {
       // A steered data-driven member can execute outside its group while

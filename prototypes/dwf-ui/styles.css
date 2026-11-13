@@ -1110,3 +1110,40 @@ body[data-live] .run time { white-space: normal; }
 .result-fields dd { margin: 4px 0 12px 14px; }
 .result-fields dd p { margin: 0; }
 .session-directories code { display: block; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+
+/* Task-scale map: independent disclosure, not one flattened list of 24 roles. */
+.hub-surface { fill:#e8eee780;stroke:#b9cbbd;stroke-width:1;stroke-dasharray:5 4 }
+.block-surface { fill:white;stroke:#b6c8bc;stroke-width:1.4 }
+.implement-card.active .block-surface { stroke:var(--active);stroke-width:2.2 }
+.implement-card[data-status=conflict] .block-surface,
+.implement-card[data-status=blocked] .block-surface { stroke:#a86732;stroke-width:2 }
+.block-status { font-size:14px;fill:var(--ink);font-weight:600 }
+.disclosure { font-size:20px;fill:var(--active) }
+[data-toggle-implement],[data-implement-overview] { cursor:pointer;outline:none }
+[data-toggle-implement]:focus-visible .focus-ring,
+[data-implement-overview]:focus-visible .focus-ring { opacity:1 }
+.overview-surface { fill:#eaf1e9 }
+[data-implement-overview]:hover .overview-surface { fill:#dbeadf }
+.overview-label { font-size:13px;fill:var(--active);font-weight:600 }
+.block-picker { display:flex;gap:6px;overflow:auto;padding:12px 2px;max-height:150px;flex-wrap:wrap }
+.block-picker button { text-align:left;overflow-wrap:anywhere;border:1px solid var(--rule);border-radius:4px;padding:6px 9px;font-size:12px }
+.block-picker [aria-pressed=true] { background:var(--tint);border-color:var(--active) }
+.task-back { margin-top:12px;color:var(--active);text-align:left }
+.report-entry { margin:14px 0;padding:12px;border-left:2px solid var(--rule);background:var(--paper) }
+.report-entry button { color:var(--active);text-align:left;font-weight:600;padding:0 0 8px }
+.problem { border-left:3px solid #a86732;padding-left:12px }
+.technical-session { margin-block:20px }
+.technical-session>summary { cursor:pointer;color:var(--muted) }
+.detail-block, .detail-top, .block-picker { overflow-wrap:anywhere;min-width:0 }
+.assignment p+p { margin-top:12px }
+.call-picker { flex-wrap:nowrap;overflow-x:auto;max-width:100%;padding-bottom:3px }
+.call-picker button { flex:none;white-space:nowrap;font:12px var(--sans) }
+.detail-block p, .report-entry p { white-space:pre-wrap }
+#task-navigation { display:flex;gap:8px;overflow-x:auto;padding:10px 24px;border-bottom:1px solid var(--rule);flex:none }
+#task-navigation button { flex:0 0 210px;text-align:left;border:1px solid #b6c8bc;border-radius:5px;padding:7px 10px;background:#fff }
+#task-navigation strong { display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:12px;font-weight:600;line-height:1.35 }
+#task-navigation span { display:block;color:var(--muted);font-size:11px;margin-top:4px }
+.live-progress { color:var(--active);border-left:2px solid var(--active);padding-left:10px;margin-block:14px;font-size:12px;white-space:pre-wrap }
+.implement-card.selected .block-surface { stroke:var(--active);stroke-width:3 }
+/* Keep keyboard focus fully painted inside the horizontally clipped call strip. */
+.call-picker button:focus-visible,.block-picker button:focus-visible { outline-offset:-3px }

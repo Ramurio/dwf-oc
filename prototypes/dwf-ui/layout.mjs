@@ -1,5 +1,6 @@
 // Deterministic layered relay layout. Geometry depends only on graph structure and
-// labels, never on workflow IDs, execution state, or the inspected invocation.
+// labels, never on workflow IDs or the inspected invocation. Implement cards
+// additionally measure their displayed runtime labels and explicit expansion state.
 // The browser supplies real canvas metrics; this conservative fallback keeps
 // headless geometry checks and non-browser consumers dependency-free.
 const estimateText = (text, size=18) => Array.from(text).reduce((width,c)=>width+size*(/[MW@%]/.test(c)?.92:/[ilI.,:;!'| ]/.test(c)?.3:/[A-Z]/.test(c)?.68:.56),0);
@@ -19,11 +20,45 @@ export function wrapText(value, width=222, measure=text=>estimateText(text)) {
   if(line)lines.push(line);
   return lines.length?lines:[''];
 }
+// Runtime instances, not participant-name heuristics, define these independent
+// cards. Expansion is view state only and never changes the workflow topology.
+function layoutImplementCards(node, measure, expanded) {
+  const width=364, gap=20, inset=20, header=68;
+  const wrap=(value,size=14,weight=400)=>wrapText(value,width-32,t=>measure(t,size,weight));
+  const cards=node.instances.map(instance=>{
+    const title=wrap(instance.title||'Untitled task (no explicit title)',18,600);
+    const identity=wrap([instance.taskId,instance.beadsId].filter(Boolean).join(' · '),12);
+    const status=wrap(`${instance.executionStatus ? instance.executionStatus+' · ' : ''}${instance.status} · ${instance.phase||'no stage yet'} · cycle ${instance.cycle??0}`);
+    const waiting=wrap(instance.waitingReason ? `Waiting: ${instance.waitingReason}${instance.waitingFor?.length?' · '+instance.waitingFor.join(', '):''}` : '');
+    const reports=instance.results||[];
+    const questions=reports.filter(r=>r.result?.outcome==='blocked'||r.result?.questions?.length);
+    const latest=reports.at(-1);
+    const conflict=instance.refresh?.status==='conflict'?instance.refresh:instance.integration?.status==='conflict'?instance.integration:null;
+    const problem=instance.status==='conflict' ? conflict?.error||'Integration conflict' : ['blocked','changes_requested'].includes(instance.status) ? instance.result?.summary||latest?.error?.message||latest?.error||latest?.result?.summary : null;
+    const summary=problem||instance.result?.summary||latest?.error?.message||latest?.error||latest?.result?.summary||'No result recorded';
+    const preview=wrap(typeof summary==='string'?summary:JSON.stringify(summary)).slice(0,2);
+    if(wrap(typeof summary==='string'?summary:JSON.stringify(summary)).length>2)preview[1]+='…';
+    const roles=(node.participants||[]).filter(p=>instance.participants.some(r=>r.participant===p.id));
+    const isExpanded=expanded.has(instance.id);
+    const top=18+title.length*22+8+identity.length*16+10+status.length*18+waiting.length*18;
+    const height=top+(isExpanded?roles.length*76+12:10)+18+preview.length*18+44;
+    return {id:instance.id,width,height,title,identity,status,waiting,preview,problem:Boolean(problem),questions:questions.length,roles,expanded:isExpanded,top};
+  });
+  const columns=cards.length>1?2:1;
+  let y=header;
+  for(let i=0;i<cards.length;i+=columns){
+    const row=cards.slice(i,i+columns),height=Math.max(...row.map(c=>c.height));
+    row.forEach((card,j)=>{card.x=inset+j*(width+gap);card.y=y;});
+    y+=height+gap;
+  }
+  return {width:inset*2+columns*width+(columns-1)*gap,height:y,title:['Implement tasks'],header,cards,rows:[],members:[]};
+}
 const sum = a => a.reduce((s,n)=>s+n,0);
-export function layoutGraph(graph, {measure=estimateText}={}) {
+export function layoutGraph(graph, {measure=estimateText, expandedImplements=new Set()}={}) {
   if(!graph.nodes.length)throw new Error('A map needs at least one node');
   if(new Set(graph.edges.map(e=>e.id)).size!==graph.edges.length)throw new Error('Duplicate edge ID');
   const nodes=graph.nodes.map((n,index)=>{
+    if(n.group==='implements')return {id:n.id,index,role:n.role,group:n.group,rank:0,...layoutImplementCards(n,measure,expandedImplements)};
     const title=wrapText(n.label,n.role==='terminal'?58:n.group?208:222,t=>measure(t,18,600));
     const members=(n.group?n.participants||[]:[]).map(p=>({id:p.id,lines:wrapText(p.showRole?`${p.name} · ${p.role}`:p.name,158,t=>measure(t,16,600))}));
     const header=title.length*22+34;

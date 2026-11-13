@@ -40,10 +40,11 @@ export function publicImplements(state) {
   return { concurrency: state.definition.implements.concurrency,
     instances: Object.entries(state.definition.implements.instances).map(([id, config]) => {
       const instance = instances[id] ?? { id, taskId: config.taskId, status: 'pending' };
-      const dependencies = state.definition.taskPackages.find(task => task.id === instance.taskId).dependencies;
+      const task = state.definition.taskPackages.find(task => task.id === instance.taskId);
+      const dependencies = task.dependencies;
       const waitingFor = dependencies.filter(taskId => !Object.values(instances).some(item => item.taskId === taskId && item.status === 'integrated'));
       const current = currentOf(state, instance);
-      return { ...instance, dependencies,
+      return { ...instance, ...(task.title ? { title: task.title } : {}), ...(task.beadsId ? { beadsId: task.beadsId } : {}), dependencies,
         ...(instance.status === 'pending' ? { waitingReason: 'assignment' } :
           instance.status === 'queued' ? { waitingReason: waitingFor.length ? 'dependencies' : 'concurrency', waitingFor } :
           ['ready', 'changes_requested', 'blocked', 'conflict', 'stale'].includes(instance.status) ? { waitingReason: 'controller' } : {}),

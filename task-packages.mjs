@@ -23,9 +23,9 @@ export function validateTaskPackages(definition) {
   if (packages !== undefined) {
     if (!Array.isArray(packages) || !packages.length) reject('нужен непустой массив taskPackages.');
     for (const task of packages) {
-      if (!fields(task, ['formatVersion', 'id', 'beadsId', 'requirements', 'acceptanceCriteria', 'dependencies', 'decisions', 'artifacts']) ||
+      if (!fields(task, ['formatVersion', 'id', 'beadsId', 'title', 'requirements', 'acceptanceCriteria', 'dependencies', 'decisions', 'artifacts']) ||
         task.formatVersion !== 1 || !identifier(task.id) || !text(task.requirements) ||
-        (task.beadsId !== undefined && !identifier(task.beadsId))) reject('неверный пакет или версия формата.');
+        (task.beadsId !== undefined && !identifier(task.beadsId)) || (task.title !== undefined && !text(task.title))) reject('неверный пакет или версия формата.');
       if (!Array.isArray(task.acceptanceCriteria) || !task.acceptanceCriteria.every(text)) reject('acceptanceCriteria должен быть массивом точных строк.');
       if (!Array.isArray(task.dependencies) || !task.dependencies.every(identifier) || !unique(task.dependencies)) reject('неверные dependencies.');
       if (!Array.isArray(task.decisions) || task.decisions.some(decision =>
