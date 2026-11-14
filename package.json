@@ -10,14 +10,14 @@
     "test:acceptance": "cucumber-js --config cucumber.mjs --tags @controlled --format json:acceptance-results/opencode/controlled.json",
     "test:real": "cucumber-js --config cucumber.mjs --tags @real --format json:acceptance-results/opencode/real.json",
     "test:steps": "cucumber-js --config cucumber.mjs --dry-run",
-    "test:harness": "node --test acceptance/pty-text.test.mjs acceptance/harness.test.mjs acceptance/tester.test.mjs acceptance/isolation.test.mjs acceptance/benchmark.test.mjs",
+    "test:harness": "node --test acceptance/pty-text.test.mjs acceptance/harness.test.mjs acceptance/tester.test.mjs acceptance/isolation.test.mjs acceptance/benchmark.test.mjs acceptance/candidate-tester.test.mjs acceptance/context-implement-faults.test.mjs acceptance/original-trial-tests.test.mjs",
     "test:mutation": "node acceptance/verify-lifetime-mutation.mjs",
     "dwf": "node dwf.mjs",
     "test:product": "node --test workflow-continuation.test.mjs context-delivery.test.mjs role-context.test.mjs task-packages.test.mjs run-store.test.mjs workflow.test.mjs workflow-controls.test.mjs workflow-groups.test.mjs workflow-implements.test.mjs workflow-admission.test.mjs ui.test.mjs ui-implements.test.mjs",
-    "test:runtime": "node --test acceptance/continuation.test.mjs acceptance/runtime.test.mjs acceptance/implements.test.mjs",
+    "test:runtime": "node --test acceptance/context-implement-recovery.test.mjs acceptance/tester-native.test.mjs acceptance/continuation.test.mjs acceptance/runtime.test.mjs acceptance/implements.test.mjs",
     "test:recovery": "cucumber-js --config cucumber.mjs --tags @recovery --format json:acceptance-results/opencode/recovery.json",
     "test:workflow": "cucumber-js --config cucumber.mjs --tags @workflow --format json:acceptance-results/opencode/workflow.json",
-    "test:ui": "node --test ui.test.mjs ui-implements.test.mjs && node --test prototypes/dwf-ui/qa/layout.test.mjs && node prototypes/dwf-ui/qa/paired-routes.test.mjs && node acceptance/ui-browser.mjs && node acceptance/ui-view-regressions.mjs && node acceptance/ui-inspector-regressions.mjs && node acceptance/ui-overview-focus.mjs && node acceptance/ui-implements.mjs && node acceptance/ui-implements-native.mjs"
+    "test:ui": "node --test ui.test.mjs ui-implements.test.mjs && node --test prototypes/dwf-ui/qa/layout.test.mjs && node prototypes/dwf-ui/qa/paired-routes.test.mjs && node acceptance/ui-browser.mjs && node acceptance/ui-view-regressions.mjs && node acceptance/ui-inspector-regressions.mjs && node acceptance/ui-overview-focus.mjs && node acceptance/ui-implements.mjs && node acceptance/ui-implements-native.mjs && node acceptance/ui-long-workflow.mjs"
   },
   "devDependencies": {
     "@cucumber/cucumber": "13.2.1"

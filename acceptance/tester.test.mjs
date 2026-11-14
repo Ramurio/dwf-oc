@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile, mkdir, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { createAttempt, admitTester, visibleMessages, testerState, inspectTester, checkTester } from './tester.mjs';
+import { createAttempt, admitTester, visibleMessages, testerState, inspectTester, checkTester, prepareTesterSkill } from './tester.mjs';
 
 test('fresh tester attempts clone one baseline without changing the source', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'dwf-tester-test-'));
@@ -199,4 +199,49 @@ test('resumed tester reports replace old completions and retain length continuat
   }
   assert.equal(testerState(attempt, [{ type: 'user', id: 'msg_one' }, answer('first', 'Long ', 'length'),
     answer('last', 'report'), { type: 'idle', outcome: 'succeeded' }]).report, 'Long report');
+});
+
+
+test('explicit candidate skills cannot silently reuse another launcher in an existing profile', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'dwf-tester-skill-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const source = join(directory, 'candidate');
+  const target = join(directory, 'profile/skills/dwf-oc');
+  await mkdir(join(source, 'references'), { recursive: true });
+  await writeFile(join(source, 'SKILL.md'), '---\nname: dwf-oc\ndescription: test\n---\nCandidate launcher\n');
+  await writeFile(join(source, 'references/cli.md'), 'Candidate CLI\n');
+  const evidence = await prepareTesterSkill(source, target);
+  assert.equal(evidence.sourceDirectory, await realpath(source));
+  assert.equal(evidence.installedDirectory, await realpath(target));
+  assert.match(evidence.sha256, /^[a-f0-9]{64}$/);
+  assert.deepEqual(await prepareTesterSkill(source, target), evidence);
+  await writeFile(join(source, 'references/cli.md'), 'Changed reference\n');
+  await assert.rejects(prepareTesterSkill(source, target), /fresh|свеж/i);
+  assert.equal(await readFile(join(target, 'references/cli.md'), 'utf8'), 'Candidate CLI\n');
+});
+
+test('tester verifies the native loaded launcher path and body, not only its ID', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'dwf-tester-loaded-skill-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const source = join(directory, 'candidate');
+  const target = join(directory, 'profile/skills/dwf-oc');
+  await mkdir(source);
+  await writeFile(join(source, 'SKILL.md'), '---\nname: dwf-oc\n---\nCandidate launcher\n');
+  const dwfTesterSkill = await prepareTesterSkill(source, target);
+  const selected = { providerID: 'openai', id: 'gpt-6.1-sol', variant: 'high' };
+  let loaded = { id: 'dwf-oc', path: join(source, 'SKILL.md'), content: 'Candidate launcher' };
+  const client = { dwfTesterSkill,
+    model: { list: async () => ({ data: [{ ...selected, enabled: true, variants: [{ id: 'high' }] }] }) },
+    skill: { list: async () => ({ data: [loaded] }) } };
+  const attempt = { directory, workspace: directory, model: selected };
+  await assert.rejects(checkTester(client, attempt), /path|путь/i);
+  loaded.path = join(target, 'SKILL.md'); loaded.content = 'Stale launcher';
+  await assert.rejects(checkTester(client, attempt), /content|содерж/i);
+  loaded.content = 'Candidate launcher';
+  await checkTester(client, attempt);
+  const saved = JSON.parse(await readFile(join(directory, 'skill-evidence.json'), 'utf8'));
+  assert.equal(saved.sha256, dwfTesterSkill.sha256);
+  assert.equal(saved.loadedPath, loaded.path);
+  await writeFile(join(target, 'SKILL.md'), 'Changed after connection');
+  await assert.rejects(checkTester(client, attempt), /fresh|свеж/i);
 });

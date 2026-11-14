@@ -19,7 +19,7 @@ const runtimeFiles = ['dwf.mjs', 'ui-service.mjs', 'ui-server.mjs', 'ui-data.mjs
   'prototypes/dwf-ui/app.mjs', 'prototypes/dwf-ui/layout.mjs', 'prototypes/dwf-ui/index.html', 'prototypes/dwf-ui/styles.css',
   'role-context.mjs', 'context-delivery.mjs', 'workflow-definition.mjs', 'implement-definition.mjs', 'workflow-implements.mjs', 'workflow-runtime.mjs', 'workflow-continuation.mjs', 'workflow-admission.mjs', 'workflow-git.mjs',
   'run-store.mjs', 'task-packages.mjs', 'opencode-runtime.mjs', 'opencode-tools.mjs', 'role-skills.mjs', 'skills', 'package.json', 'package-lock.json',
-  'acceptance/tester.mjs', 'workflow-groups.mjs', 'research-workflow.mjs', 'acceptance/model-observer'];
+  'acceptance/tester.mjs', 'acceptance/harness.mjs', 'workflow-groups.mjs', 'research-workflow.mjs', 'acceptance/model-observer'];
 
 function git(directory, args) {
   return execFileSync('git', args, { cwd: directory, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();

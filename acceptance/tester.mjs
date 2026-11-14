@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { access, cp, mkdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve, relative, sep, delimiter } from 'node:path';
@@ -9,6 +9,7 @@ import { parseArgs } from 'node:util';
 import { OpenCode, ClientError, isSessionNotFoundError } from '@opencode/client';
 import { Service } from '@opencode/client/service';
 import { connect } from '../opencode-runtime.mjs';
+import { snapshot } from './harness.mjs';
 
 const projectDirectory = fileURLToPath(new URL('../', import.meta.url));
 const executable = join(projectDirectory, 'node_modules/.bin/opencode');
@@ -77,6 +78,25 @@ function environment(profile, stateDirectory) {
     PATH: join(projectDirectory, 'node_modules/.bin') + delimiter + (process.env.PATH ?? '') };
 }
 
+// Fail closed when an explicitly requested launcher differs from a pre-existing
+// profile. A new trial must not inherit an installed/default launcher by accident.
+export async function prepareTesterSkill(source, target) {
+  const sourceDirectory = await realpath(source);
+  await access(join(sourceDirectory, 'SKILL.md'));
+  const expected = await snapshot(sourceDirectory);
+  try { await access(target); }
+  catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    await cp(sourceDirectory, target, { recursive: true, errorOnExist: true, force: false });
+  }
+  const actual = await snapshot(target);
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    throw new Error('Requested launcher differs from the installed copy; use a fresh tester profile.');
+  }
+  return { sourceDirectory, installedDirectory: await realpath(target),
+    sha256: createHash('sha256').update(JSON.stringify(expected)).digest('hex'), files: expected };
+}
+
 export async function authorizeTester(client) {
   if ((await client.credential.list()).length !== 0) return;
   try {
@@ -95,9 +115,13 @@ async function connectLegacyTester(root, stateDirectory, prepare, launch) {
   await mkdir(configDirectory, { recursive: true, mode: 0o700 });
   try { await access(join(configDirectory, 'opencode.json')); }
   catch (error) { if (error.code !== 'ENOENT') throw error; prepare = true; }
+  let explicitSkill;
+  if (launch.skillDirectory) {
+    explicitSkill = await prepareTesterSkill(launch.skillDirectory, join(profile, 'skills/dwf-oc'));
+  }
   if (prepare) {
     const skills = join(profile, 'skills');
-    await cp(launch.skillDirectory ?? join(homedir(), '.codex/skills/dwf-oc'), join(skills, 'dwf-oc'), { recursive: true });
+    if (!explicitSkill) await cp(join(homedir(), '.codex/skills/dwf-oc'), join(skills, 'dwf-oc'), { recursive: true });
     await save(join(configDirectory, 'opencode.json'), { update: 'disable', snapshots: false,
       mcp: { servers: {} }, skills: [skills],
       plugins: ['-opencode.skill', '-opencode.config.compatibility', 'opencode.config.skill', 'opencode.tool.skill'],
@@ -107,11 +131,12 @@ async function connectLegacyTester(root, stateDirectory, prepare, launch) {
   const endpoint = await Service.ensure({ file: join(profile, 'state/opencode/service.json'), version,
     command: [...launch.commandPrefix ?? [], executable, 'serve', '--service', '--hostname', '127.0.0.1', '--port', String(launch.port ?? 0)],
     env: { ...launch.env, ...environment(profile, stateDirectory),
-      PATH: join(projectDirectory, 'node_modules/.bin') + delimiter + (launch.env?.PATH ?? process.env.PATH ?? '') },
+      PATH: launch.env?.PATH ?? environment(profile, stateDirectory).PATH },
     onStart(reason) { if (reason === 'version-mismatch') throw new Error('Версия OpenCode тестера изменилась.'); } });
   const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) });
   // Transfer through the native credential API without writing secrets to the test journal.
   if (launch.authorize !== false) await authorizeTester(client);
+  if (explicitSkill) client.dwfTesterSkill = explicitSkill;
   return client;
 }
 
@@ -119,6 +144,10 @@ export async function connectTester(root, stateDirectory, prepare = false, launc
   if (launch.profile === 'legacy') return connectLegacyTester(root, stateDirectory, prepare, launch);
   const client = await connect(stateDirectory, undefined, launch);
   const target = join(client.dwfProfile.configDirectory, 'skills', 'dwf-oc');
+  if (launch.skillDirectory) {
+    client.dwfTesterSkill = await prepareTesterSkill(launch.skillDirectory, target);
+    return client;
+  }
   try { await access(join(target, 'SKILL.md')); }
   catch (error) {
     if (error.code !== 'ENOENT') throw error;
@@ -160,7 +189,20 @@ export async function checkTester(client, attempt) {
   const deadline = Date.now() + 15000;
   for (;;) {
     const skills = await client.skill.list({ location });
-    if (skills.data.some(skill => skill.id === 'dwf-oc')) {
+    const loaded = skills.data.find(skill => skill.id === 'dwf-oc');
+    if (loaded) {
+      if (client.dwfTesterSkill) {
+        const expected = client.dwfTesterSkill;
+        const current = await prepareTesterSkill(expected.sourceDirectory, expected.installedDirectory);
+        if (current.sha256 !== expected.sha256) throw new Error('Launcher changed; use a fresh tester profile.');
+        const expectedPath = await realpath(join(expected.installedDirectory, 'SKILL.md'));
+        if (!loaded.path || await canonical(loaded.path) !== expectedPath) {
+          throw new Error('Native dwf-oc skill path differs from the requested tester copy.');
+        }
+        const body = (await readFile(expectedPath, 'utf8')).replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '').trim();
+        if (loaded.content?.trim() !== body) throw new Error('Native dwf-oc skill content differs from the requested tester copy.');
+        await save(join(attempt.directory, 'skill-evidence.json'), { ...expected, loadedPath: loaded.path });
+      }
       await save(join(attempt.directory, 'skills.json'), skills.data);
       return;
     }

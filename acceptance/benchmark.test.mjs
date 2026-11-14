@@ -68,6 +68,8 @@ test('benchmark archives a runnable current runtime and a pristine baseline with
   const schema = JSON.parse(execFileSync(process.execPath, [join(first.runtime, 'dwf.mjs'), 'schema'],
     { cwd: first.workspace, encoding: 'utf8', stdio: 'pipe', timeout: 10000 }));
   assert(schema.roles.worker.includes('done'));
+  assert.match(execFileSync(process.execPath, [join(first.runtime, 'acceptance/tester.mjs'), '--help'],
+    { cwd: first.workspace, encoding: 'utf8', stdio: 'pipe', timeout: 10000 }), /prompt-file/);
   await assert.rejects(prepareBenchmark({ ...settings, root: join(source, 'benchmark') }), /outside/);
 });
 
