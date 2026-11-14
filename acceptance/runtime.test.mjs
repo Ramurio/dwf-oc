@@ -1560,3 +1560,46 @@ for (const boundary of ['prepared', 'admission_started']) {
     assert.equal((await transcript(sandbox.fault.calls)).filter(call => call.inputId === input.inputId).length, 1);
   });
 }
+
+test('native manager reads a frozen worker document through report artifacts', { timeout: 60000 }, async t => {
+  let observed;
+  const definition = { task: 'Read the worker evidence', entry: 'work', merge: false,
+    nodes: { work: { role: 'worker' }, manager: { role: 'orchestrator' } },
+    transitions: { work: { done: 'manager' }, manager: { done: null } } };
+  const sandbox = await fixture(t, definition, ({ prompt, toolResults }) => {
+    const context = contextOf(prompt);
+    if (context.node === 'work') {
+      if (!toolResults.length) return { toolCalls: [{ name: 'shell', arguments: {
+        command: `node -e 'require("fs").writeFileSync("evidence.md", "A line of evidence with its original newline.\\n".repeat(200) + "FINAL_DECISION_BOUNDARY\\n")'`,
+      } }] };
+      return JSON.stringify({ outcome: 'done', summary: 'Attached evidence', artifacts: ['evidence.md'] });
+    }
+    const link = context.results.find(r => r.node === 'work').artifacts[0];
+    assert.equal(link.access, 'read');
+    if (!toolResults.length) return { toolCalls: [{ name: 'read', arguments: { path: link.path } }] };
+    observed = JSON.stringify(toolResults);
+    return verdict('done');
+  });
+  await sandbox.release();
+  const state = await sandbox.finish();
+  assert.equal(state.status, 'succeeded', state.error);
+  assert(observed.includes('FINAL_DECISION_BOUNDARY'), 'Native reader must see the end of a long multiline document');
+  const history = (await sandbox.command(['inspect', sandbox.runId])).history;
+  assert.equal(history[0].artifacts[0].sha256, state.visits[0].reportArtifacts[0].sha256);
+});
+
+test('a failed report snapshot cannot leave a successful participant verdict', { timeout: 60000 }, async t => {
+  const definition = { task: 'Publish evidence', entry: 'work', merge: false,
+    nodes: { work: { role: 'worker' } }, transitions: { work: { done: null } } };
+  const sandbox = await fixture(t, definition, () => JSON.stringify({ outcome: 'done', summary: 'Evidence', artifacts: ['untouched.txt'] }));
+  const state = getWorkflow(sandbox.state, sandbox.runId);
+  const visit = state.visits[0];
+  await writeJson(join(visit.contextDirectory, 'report-artifact-0.json'), {
+    reference: { uri: 'different-file', inputId: visit.inputId, revision: visit.revision },
+  });
+  await sandbox.release();
+  const final = await sandbox.finish();
+  assert.equal(final.status, 'failed');
+  assert.match(final.error, /уже сохранён/);
+  assert.equal(final.visits[0].verdict, undefined);
+});

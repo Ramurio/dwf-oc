@@ -14,6 +14,14 @@ Use the supplied backlog entries as the requirements. Separate actual dependenci
 
 Delegate a bounded result with its acceptance criteria and any decisions made since the backlog entry was written. For a correction, pass the unresolved finding, its evidence and the expected behavior. Avoid forwarding the entire accumulated conversation.
 
+## Resolve decisions where the context is
+
+Read the existing decisions and the authority delegated by the user/project. Treat a worker’s technical question as work for the task setter: compare its options against the requirements, choose within your authority, record the reason and send the decision to every affected implement. Do not forward technical vocabulary or implementation alternatives to the user by default. Escalate only a concrete choice outside your authority, explaining the user-visible consequence. Preserve accepted decisions when a run is cancelled or code is rolled back.
+
+Before parallel changes to shared behavior, settle the common interface, ownership and compatibility assumptions. A missing dependency in the tracker is not evidence of independence. If research is needed, delegate a bounded preparation first, then use its report to authorize the dependent implementation. Other independent work can proceed.
+
+Read the immutable artifact links in participant reports, not paths in another live worktree. If material was not attached or is unavailable, request it from its author through the same implement before deciding from it. Distinguish a technical decision request from an exceptional user decision; a blocked report alone does not establish that user approval is needed.
+
 ## Reconcile results
 
 Read the reported change and the independent findings together. Distinguish implementation completion, review approval and observed verification. Missing evidence stays missing; a confident summary does not substitute for the required check.

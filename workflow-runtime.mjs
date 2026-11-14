@@ -1,3 +1,4 @@
+import { captureReportArtifacts } from './report-artifacts.mjs';
 import { checkContinuationAdmission } from './workflow-continuation.mjs';
 import { initializeImplements, publicImplements, controlVisit, implementTarget, implementContext, implementObservation,
   applyImplementDecision, advanceImplementState, checkImplementCandidates } from './workflow-implements.mjs';
@@ -45,6 +46,7 @@ export function publicWorkflow(state) {
       ...(current.startedAt ? { startedAt: current.startedAt } : {}),
       ...(current.progress ? { progress: current.progress } : {}) },
     history: state.visits.map(visit => ({ node: visit.node, inputId: visit.inputId, sessionId: visit.sessionId, ...taskIdentity(visit),
+      ...(visit.reportArtifacts?.length ? { artifacts: visit.reportArtifacts } : {}),
       ...(visit.recoveryOf ? { recoveryOf: visit.recoveryOf } : {}),
       ...(visit.recoveredBy ? { recoveredBy: visit.recoveredBy } : {}),
       ...(visit.execution ? { execution: visit.execution, executionInputId: visit.executionInputId ?? visit.inputId } : {}),
@@ -54,6 +56,7 @@ export function publicWorkflow(state) {
       ...(visit.errorHistory ? { errorHistory: visit.errorHistory } : {}),
       ...(visit.implementId ? { implementId: visit.implementId, participant: visit.participant } : {}),
       ...(visit.children ? { members: visit.children.map(child => ({ participant: child.participant, node: child.node, sessionId: child.sessionId, inputId: child.inputId, ...taskIdentity(child),
+        ...(child.reportArtifacts?.length ? { artifacts: child.reportArtifacts } : {}),
         ...(child.recoveryOf ? { recoveryOf: child.recoveryOf } : {}), ...(child.recoveredBy ? { recoveredBy: child.recoveredBy } : {}),
         ...(child.verdict ? { result: child.verdict, revision: child.revision } : {}), ...(child.error ? { error: child.error } : {}) })) } : {}),
       ...(visit.resultHistory ? { resultHistory: visit.resultHistory } : {}),
@@ -143,7 +146,7 @@ function request(state, visit) {
       permissions: [...permissions, ...artifactPermissions] } } };
 }
 
-function finishParticipant(state, visit, outcome) {
+function finishParticipant(root, state, visit, outcome) {
   const executionInputId = visit.correction?.inputId ?? visit.inputId;
   if (visit.execution && (visit.executionInputId ?? visit.inputId) !== executionInputId) {
     visit.executionHistory ??= [];
@@ -180,8 +183,9 @@ function finishParticipant(state, visit, outcome) {
     delete visit.progress;
     return;
   }
-  visit.verdict = role === 'committee' ? { outcome: verdict.outcome, summary: verdict.summary } : verdict;
   if (role === 'worker') visit.revision = revision;
+  visit.reportArtifacts = captureReportArtifacts(root, state, visit, verdict.artifacts);
+  visit.verdict = role === 'committee' ? { outcome: verdict.outcome, summary: verdict.summary } : verdict;
 }
 
 function failWorkflow(state, message) {
@@ -226,7 +230,7 @@ async function tickImplementParticipants(root, state, owner, client) {
       try {
         if (execution.status === 'rejected') throw execution.reason;
         if (execution.value.progress) visit.progress = execution.value.progress;
-        if (execution.value.outcome) finishParticipant(state, visit, execution.value.outcome);
+        if (execution.value.outcome) finishParticipant(root, state, visit, execution.value.outcome);
       } catch (error) {
         if (error.publicMessage) visit.error = error.publicMessage;
         else { state.service = 'unavailable'; available = false; }
@@ -479,7 +483,7 @@ export async function runWorkflow(root, id) {
           try {
             if (execution.status === 'rejected') throw execution.reason;
             if (execution.value.progress) child.progress = execution.value.progress;
-            if (execution.value.outcome) finishParticipant(state, child, execution.value.outcome);
+            if (execution.value.outcome) finishParticipant(root, state, child, execution.value.outcome);
           } catch (error) {
             if (error.publicMessage) child.error = error.publicMessage;
             else { state.service = 'unavailable'; client = undefined; }
@@ -543,7 +547,7 @@ export async function runWorkflow(root, id) {
       save(false);
       if (state.controls?.some(command => command.kind === 'stop' && command.status === 'pending')) continue;
       try {
-        finishParticipant(state, visit, outcome);
+        finishParticipant(root, state, visit, outcome);
       } catch (error) {
         visit.executionError = error.publicMessage ?? error.message;
         if (!state.controls?.some(command => command.kind === 'steer' && command.status === 'pending' && !implementTarget(state, command.node))) throw error;

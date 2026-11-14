@@ -57,6 +57,7 @@ function report(visit, index, definition) {
     inputId: visit.inputId, ...(visit.implementId ? { implementId: visit.implementId } : {}),
     role: visit.kind === 'implements' ? 'implements' : visit.children ? 'group' : definition.nodes[visit.node]?.role, sessionId: visit.sessionId, taskId: visit.taskId, taskVersion: visit.taskVersion,
     revision: visit.revision, ...(visit.verdict ? { result: visit.verdict } : {}),
+    ...(visit.reportArtifacts?.length ? { artifacts: visit.reportArtifacts } : {}),
     ...(visit.error || visit.executionError || visit.execution?.error ? { error: visit.error ?? visit.executionError ?? visit.execution.error } : {}),
     ...(visit.execution && (visit.execution.status === 'failed' || visit.executionError) ? { execution: visit.execution } : {}),
     ...(visit.errorHistory ? { errorHistory: visit.errorHistory } : {}),
@@ -116,7 +117,12 @@ export function prepareRoleInput(root, state, visit, previous, workspace = state
     return true;
   });
   const historyReports = executions.filter(v => v.inputId !== visit.inputId)
-    .filter(v => v.verdict || v.error || v.admitted).map((v, i) => report(v, i, definition));
+    .filter(v => v.verdict || v.error || v.admitted).map((v, i) => {
+      const value = report(v, i, definition);
+      if (!tools.includes('read') && value.artifacts) value.artifacts = value.artifacts.map(a =>
+        ({ ...a, access: 'unavailable', reason: 'read is not permitted for this participant' }));
+      return value;
+    });
   const allReports = historyReports.filter(r => !['group', 'implements'].includes(r.role));
   const history = saveDocument('history.json', historyReports);
   const details = r => ({ ...history, pointer: `/${r.visit - 1}` });

@@ -192,6 +192,10 @@ export function parseVerdict(text, role, allowed = outcomes[role]) {
     typeof result.summary !== 'string' || !result.summary.trim()) {
     throw publicError('Результат участника требует допустимый outcome и непустой summary.');
   }
+  if (result.artifacts !== undefined && (!Array.isArray(result.artifacts) || result.artifacts.length > 16 ||
+    result.artifacts.some(path => typeof path !== 'string' || !path.trim()) || new Set(result.artifacts).size !== result.artifacts.length)) {
+    throw publicError('artifacts должен содержать до 16 уникальных относительных путей файлов.');
+  }
   return result;
 }
 
@@ -278,6 +282,7 @@ const commonInstructions = [
   'Distinguish observed facts from assumptions and other participants\' conclusions. Report actions and checks truthfully.',
   'Finish or stop your background commands before reporting completion. Your result is accepted only after your commands have finished.',
   'If an obstacle prevents completion, return blocked. State the cause, the unfinished work and what is needed to continue.',
+  'To hand over a document, add artifacts: ["project/relative/file.md"] to your JSON result (up to 16 UTF-8 files, 1 MiB each). DWF saves immutable copies for the receiving participants. A path mentioned only in summary does not share the file. Keep the decision question self-contained in summary; attach supporting detail explicitly.',
 ].join('\n');
 const roleInstructions = {
   worker: [
@@ -310,6 +315,7 @@ const roleInstructions = {
   ].join('\n'),
   orchestrator: [
     'Manage the assigned work through the supplied workflow graph. Choose an outcome from this node\'s configured transitions; DWF executes its target. In summary, give the reason and the target\'s assignment or correction.',
+    'Act as the task setter for implement participants. Exercise the technical decision authority delegated by the user/project instructions, record the decision and pass it to affected participants. Do not turn their technical questions into requests for user approval when they fall within that authority. Preserve explicit user decisions and acceptance requirements; escalate only matters outside your authority.',
     'If the supplied graph has implements, dispatch concrete assignments with implements: [{action: "admit"|"revise", id: "instance ID", assignment: "specific work or correction"}, {action: "integrate", id: "ready instance ID"}]. Choose the transition targeting implements to wait for actual new results. An empty implements array waits without polling the model. Dependencies require integrated results. Individual approvals do not replace review and verification of the combined candidate.',
     'Preserve project files. Delegate implementation and checks to the configured participants. DWF owns execution, session reuse and integration; do not launch nested workflows or perform Git integration yourself.',
     'Return done when your assigned stage is complete. If done ends the workflow, the requested work must be complete and the supplied approval requirements satisfied. DWF checks the current revision again before completing or merging. Your decision is not evidence that integration happened.',

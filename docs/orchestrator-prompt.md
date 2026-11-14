@@ -1,12 +1,5 @@
-Изучи проект. Через скилл dwf-oc запусти единый workflow с orchestrator, который
-ведёт задачи Beads: dwf-oc-cuo, dwf-oc-co1, dwf-oc-8ic, dwf-oc-hni, dwf-oc-vku,
-dwf-oc-22f, dwf-oc-715, dwf-oc-3af. Требования и зависимости возьми из Beads.
+Изучи проект и AGENTS.md. Через dwf-oc выполни Beads: dwf-oc-cuo, dwf-oc-co1, dwf-oc-8ic, dwf-oc-hni, dwf-oc-vku, dwf-oc-22f, dwf-oc-715, dwf-oc-3af. Требования и принятые решения возьми из задач и комментариев.
 
-На каждую задачу разверни свой implement внутри общей видимой схемы:
-worker ↔ reviewer → verifier → orchestrator. Orchestrator распределяет работу,
-возвращает замечания и несовместимости на доработку и разрешает общий merge
-после проверки итогового результата. Verifier сам merge не запускает.
+Один DWF: orchestrator управляет раскрываемыми implement, worker ↔ reviewer → verifier возвращает результат ему. Технические решения принимает orchestrator самостоятельно; ко мне только исключительные вопросы вне цели и полномочий или с серьёзными необратимыми последствиями. Сначала согласуйте общие интерфейсы, затем выполняйте независимые implement параллельно. Конфликты возвращайте на доработку; общий merge после проверки объединённого результата.
 
-Orchestrator и reviewer — Astra 6 xhigh; worker — Sol 6.1 high;
-verifier — Sol 6.1 xhigh. У всех обычная скорость.
-Соблюдай AGENTS.md, наблюдай запуск до завершения и обновляй Beads по факту.
+Orchestrator/reviewer — Astra 6 xhigh, worker — Sol 6.1 high, verifier — Sol 6.1 xhigh. Все на обычной скорости. Покажи живой UI, доведи до проверенного результата, обнови Beads и опубликуй по правилам проекта. После устранимых сбоев продолжай тот же run; сохраняй принятые решения.
