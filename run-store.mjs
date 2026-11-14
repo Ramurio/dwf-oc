@@ -170,7 +170,7 @@ export function queueWorkflowCommand(root, id, kind, node, text, revisionKind = 
     if (!row) throw publicError('Workflow не найден.');
     const state = JSON.parse(row.state);
     validateTaskState(state);
-    const stopped = state.controls?.find(command => command.kind === 'stop');
+    const stopped = state.controls?.find(command => command.kind === 'stop' && !command.resumedBy);
     if (kind === 'stop' && stopped) return stopped;
     if (state.status !== 'running' || state.finalizing || stopped) throw publicError('Workflow уже завершает работу и не принимает команды.');
     if (kind === 'steer' && state.definition.nodes[state.definition.entry]?.role === 'scientist') {
@@ -264,9 +264,47 @@ export function savedRuns(root) {
     const workflows = tables.includes('workflows') ? db.prepare('SELECT rowid, state, owner, expires FROM workflows ORDER BY rowid DESC').all()
       .map(row => { const state = JSON.parse(row.state); validateTaskState(state);
         return { state, order: row.rowid, owned: Boolean(row.owner && row.expires > Date.now()) }; }) : [];
-    const runs = db.prepare('SELECT rowid, * FROM runs ORDER BY rowid DESC').all().map(row => ({ id: row.id,
+    const runs = db.prepare('SELECT rowid, * FROM runs ORDER BY rowid DESC').all().filter(row => !workflows.some(w => w.state.id === row.id)).map(row => ({ id: row.id,
       sessionId: row.session_id, inputId: row.input_id, request: JSON.parse(row.request), admitted: row.admitted === 1,
       status: row.status, result: row.result, error: row.error, order: row.rowid }));
     return { workflows, runs };
+  } finally { if (db.isTransaction) db.exec('ROLLBACK'); db.close(); }
+}
+
+// Continuation and its preflight must be atomic with owner takeover and controls.
+// The transaction never submits model input or changes project files.
+export async function withWorkflowContinuation(root, id, action) {
+  const db = open(root, true);
+  try {
+    db.exec('BEGIN IMMEDIATE');
+    workflowTable(db);
+    let row = db.prepare('SELECT state, owner, expires FROM workflows WHERE id = ?').get(id);
+    if (!row) {
+      const legacy = getRun(root, id);
+      if (!legacy) throw publicError('Запуск не найден в состоянии DWF.');
+      if (legacy.status !== 'failed') return legacy;
+      const state = { id, status: legacy.status, error: legacy.error, createdAt: legacy.request.createdAt,
+        definition: { task: legacy.request.text, entry: 'planner', nodes: { planner: { role: 'planner' } }, transitions: { planner: { done: null } } },
+        workspace: { mode: 'directory', path: legacy.request.session.location.directory },
+        model: legacy.request.session.model, opencode: legacy.request.opencode, legacyPlanner: legacy,
+        roleAgents: { planner: legacy.request.session.agent },
+        rolePermissions: { planner: legacy.request.session.permissions }, sessions: { planner: legacy.sessionId },
+        visits: [{ node: 'planner', participant: 'planner', sessionId: legacy.sessionId, inputId: legacy.inputId,
+          prompt: legacy.request.text, admitted: legacy.admitted }] };
+      row = { state: JSON.stringify(state) };
+      db.prepare('INSERT INTO workflows (id, state) VALUES (?, ?)').run(id, row.state);
+    }
+    const state = JSON.parse(row.state);
+    validateTaskState(state);
+    const before = structuredClone(state);
+    await action(state, { owned: Boolean(row.owner && row.expires > Date.now()) });
+    validateTaskState(state, before);
+    // Live running owners were left untouched by action. Terminal old owners are
+    // revoked together with accepting continuation, fencing stale late writes.
+    const runningOwner = before.status === 'running' && row.owner && row.expires > Date.now();
+    db.prepare('UPDATE workflows SET state = ?, owner = ?, expires = ? WHERE id = ?')
+      .run(JSON.stringify(state), runningOwner ? row.owner : null, runningOwner ? row.expires : 0, id);
+    db.exec('COMMIT');
+    return state;
   } finally { if (db.isTransaction) db.exec('ROLLBACK'); db.close(); }
 }

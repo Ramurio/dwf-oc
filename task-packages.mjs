@@ -77,9 +77,13 @@ export function taskPackageAt(state, taskId, version) {
 
 export function validateTaskState(state, saved) {
   validateContextDelivery(state, saved, reject);
+  for (const field of ['recoveryHistory', 'failures']) if (state[field] !== undefined && !Array.isArray(state[field])) reject('неверная история восстановления.');
   if (state.taskRevisions !== undefined && !Array.isArray(state.taskRevisions)) reject('неверный журнал версий.');
   // Enforce saved invariants before considering the legacy no-definition shape.
   if (saved) {
+    for (const field of ['recoveryHistory', 'failures']) {
+      if (JSON.stringify((state[field] ?? []).slice(0, (saved[field] ?? []).length)) !== JSON.stringify(saved[field] ?? [])) reject('история восстановления неизменяема.');
+    }
     if (JSON.stringify(saved.definition?.taskPackages) !== JSON.stringify(state.definition?.taskPackages) ||
       (saved.definition?.taskPackages && JSON.stringify(saved.definition) !== JSON.stringify(state.definition))) reject('исходный снимок неизменяем.');
     if (JSON.stringify(saved.inputSnapshot) !== JSON.stringify(state.inputSnapshot)) reject('исходный ввод неизменяем.');

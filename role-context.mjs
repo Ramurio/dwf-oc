@@ -57,7 +57,11 @@ function report(visit, index, definition) {
     inputId: visit.inputId, ...(visit.implementId ? { implementId: visit.implementId } : {}),
     role: visit.kind === 'implements' ? 'implements' : visit.children ? 'group' : definition.nodes[visit.node]?.role, sessionId: visit.sessionId, taskId: visit.taskId, taskVersion: visit.taskVersion,
     revision: visit.revision, ...(visit.verdict ? { result: visit.verdict } : {}),
-    ...(visit.error ? { error: visit.error } : {}),
+    ...(visit.error || visit.executionError || visit.execution?.error ? { error: visit.error ?? visit.executionError ?? visit.execution.error } : {}),
+    ...(visit.execution && (visit.execution.status === 'failed' || visit.executionError) ? { execution: visit.execution } : {}),
+    ...(visit.errorHistory ? { errorHistory: visit.errorHistory } : {}),
+    ...(visit.executionHistory ? { executionHistory: visit.executionHistory } : {}),
+    ...(visit.recoveryOf ? { recoveryOf: visit.recoveryOf, recoveryId: visit.recoveryId } : {}),
     ...(visit.integratedRevision ? { integratedRevision: visit.integratedRevision } : {}) };
 }
 function latestReports(reports) {
@@ -102,7 +106,15 @@ export function prepareRoleInput(root, state, visit, previous, workspace = state
   // Keep group outcomes as well as child reports: successful branches do not
   // establish that their integration succeeded. Store the full, chronological
   // evidence once; role inputs use addressed reports or navigation cards.
-  const executions = state.visits.flatMap(v => v.children ? [...v.children, v] : [v]);
+  // Group membership is not another execution of a retained input. Preserve
+  // each group's envelope, but include a native input once, at its first visit.
+  const seenInputs = new Set();
+  const executions = state.visits.flatMap(v => v.children ? [...v.children, v] : [v]).filter(v => {
+    if (!v.inputId) return true;
+    if (seenInputs.has(v.inputId)) return false;
+    seenInputs.add(v.inputId);
+    return true;
+  });
   const historyReports = executions.filter(v => v.inputId !== visit.inputId)
     .filter(v => v.verdict || v.error || v.admitted).map((v, i) => report(v, i, definition));
   const allReports = historyReports.filter(r => !['group', 'implements'].includes(r.role));
@@ -132,6 +144,7 @@ export function prepareRoleInput(root, state, visit, previous, workspace = state
   const assignmentReport = execution.implement?.controllerInputId && historyReports.find(r => r.inputId === execution.implement.controllerInputId);
   const context = { formatVersion: 1, runId: state.id, inputId: visit.inputId, role: node.role, node: visit.node, participant: visit.participant ?? visit.node,
     candidate: visit.revision, history,
+    ...(execution.recovery ? { recovery: execution.recovery } : {}),
     ...(visit.review ? { review: { ...visit.review, purpose: 'Complete candidate diff relative to the workflow base' } } : {}),
     assignment: { ...(node.instructions ? { instructions: node.instructions } : {}),
       ...(execution.implement ? { implement: { text: execution.implement.assignment, controllerInputId: execution.implement.controllerInputId,
@@ -199,6 +212,11 @@ export function prepareRoleInput(root, state, visit, previous, workspace = state
     });
     context.artifacts = (task?.artifacts ?? []).map(artifact => artifactLink(artifact, workspace, tools));
   }
+  const recoveryDecisions = (state.recoveryHistory ?? []).flatMap(record => record.resolution?.decisions ?? []).filter(decision => {
+    const origin = executions.find(v => (v.correction?.inputId ?? v.inputId) === decision.attemptId);
+    return origin && (origin.participant ?? origin.node) === (visit.participant ?? visit.node) && origin.implementId === visit.implementId;
+  });
+  if (recoveryDecisions.length) context.recordedRecoveryDecisions = { evidence: 'Historical user witnesses/permissions for the listed original operations and revisions only; not permission to repeat in a different attempt.', decisions: recoveryDecisions };
   // Context is an input snapshot, not live references to scheduler operations,
   // event arrays, package metadata or verdicts mutated by later ticks.
   visit.taskContext = JSON.parse(JSON.stringify(context));

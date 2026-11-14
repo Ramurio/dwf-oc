@@ -17,7 +17,7 @@ const projectDirectory = fileURLToPath(new URL('../', import.meta.url));
 const model = { providerID: 'openai', id: 'gpt-6.1-sol-ultrafast', variant: 'high' };
 const runtimeFiles = ['dwf.mjs', 'ui-service.mjs', 'ui-server.mjs', 'ui-data.mjs',
   'prototypes/dwf-ui/app.mjs', 'prototypes/dwf-ui/layout.mjs', 'prototypes/dwf-ui/index.html', 'prototypes/dwf-ui/styles.css',
-  'role-context.mjs', 'context-delivery.mjs', 'workflow-definition.mjs', 'implement-definition.mjs', 'workflow-implements.mjs', 'workflow-runtime.mjs', 'workflow-admission.mjs', 'workflow-git.mjs',
+  'role-context.mjs', 'context-delivery.mjs', 'workflow-definition.mjs', 'implement-definition.mjs', 'workflow-implements.mjs', 'workflow-runtime.mjs', 'workflow-continuation.mjs', 'workflow-admission.mjs', 'workflow-git.mjs',
   'run-store.mjs', 'task-packages.mjs', 'opencode-runtime.mjs', 'opencode-tools.mjs', 'role-skills.mjs', 'skills', 'package.json', 'package-lock.json',
   'acceptance/tester.mjs', 'workflow-groups.mjs', 'research-workflow.mjs', 'acceptance/model-observer'];
 

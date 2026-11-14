@@ -366,7 +366,7 @@ export function sessionRequest(workspace, model, runId, task) {
     permissions: planner.permissions }, text: task };
 }
 
-async function readMessages(client, sessionId) {
+export async function readMessages(client, sessionId) {
   const messages = [];
   let cursor;
   do {
@@ -385,7 +385,12 @@ export async function readOutcome(client, run) {
 }
 
 export async function readExecution(client, run) {
-  let messages = await readMessages(client, run.sessionId);
+  let messages;
+  try { messages = await readMessages(client, run.sessionId); }
+  catch (error) {
+    if (isSessionNotFoundError(error)) throw publicError('Native-сессия недоступна. Сохранённый ввод и файлы сохранены; используйте dwf continue для проверки и явного решения.');
+    throw error;
+  }
   let outcome = outcomeFromMessages(messages, run.inputId);
   // Pages are live: idle may appear after an earlier page captured a still-streaming answer.
   // Reading again after observing idle obtains the completed answer and all its text parts.
@@ -464,10 +469,11 @@ export function outcomeFromMessages(messages, inputId) {
     }
     if (message.type !== 'idle') continue;
     if (message.outcome !== 'succeeded') {
-      result = { status: 'failed', error: message.outcome === 'interrupted'
+      const diagnostic = message.error ?? answer?.error;
+      result = { status: 'failed', ...(diagnostic ? { diagnostic: { type: diagnostic.type, message: diagnostic.message, status: diagnostic.status } } : {}), error: message.outcome === 'interrupted'
         ? 'Поручение участника прервано.' : message.error?.type === 'output-limit'
           ? 'Ответ участника остался оборванным после штатных продолжений по лимиту длины.'
-          : 'Модель завершила поручение с ошибкой.' };
+          : diagnostic ? `${diagnostic.type}${diagnostic.status ? ' HTTP ' + diagnostic.status : ''}: ${diagnostic.message}` : 'Модель завершила поручение с ошибкой.' };
       continue;
     }
     if (!answer || answer.finish !== 'stop' || answer.time.completed === undefined || answer.error) {
@@ -479,4 +485,38 @@ export function outcomeFromMessages(messages, inputId) {
       : { status: 'failed', error: 'Участник не вернул текстовый результат.' };
   }
   return result;
+}
+
+// Read-only evidence for continue. An absent session is not evidence that its
+// arbitrary commands never ran. No automatic prompt or session recreation here.
+export async function observeAttempt(client, state, visit) {
+  const inputId = visit.correction?.inputId ?? visit.inputId;
+  try {
+    const session = await client.session.get({ sessionID: visit.sessionId });
+    if (session.metadata?.dwfRunId !== state.id || (visit.implementId &&
+      (session.metadata.dwfImplementId !== visit.implementId || session.metadata.dwfParticipant !== visit.participant || session.metadata.dwfTaskId !== visit.taskId))) {
+      throw publicError('Сессия продолжения принадлежит другому запуску/участнику.');
+    }
+  } catch (error) {
+    if (!isSessionNotFoundError(error)) throw error;
+    return { absent: true, sessionMissing: true, ...(visit.admissionStarted !== false || visit.admitted || visit.error || visit.progress || visit.execution ? { uncertain: [
+      { id: `session:${visit.sessionId}:${inputId}`, kind: 'missing_session', reason: 'Native history unavailable; external results cannot be reconstructed.' },
+    ] } : {}) };
+  }
+  let [messages, active, inbox] = await Promise.all([readMessages(client, visit.sessionId), client.session.active(), client.session.inbox.list({ sessionID: visit.sessionId })]);
+  const pending = inbox.some(input => input.id === inputId);
+  const shells = client.shell ? (await client.shell.list({ location: { directory: visit.workspace?.path ?? state.workspace.path } })).data : [];
+  const shellActive = shells.some(s => s.metadata?.sessionID === visit.sessionId && s.status === 'running');
+  if (!active[visit.sessionId] && !pending && !shellActive) messages = await readMessages(client, visit.sessionId);
+  const start = messages.findIndex(m => m.type === 'user' && m.id === inputId);
+  const attempt = start < 0 ? [] : messages.slice(start + 1).slice(0, messages.slice(start + 1).findIndex(m => m.type === 'user') < 0 ? undefined : messages.slice(start + 1).findIndex(m => m.type === 'user'));
+  const uncertain = attempt.flatMap(message => (message.content ?? []).filter(part => part.type === 'tool' &&
+    !['read', 'glob', 'grep', 'websearch', 'webfetch', 'skill'].includes(part.name) && part.state.status !== 'completed')
+    .map(tool => ({ id: `${message.id}:${tool.id}`, kind: 'tool', name: tool.name, state: tool.state })));
+  // Running native work must be attached, never retried by a new DWF input.
+  if (active[visit.sessionId] || shellActive || pending) return { active: Boolean(active[visit.sessionId]) || shellActive, present: start >= 0, pending };
+  if (start < 0 && visit.admitted) uncertain.push({ id: `input:${visit.sessionId}:${inputId}`, kind: 'missing_input', reason: 'Acknowledged input is absent from native history; its effects cannot be inferred.' });
+  const outcome = outcomeFromMessages(messages, inputId);
+  return { active: false, present: start >= 0, pending: false, ...(start < 0 ? { absent: true } : {}),
+    ...(!outcome && start >= 0 ? { inactive: true } : {}), outcome, ...(uncertain.length ? { uncertain } : {}) };
 }

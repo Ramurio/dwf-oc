@@ -1,3 +1,4 @@
+import { checkContinuationAdmission } from './workflow-continuation.mjs';
 import { initializeImplements, publicImplements, controlVisit, implementTarget, implementContext, implementObservation,
   applyImplementDecision, advanceImplementState, checkImplementCandidates } from './workflow-implements.mjs';
 import { acknowledgeContext } from './context-delivery.mjs';
@@ -5,7 +6,7 @@ import { prepareRoleInput } from './role-context.mjs';
 import { taskBinding } from './task-packages.mjs';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { openSync, closeSync } from 'node:fs';
+import { openSync, closeSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as pause } from 'node:timers/promises';
@@ -30,20 +31,37 @@ export function publicWorkflow(state) {
     ...(state.definition.implements ? { implements: publicImplements(state) } : {}),
     ...(state.definition.taskPackages ? { taskPackages: state.definition.taskPackages, taskRevisions: state.taskRevisions ?? [] } : {}),
     current: current && { node: current.node, role: current.kind === 'implements' ? 'implements' : state.definition.nodes[current.node]?.role ?? 'group',
-      sessionId: current.sessionId, visit: state.visits.indexOf(current) + 1,
+      sessionId: current.sessionId, inputId: current.inputId,
+      ...(current.kind !== 'implements' ? { admission: admissionStage(current) } : {}),
+      ...(current.recoveryOf ? { recoveryOf: current.recoveryOf, recoveryId: current.recoveryId } : {}), visit: state.visits.indexOf(current) + 1,
       ...(current.kind === 'implements' && !current.verdict && state.status === 'running' ? { waitingReason: 'implement_events', eventCursor: current.eventCursor } : {}),
       ...(current.taskId ? { taskId: current.taskId, taskVersion: current.taskVersion } : {}),
       ...(current.participant ? { participant: current.participant } : {}),
       ...(current.children ? { members: current.children.map(child => ({ participant: child.participant, node: child.node,
-        sessionId: child.sessionId, ...taskIdentity(child), status: child.error ? 'failed' : child.verdict ? 'completed' : 'running',
+        sessionId: child.sessionId, inputId: child.inputId, ...taskIdentity(child),
+        ...(child.recoveryOf ? { recoveryOf: child.recoveryOf } : {}),
+        ...(child.recoveredBy ? { recoveredBy: child.recoveredBy } : {}), status: child.error ? 'failed' : child.verdict ? 'completed' : 'running',
         ...(child.progress ? { progress: child.progress } : {}) })) } : {}),
       ...(current.startedAt ? { startedAt: current.startedAt } : {}),
       ...(current.progress ? { progress: current.progress } : {}) },
-    history: state.visits.map(visit => ({ node: visit.node, sessionId: visit.sessionId, ...taskIdentity(visit),
+    history: state.visits.map(visit => ({ node: visit.node, inputId: visit.inputId, sessionId: visit.sessionId, ...taskIdentity(visit),
+      ...(visit.recoveryOf ? { recoveryOf: visit.recoveryOf } : {}),
+      ...(visit.recoveredBy ? { recoveredBy: visit.recoveredBy } : {}),
+      ...(visit.execution ? { execution: visit.execution, executionInputId: visit.executionInputId ?? visit.inputId } : {}),
+      ...(visit.executionHistory ? { executionHistory: visit.executionHistory } : {}),
+      ...(visit.executionError ? { executionError: visit.executionError } : {}),
+      ...(visit.error ? { error: visit.error } : {}),
+      ...(visit.errorHistory ? { errorHistory: visit.errorHistory } : {}),
       ...(visit.implementId ? { implementId: visit.implementId, participant: visit.participant } : {}),
-      ...(visit.children ? { members: visit.children.map(child => ({ participant: child.participant, node: child.node, ...taskIdentity(child) })) } : {}),
+      ...(visit.children ? { members: visit.children.map(child => ({ participant: child.participant, node: child.node, sessionId: child.sessionId, inputId: child.inputId, ...taskIdentity(child),
+        ...(child.recoveryOf ? { recoveryOf: child.recoveryOf } : {}), ...(child.recoveredBy ? { recoveredBy: child.recoveredBy } : {}),
+        ...(child.verdict ? { result: child.verdict, revision: child.revision } : {}), ...(child.error ? { error: child.error } : {}) })) } : {}),
+      ...(visit.resultHistory ? { resultHistory: visit.resultHistory } : {}),
       ...(visit.verdict ? { result: visit.verdict, revision: visit.revision } : {}) })),
     ...(state.controls ? { controls: state.controls.map(({ target, ...command }) => command) } : {}),
+    ...(state.recovery ? { recovery: state.recovery } : {}),
+    ...(state.recoveryHistory ? { recoveryHistory: state.recoveryHistory } : {}),
+    ...(state.failures ? { failures: state.failures } : {}),
     ...(state.error ? { error: state.error } : {}),
     ...(state.pendingFailure ? { pendingFailure: state.pendingFailure } : {}),
     ...(state.service ? { service: { status: 'unavailable' } } : {}),
@@ -75,6 +93,7 @@ export function watchEvent(previous, state) {
 
 export async function ensureWorkflowRunner(root, id) {
   if (workflowHasOwner(root, id)) return;
+  mkdirSync(join(root, 'workflows', id), { recursive: true, mode: 0o700 });
   const descriptor = openSync(join(root, 'workflows', id, 'controller.log'), 'a', 0o600);
   let child;
   try {
@@ -125,13 +144,24 @@ function request(state, visit) {
 }
 
 function finishParticipant(state, visit, outcome) {
+  const executionInputId = visit.correction?.inputId ?? visit.inputId;
+  if (visit.execution && (visit.executionInputId ?? visit.inputId) !== executionInputId) {
+    visit.executionHistory ??= [];
+    visit.executionHistory.push({ inputId: visit.executionInputId ?? visit.inputId, outcome: visit.execution });
+  }
+  visit.executionInputId = executionInputId;
+  visit.execution = outcome;
   const role = state.definition.nodes[visit.node].role;
   const revision = snapshot(visit.workspace ?? state.workspace);
-  if (role !== 'worker' && !(role === 'orchestrator' && state.implements) && revision !== visit.revision) {
+  if (role !== 'worker' && !(role === 'planner' && state.legacyPlanner) && !(role === 'orchestrator' && state.implements) && revision !== visit.revision) {
     throw publicError('Рабочее дерево изменилось во время проверки. Требуется новая проверка.');
   }
   if (role === 'orchestrator' && state.implements) visit.completionRevision = revision;
   if (outcome.status !== 'succeeded') throw publicError(outcome.error);
+  if (state.legacyPlanner && role === 'planner') {
+    visit.verdict = { outcome: 'done', summary: outcome.result };
+    return;
+  }
   let verdict;
   try {
     verdict = parseVerdict(outcome.result, role, decisionOutcomes(state.definition, visit.node));
@@ -155,6 +185,9 @@ function finishParticipant(state, visit, outcome) {
 }
 
 function failWorkflow(state, message) {
+  state.failures ??= [];
+  state.failures.push({ createdAt: Date.now(), message, inputId: controlVisit(state)?.inputId,
+    boundary: state.finalizing ? 'finalization' : controlVisit(state) ? admissionStage(controlVisit(state)) : 'preparation' });
   if (state.implements) state.pendingFailure ??= message;
   else { state.status = 'failed'; state.error = message; }
 }
@@ -173,6 +206,7 @@ async function tickImplementParticipants(root, state, owner, client) {
     if (state.controls?.some(command => command.kind === 'stop' && command.status === 'pending')) return;
     await Promise.all(admitting.map(async visit => {
       try {
+        await checkContinuationAdmission(client, state, visit);
         await admit(client, request(state, visit));
         visit.admitted = true;
         acknowledgeContext(visit);
@@ -216,7 +250,7 @@ export async function runWorkflow(root, id) {
   initializeImplements(state);
   const research = researchGraph(state.definition);
   const save = complete => updateWorkflow(root, state, owner, complete);
-  if (state.status !== 'running') { save(true); acknowledge(); return; }
+  if (state.status !== 'running' || ['blocked', 'aborted'].includes(state.recovery?.status) && !state.controls?.some(c => c.kind === 'stop' && c.status === 'pending')) { save(true); acknowledge(); return; }
   let client;
   let acknowledged = false;
   while (state.status === 'running') {
@@ -319,7 +353,7 @@ export async function runWorkflow(root, id) {
             if (state.definition.merge) {
               state.result = { summary: visit.verdict.summary,
                 commit: mergeWorkspace(state.workspace, revision, workflowCommitTitle(state, revision)) };
-            } else state.result = report ?? visit.verdict;
+            } else state.result = state.legacyPlanner ? visit.verdict.summary : report ?? visit.verdict;
             state.status = 'succeeded';
           });
           continue;
@@ -413,7 +447,7 @@ export async function runWorkflow(root, id) {
         continue;
       }
       if (visit.children) {
-        const awaitingAdmission = visit.children.filter(child => admissionStage(child, visit) === 'admission_started');
+        const awaitingAdmission = visit.children.filter(child => !child.recoveredBy && admissionStage(child, visit) === 'admission_started');
         // The group's barrier and each child's acknowledgement are separate facts.
         // Saved verdicts/errors are terminal even in older records without admitted.
         if (admissionStage(visit) === 'admission_started' || awaitingAdmission.length) {
@@ -421,6 +455,8 @@ export async function runWorkflow(root, id) {
             if (state.controls?.some(command => command.status === 'pending' && command.kind === 'stop')) return;
             await Promise.all(awaitingAdmission.map(async child => {
               try {
+                child.admissionStarted = true;
+                await checkContinuationAdmission(client, state, child);
                 await admit(client, request(state, child));
                 child.admitted = true;
                 acknowledgeContext(child);
@@ -431,12 +467,12 @@ export async function runWorkflow(root, id) {
                 else state.service = 'unavailable';
               }
             }));
-            visit.admitted = visit.children.every(child => ['admitted', 'finished'].includes(admissionStage(child, visit)));
+            visit.admitted = visit.children.filter(child => !child.recoveredBy).every(child => ['admitted', 'finished'].includes(admissionStage(child, visit)));
           });
           if (admissionStage(visit) !== 'admitted') { client = undefined; await pause(300); continue; }
         }
         if (!acknowledged) { acknowledge(); acknowledged = true; }
-        const active = visit.children.filter(child => admissionStage(child, visit) === 'admitted');
+        const active = visit.children.filter(child => !child.recoveredBy && admissionStage(child, visit) === 'admitted');
         const executions = await Promise.allSettled(active.map(child => readExecution(client, request(state, child))));
         for (const [index, execution] of executions.entries()) {
           const child = active[index];
@@ -454,7 +490,7 @@ export async function runWorkflow(root, id) {
         }
         save(false);
         if (state.controls?.some(command => command.kind === 'stop' && command.status === 'pending')) continue;
-        if (visit.children.every(child => admissionStage(child, visit) === 'finished')) {
+        if (visit.children.filter(child => !child.recoveredBy).every(child => admissionStage(child, visit) === 'finished')) {
           await withWorkflowAction(root, state, owner, () => {
             if (state.controls?.some(command => command.kind === 'stop' && command.status === 'pending')) return;
             visit.verdict = groupVerdict(visit);
@@ -470,6 +506,7 @@ export async function runWorkflow(root, id) {
         try {
           await withWorkflowAction(root, state, owner, async () => {
             if (state.controls?.some(command => command.status === 'pending' && command.kind === 'stop')) return;
+            await checkContinuationAdmission(client, state, visit);
             await admit(client, request(state, visit));
             visit.admitted = true;
             acknowledgeContext(visit);
@@ -508,6 +545,7 @@ export async function runWorkflow(root, id) {
       try {
         finishParticipant(state, visit, outcome);
       } catch (error) {
+        visit.executionError = error.publicMessage ?? error.message;
         if (!state.controls?.some(command => command.kind === 'steer' && command.status === 'pending' && !implementTarget(state, command.node))) throw error;
         visit.verdict = { outcome: 'blocked', summary: error.publicMessage };
       }
@@ -529,7 +567,7 @@ export async function runWorkflow(root, id) {
               summary: error.publicMessage ?? 'Выполнение этапа прервано уточнением.' };
             return;
           }
-          failWorkflow(state, error.publicMessage ?? 'Контроллер workflow завершился с ошибкой. Рабочее дерево сохранено.');
+          failWorkflow(state, error.publicMessage ?? `Контроллер workflow: ${error.code ?? error.name}: ${error.message}. Рабочее дерево сохранено; исправьте причину и выполните dwf continue.`);
         });
       } catch { break; /* A replacement controller owns the current state. */ }
       if (state.status === 'running') { client = undefined; await pause(1000); }

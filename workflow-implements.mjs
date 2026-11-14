@@ -481,3 +481,12 @@ export function advanceImplementState(root, state) {
     running++;
   }
 }
+
+// Drift during a stopped run is a new candidate, never an approval of the old
+// worker result under a new revision. Preserve all reports and notify manager.
+export function invalidateForContinuation(state, instance) {
+  if (instance.status === 'integrated') reopenImplement(state, instance);
+  instance.status = 'queued';
+  instance.nextRole = 'worker';
+  emit(state, instance, 'invalidated', { reason: 'Candidate files changed while execution was stopped; fresh worker/checking results are required.' });
+}

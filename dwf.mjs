@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { continueWorkflow } from './workflow-continuation.mjs';
 import { isUtf8 } from 'node:buffer';
 import { randomUUID } from 'node:crypto';
 import { readFile, mkdir, realpath } from 'node:fs/promises';
@@ -101,7 +102,7 @@ async function inspect(runId) {
   const root = stateRoot();
   const workflow = getWorkflow(root, runId);
   if (workflow) {
-    if (workflow.status === 'running') await ensureWorkflowRunner(root, runId);
+    if (workflow.status === 'running' && !['blocked', 'aborted'].includes(workflow.recovery?.status)) await ensureWorkflowRunner(root, runId);
     return publicWorkflow(getWorkflow(root, runId));
   }
   let run = getRun(root, runId);
@@ -226,6 +227,7 @@ const usage = {
   preset: ['dwf preset list', 'dwf preset show <имя>', 'dwf preset save <имя> --file workflow.json',
     'dwf preset save <имя> --from-run <run-id>'],
   steer: ['dwf steer <run-id> <участник> --message-file <файл>', 'Передаёт уточнение участнику на границе ответа. Необязательно: --kind clarification|decision.'],
+  continue: ['dwf continue <run-id> [--resume-cancelled] [--resolution-file <file>]', 'Продолжает с проверенной границы. При неизвестном результате возвращает recovery.resolutionTemplate.'],
   stop: ['dwf stop <run-id>', 'Останавливает workflow и возвращает подтверждённое терминальное состояние.'],
 };
 try {
@@ -239,6 +241,7 @@ try {
       '  dwf inspect <run-id> [--watch]',
       '  dwf steer <run-id> <участник> --message-file <файл>',
       '  dwf stop <run-id>',
+      '  dwf continue <run-id> [--resume-cancelled] [--resolution-file <file>]',
       '  dwf ui --start | --stop | --status',
       '  dwf schema',
       '  dwf preset list',
@@ -263,6 +266,24 @@ try {
   else if (command === 'start' && args.length === 4 && args[0] === '--preset' && args[2] === '--task-file') await startPreset(args[1], args[3]);
   else if (command === 'inspect' && args.length === 1) json(await inspect(args[0]));
   else if (command === 'inspect' && args.length === 2 && args[1] === '--watch') await watch(args[0]);
+  else if (command === 'continue') {
+    const [id, ...flags] = args;
+    const options = {};
+    if (!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(id ?? '')) throw publicError('Неверный идентификатор запуска.');
+    while (flags.length) {
+      const flag = flags.shift();
+      if (flag === '--resume-cancelled' && !options.resumeCancelled) options.resumeCancelled = true;
+      else if (flag === '--resolution-file' && !options.resolution && flags.length) {
+        const raw = await readFile(flags.shift());
+        if (!isUtf8(raw)) throw publicError('Решение должно быть UTF-8.');
+        options.resolution = parse(raw.toString('utf8'), 'Неверный JSON решения.');
+        if (!object(options.resolution)) throw publicError('Решение должно быть JSON-объектом.');
+      } else throw publicError(usage.continue[0]);
+    }
+    const state = await continueWorkflow(stateRoot(), id, options);
+    if (state.definition && state.status === 'running' && !['blocked', 'aborted'].includes(state.recovery?.status)) await ensureWorkflowRunner(stateRoot(), id);
+    json(getWorkflow(stateRoot(), id) ? publicWorkflow(getWorkflow(stateRoot(), id)) : publicOutcome(state));
+  }
   else if (command === 'stop' && args.length === 1) await control(args[0], 'stop');
   else if (command === 'steer' && args.length === 4 && args[2] === '--message-file') await control(args[0], 'steer', args[1], args[3]);
   else if (command === 'steer' && args.length === 6 && args[2] === '--message-file' && args[4] === '--kind') await control(args[0], 'steer', args[1], args[3], args[5]);
@@ -299,6 +320,6 @@ try {
   else if (command === 'preset') await presetCommand(args);
   else throw publicError('Справка: dwf --help');
 } catch (error) {
-  process.stderr.write((error.publicMessage ?? 'Не удалось прочитать или выполнить запуск. Проверьте конфигурацию и данные.') + '\n');
+  process.stderr.write((error.publicMessage ?? (command === 'continue' ? `Не удалось продолжить запуск: ${error.code ?? error.name}. Проверьте доступ к состоянию/окружение и повторите команду; прогресс не сброшен.` : 'Не удалось прочитать или выполнить запуск. Проверьте конфигурацию и данные.')) + '\n');
   process.exitCode = 1;
 }

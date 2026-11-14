@@ -76,7 +76,7 @@ function callView(state, visit, location, { root, owned }) {
   const skillIds = permissions?.filter(rule => rule.action === 'skill' && rule.effect === 'allow').map(rule => rule.resource);
   const directory = visit.workspace?.path ?? state.workspace?.path;
   let status = 'unknown';
-  if (visit.error) status = 'failed';
+  if (visit.error || visit.executionError || visit.execution?.status === 'failed') status = 'failed';
   else if (visit.verdict) status = 'done';
   else if (state.status === 'cancelled' || state.executionStopped) status = 'cancelled';
   else if (state.status === 'running' && owned && !state.service) status = 'active';
@@ -97,12 +97,14 @@ function callView(state, visit, location, { root, owned }) {
     assignment: visit.taskContext?.assignment ?? null,
     handoff: visit.taskContext?.otherReports?.handoff ?? null,
     problem: visit.error ? (typeof visit.error === 'string' ? visit.error : visit.error.message ?? resultProjection(visit.error).result) :
-      ['blocked', 'changes', 'failed'].includes(visit.verdict?.outcome) ? visit.verdict.summary : null,
+      visit.executionError ?? visit.execution?.error ?? (
+      ['blocked', 'changes', 'failed'].includes(visit.verdict?.outcome) ? visit.verdict.summary : null),
     outcome: visit.verdict?.outcome ?? null,
     cycle: visit.cycle ?? visit.taskContext?.implement?.cycle ?? null,
     taskId: visit.taskId ?? null, taskVersion: visit.taskVersion ?? null,
     promptRaw: visit.prompt ?? null,
-    ...resultProjection(visit.verdict ?? visit.error),
+    ...resultProjection(visit.verdict ?? visit.error ?? visit.executionError ?? visit.execution),
+    ...(visit.recoveryOf ? { recoveryOf: visit.recoveryOf, recoveryId: visit.recoveryId } : {}),
     state: status,
     model: model ? `${model.providerID}/${model.id}` : unknown,
     reasoning: model?.variant ?? 'Not recorded / unset',
@@ -120,8 +122,17 @@ export function workflowView(state, { root, owned = false, order = 0 } = {}) {
   const def = state.definition;
   const visits = state.visits ?? [];
   const groups = def.groups ?? {};
+  // A retained result can belong to several recheck groups without being a new
+  // execution. Keep its first (actual) call location and chronological position.
+  const seenInputs = new Set();
   const flat = visits.flatMap(visit => (visit.children ?? [visit])
-    .map(child => ({ visit: child, location: child.implementId ? 'implements' : visit.node })));
+    .map(child => ({ visit: child, location: child.implementId ? 'implements' : visit.node })))
+    .filter(({ visit }) => {
+      if (!visit.inputId) return true; // Do not invent identities for legacy calls.
+      if (seenInputs.has(visit.inputId)) return false;
+      seenInputs.add(visit.inputId);
+      return true;
+    });
 
   const lastDirectories = new Map();
   for (const { visit } of flat) {
@@ -143,9 +154,12 @@ export function workflowView(state, { root, owned = false, order = 0 } = {}) {
           prompt: visit.correction.prompt, taskContext: undefined, delivery: undefined, startedAt: undefined,
         }, location, { root, owned });
         if (correction) correction.lastObservedDirectory = first.lastObservedDirectory;
+        const savedOriginal = visit.executionHistory?.find(entry => entry.inputId === visit.inputId)?.outcome;
         return [{
-          ...first, state: 'done', result: 'Original reply required correction; its text was not saved.',
-          resultDetails: [], resultRaw: null, outcome: null, problem: null, progress: null,
+          ...first, state: savedOriginal?.status === 'failed' ? 'failed' : 'done',
+          ...(savedOriginal ? resultProjection(savedOriginal.result ?? savedOriginal.error) : {
+            result: 'Original reply required correction; its text was not saved.', resultDetails: [], resultRaw: null,
+          }), outcome: null, problem: savedOriginal?.error ?? null, progress: null,
         }, ...(correction ? [correction] : [])];
       });
     const latest = invocations.at(-1);
@@ -251,10 +265,11 @@ export function workflowView(state, { root, owned = false, order = 0 } = {}) {
   }
   let description = '';
   if (state.status === 'running') {
-    if (!owned) description = 'Saved running · controller not confirmed (resume with dwf inspect)';
+    if (!owned) description = 'Saved running · controller not confirmed (resume with dwf continue)';
     else if (state.pendingFailure) description = 'Stopping after controller failure · execution stop not yet confirmed';
     else description = state.service ? 'Running · OpenCode connection unavailable' : 'Running';
   }
+  if (state.recovery) description += ` · Recovery ${state.recovery.status}: ${state.recovery.reason ?? state.recovery.boundary ?? ''}`;
   return {
     id: state.id,
     project: state.workspace?.source ?? state.workspace?.path ?? 'Directory not recorded',
@@ -262,6 +277,9 @@ export function workflowView(state, { root, owned = false, order = 0 } = {}) {
     title: def.task.trim().split('\n')[0].slice(0, 140),
     task: def.task,
     ...resultProjection(state.result ?? state.error),
+    ...(state.recovery ? { recovery: state.recovery, recoveryHistory: state.recoveryHistory ?? [] } : {}),
+    ...(state.recovery ? { resultDetails: [...resultProjection(state.result ?? state.error).resultDetails,
+      { label: 'Recovery', value: state.recovery }, { label: 'Recovery history', value: state.recoveryHistory ?? [] }] } : {}),
     status: state.status,
     createdAt: state.createdAt ?? visits.find(visit => visit.startedAt)?.startedAt ?? null,
     order, description, graph: { nodes, edges },

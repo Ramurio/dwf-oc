@@ -80,11 +80,11 @@ export function validateResearchGraph(definition, settings, reject) {
 }
 
 export function researchRounds(graph, visits) {
-  return visits.filter(visit => visit.node === graph.researchers && visit.verdict?.outcome === 'done').length;
+  return visits.filter(visit => !visit.recoveredBy && visit.node === graph.researchers && visit.verdict?.outcome === 'done').length;
 }
 
 export function scientistOutcomes(graph, visits) {
-  const previous = visits.at(-1);
+  const previous = visits.findLast(visit => !visit.recoveredBy);
   if (!previous) return ['scout'];
   if (researchRounds(graph, visits) >= 3) return ['report'];
   return previous.node === graph.researchers ? ['research', 'report'] : ['research'];
@@ -111,8 +111,9 @@ export function validateScientistVerdict(graph, visits, verdict, validateItems, 
 }
 
 export function researchResult(graph, visits) {
-  const review = visits.at(-1);
-  const report = visits.at(-2);
+  const logical = visits.filter(visit => !visit.recoveredBy);
+  const review = logical.at(-1);
+  const report = logical.at(-2);
   if (review?.node !== graph.committee || report?.node !== graph.scientist ||
       report.verdict?.outcome !== 'report') return undefined;
   const { outcome, summary } = review.verdict;

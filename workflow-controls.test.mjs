@@ -15,6 +15,7 @@ registerHooks({
       return { format: 'module', shortCircuit: true, source: `
         export const OPENCODE_VERSION = '2.2.5';
         export const connect = async () => globalThis.dwfControlIO.connect();
+        export const observeAttempt = async () => { throw new Error('Unexpected recovery observation in normal controller controls'); };
         export const checkRoleAgents = async () => {};
         export const admit = async (_client, request) => globalThis.dwfControlIO.admit(request);
         export const readExecution = async (_client, request) => globalThis.dwfControlIO.read(request);
@@ -177,6 +178,7 @@ async function fixture(t, options = {}) {
   if (options.memory === false) definition.transitions.verify.changes = 'review';
   createWorkflow(root, { id, definition, workspace: { mode: 'directory', path: root },
     status: 'running', visits: options.visits ?? [], sessions: {},
+    ...(options.legacyPlanner ? { legacyPlanner: options.legacyPlanner } : {}),
     ...(options.memory === false ? { participants: { review: { memory: false, agent: { permissions: [] } } } } : {}) });
   const admitted = [];
   io = globalThis.dwfControlIO = {
@@ -803,4 +805,25 @@ test('legacy prepared steering recovers orphan context documents left before a f
   assert.equal(result.visits[0].children[0].sessionId, child.sessionId);
   assert.deepEqual(result.controls.map(command => command.status), ['applied', 'applied']);
   assert.equal(await readFile(document, 'utf8'), original);
+});
+
+test('a non-provider controller failure retains its concrete environment diagnosis and last saved boundary', async t => {
+  const f = await fixture(t);
+  io.snapshot = () => { throw Object.assign(new Error('No space left on device'), { code: 'ENOSPC' }); };
+  await f.run();
+  const state = f.state();
+  assert.equal(state.status, 'failed'); assert.equal(state.visits.length, 0);
+  assert.match(state.error, /ENOSPC/); assert.match(state.error, /No space left on device/);
+  assert.equal(state.failures[0].boundary, 'preparation');
+});
+
+test('a cached legacy planner result does not invent an original workspace revision', async t => {
+  const definition = { task: 'Legacy saved task', entry: 'plan', nodes: { plan: { role: 'planner' } }, transitions: { plan: { done: null } } };
+  const f = await fixture(t, { definition, legacyPlanner: { request: { text: 'Legacy saved task' } },
+    visits: [{ node: 'plan', inputId: 'msg_saved', sessionId: 'ses_saved', admitted: true, prompt: 'Legacy saved task' }] });
+  io.read = async () => ({ outcome: { status: 'succeeded', result: 'Cached original plan' } });
+  await f.run();
+  assert.equal(f.state().status, 'succeeded', f.state().error);
+  assert.equal(f.state().result, 'Cached original plan');
+  assert.equal(f.state().visits[0].revision, undefined);
 });

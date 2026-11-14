@@ -15,7 +15,7 @@ export function assertHigh(call) {
   assert.equal(call.reasoning, 'high', 'Фактический модельный запрос должен содержать reasoning high');
 }
 
-export async function createControlledHttpProvider({ directory, token, finishes = ['stop'], reply }) {
+export async function createControlledHttpProvider({ directory, token, finishes = ['stop'], reply, reject }) {
   const calls = new Map();
   let closing = false;
   const record = event => appendFileSync(join(directory, 'provider.jsonl'),
@@ -67,6 +67,13 @@ export async function createControlledHttpProvider({ directory, token, finishes 
         reasoning: body.reasoning_effort ?? body.reasoning?.effort,
         limits: Object.fromEntries(['max_tokens', 'max_completion_tokens', 'max_output_tokens']
           .filter(key => typeof body[key] === 'number').map(key => [key, body[key]])) });
+      const rejection = reject?.({ prompt, userTexts, tools, toolResults });
+      if (rejection) {
+        record({ type: 'rejected', callId, status: rejection.status });
+        if (rejection.disconnect) res.destroy();
+        else res.writeHead(rejection.status ?? 403, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: { message: rejection.message ?? 'Forbidden', type: 'provider.auth' } }));
+        return;
+      }
       res.on('error', () => {});
       res.once('close', () => {
         call.closed = true;

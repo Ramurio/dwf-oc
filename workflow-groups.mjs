@@ -35,26 +35,26 @@ export function prepareGroup(root, state, id, previous) {
 }
 
 export function groupVerdict(visit) {
-  const required = visit.children.filter(child => child.required);
+  const required = visit.children.filter(child => !child.recoveredBy && child.required);
   const failed = required.some(child => child.error || child.verdict?.outcome === 'blocked');
   const changes = required.some(child => child.verdict?.outcome === 'changes');
   return { outcome: failed ? 'failed' : changes ? 'changes' : 'done',
     summary: `Собраны результаты ${visit.children.length} участников группы ${visit.node}.`,
-    results: visit.children.map(child => ({ participant: child.participant, node: child.node,
+    results: visit.children.filter(child => !child.recoveredBy).map(child => ({ participant: child.participant, node: child.node,
       required: child.required, ...(child.taskId ? { taskId: child.taskId, taskVersion: child.taskVersion } : {}), ...(child.item ? { item: child.item } : {}), revision: child.revision,
       status: child.error ? 'failed' : 'completed',
       ...(child.error ? { error: child.error } : { result: child.verdict }) })) };
 }
 
 export function integrateGroup(root, state, visit) {
-  const writers = visit.children.filter(child => state.definition.nodes[child.node].role === 'worker' &&
+  const writers = visit.children.filter(child => !child.recoveredBy && !visit.integratedWriterInputs?.includes(child.inputId) && state.definition.nodes[child.node].role === 'worker' &&
     child.verdict?.outcome === 'done');
   if (!writers.length) return;
   const combined = verificationWorkspace(root, state.id, state.workspace, visit.revision, 'group_' + randomUUID());
   let revision;
   try {
     for (const child of writers) {
-      const patch = writeReviewDiff({ ...child.workspace, base: visit.revision }, child.revision,
+      const patch = writeReviewDiff({ ...child.workspace, base: visit.writerBaseRevision ?? visit.revision }, child.revision,
         join(root, 'workflows', state.id, 'groups', `${child.inputId}.diff`));
       if (patch.bytes) git(combined.path, ['apply', '--3way', '--index', patch.path]);
     }
@@ -71,4 +71,5 @@ export function integrateGroup(root, state, visit) {
   }
   if (snapshot(state.workspace) !== revision) throw publicError('Объединённый результат группы требует повторной проверки.');
   visit.integratedRevision = revision;
+  if (visit.integratedWriterInputs) visit.integratedWriterInputs = [...new Set([...visit.integratedWriterInputs, ...writers.map(child => child.inputId)])];
 }

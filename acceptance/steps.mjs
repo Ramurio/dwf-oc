@@ -390,7 +390,8 @@ Then('workflow завершает оба цикла доработки в исх
     }).trim(), final.result.commit);
   } else assert.equal(final.result.outcome, 'done');
   assert.deepEqual(this.orchestratorHistory.map(({ node, sessionId, revision, result }) =>
-    ({ node, sessionId, revision, result })), final.history.slice(0, -1),
+    ({ node, sessionId, revision, result })), final.history.slice(0, -1).map(({ node, sessionId, revision, result }) =>
+    ({ node, sessionId, revision, result })),
   'Фактический модельный запрос orchestrator должен содержать каждый завершённый этап');
   const received = (await events(this)).filter(event => event.type === 'received');
   const roles = new Set(Object.values((await readJson(this.workflowFile)).nodes).map(node => node.role));

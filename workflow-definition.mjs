@@ -236,7 +236,7 @@ export function approvalProblems(state, revision) {
     for (const [groupId] of maps) {
       const latest = state.visits.findLast(visit => visit.node === groupId);
       if (!latest) { problems.push(`Для завершения нужны результаты ${groupId}.`); continue; }
-      for (const child of latest.children) required.push({ id: child.participant, role: node.role,
+      for (const child of latest.children.filter(child => !child.recoveredBy)) required.push({ id: child.participant, role: node.role,
         visit: participantVisits(state.visits).findLast(visit => visit.participant === child.participant) });
     }
     const ordinary = participantVisits(state.visits).findLast(visit => visit.node === id && !visit.item && !visit.implementId);
